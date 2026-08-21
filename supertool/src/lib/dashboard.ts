@@ -134,6 +134,7 @@ export async function getKeywords(projectId: string) {
     return {
       id: k.id,
       phrase: k.phrase,
+      dataSource: k.dataSource,
       volume: k.volume,
       difficulty: k.difficulty,
       cpc: k.cpc,

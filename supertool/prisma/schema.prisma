@@ -13,22 +13,61 @@ datasource db {
 }
 
 model User {
-  id           String       @id @default(cuid())
-  email        String       @unique
+  id           String               @id @default(cuid())
+  email        String               @unique
   name         String
   passwordHash String
-  role         String       @default("owner")
-  createdAt    DateTime     @default(now())
+  role         String               @default("owner")
+  createdAt    DateTime             @default(now())
   memberships  Membership[]
+  resetTokens  PasswordResetToken[]
+}
+
+/// Single-use, expiring password reset token. Only the hash is stored, so a
+/// database leak does not hand out working reset links.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/// Records a processed Stripe event so a redelivered webhook is a no-op.
+model ProcessedWebhookEvent {
+  id          String   @id
+  type        String
+  processedAt DateTime @default(now())
+
+  @@index([processedAt])
 }
 
 model Organization {
-  id        String       @id @default(cuid())
+  id        String   @id @default(cuid())
   name      String
-  plan      String       @default("growth")
-  createdAt DateTime     @default(now())
-  members   Membership[]
-  projects  Project[]
+  /// Entitlement tier. Written by the Stripe webhook, never by the client.
+  plan      String   @default("starter")
+  createdAt DateTime @default(now())
+
+  // --- Billing -------------------------------------------------------------
+  stripeCustomerId     String?   @unique
+  stripeSubscriptionId String?   @unique
+  /// Mirrors Stripe: trialing | active | past_due | canceled | incomplete | none
+  subscriptionStatus   String    @default("trialing")
+  /// When the current paid period or trial ends.
+  currentPeriodEnd     DateTime?
+  trialEndsAt          DateTime?
+  /// Set when the customer cancels but the period has not yet elapsed.
+  cancelAtPeriodEnd    Boolean   @default(false)
+
+  members  Membership[]
+  projects Project[]
 }
 
 model Membership {

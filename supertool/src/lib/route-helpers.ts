@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getSession, type SessionUser } from './auth';
 import { db } from './db';
-import { PlanLimitError } from './plan';
+import { PlanLimitError, SubscriptionRequiredError } from './plan';
 
 /** Standard JSON error shape used by every dashboard route. */
 export function fail(message: string, status = 400) {
@@ -45,6 +45,7 @@ export function withSession<S extends z.ZodTypeAny>(
       return await handler({ session, body: body as never, req });
     } catch (err) {
       if (err instanceof PlanLimitError) return fail(err.message, 402);
+      if (err instanceof SubscriptionRequiredError) return fail(err.message, 402);
       console.error('route error:', err);
       return fail('Something went wrong on our side. Please try again.', 500);
     }

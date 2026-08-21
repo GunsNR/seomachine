@@ -1,6 +1,9 @@
 import { NextResponse } from 'next/server';
 import { liveEngines, ENGINES } from '@/lib/ai/engines';
+import { billingEnabled } from '@/lib/billing';
 import { db } from '@/lib/db';
+import { emailProvider } from '@/lib/email';
+import { providerConfigured } from '@/lib/seo/providers/keyword-data';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -40,6 +43,12 @@ export async function GET() {
         // reported as information rather than folded into the status.
         answerEngines: { total: ENGINES.length, live: live.length, simulated: ENGINES.length - live.length },
         authSecret: process.env.AUTH_SECRET ? 'configured' : 'using-development-default',
+        // Reported as information, not failure: each of these has a supported
+        // unconfigured mode, and a self-hosted install may want none of them.
+        billing: billingEnabled() ? 'stripe' : 'disabled-self-hosted',
+        email: emailProvider(),
+        keywordData: providerConfigured() ? 'provider' : 'modelled',
+        scheduledRuns: process.env.CRON_SECRET ? 'enabled' : 'disabled',
       },
       timestamp: new Date().toISOString(),
     },

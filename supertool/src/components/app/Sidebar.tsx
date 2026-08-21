@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import {
   BarChart3, FileText, LayoutDashboard, Link2, LogOut, Menu, Plug, Quote,
-  Search, ShieldCheck, Sparkles, UserCircle, Users, X,
+  CreditCard, Search, ShieldCheck, Sparkles, UserCircle, Users, X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { LogoMark } from '@/components/site/Logo';
@@ -22,6 +22,7 @@ const NAV = [
   { href: '/app/leads', label: 'Leads', icon: Users },
   { href: '/app/settings', label: 'Settings', icon: Plug },
   { href: '/app/account', label: 'Account', icon: UserCircle },
+  { href: '/app/billing', label: 'Billing', icon: CreditCard },
 ];
 
 export function Sidebar({ userName, projectName }: { userName: string; projectName: string }) {

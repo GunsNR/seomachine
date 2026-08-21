@@ -73,8 +73,12 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
             <label htmlFor="password" className="block text-[0.85rem] font-semibold text-ink">
               Password
             </label>
-            {mode === 'signup' && (
+            {mode === 'signup' ? (
               <span className="text-[0.75rem] text-body">At least 10 characters</span>
+            ) : (
+              <Link href="/forgot-password" className="text-[0.8rem] font-semibold text-brand hover:underline">
+                Forgot?
+              </Link>
             )}
           </div>
           <input

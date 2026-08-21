@@ -1,4 +1,5 @@
 import 'server-only';
+import { getSubscription } from './billing';
 import { db } from './db';
 
 /**
@@ -72,6 +73,27 @@ export async function getUsage(orgId: string): Promise<Usage> {
   return { projects, prompts, keywords };
 }
 
+/**
+ * Raised when a workspace's subscription has lapsed.
+ *
+ * Deliberately separate from a plan limit: the fix is billing, not upgrading,
+ * and the product responds differently — reads and exports stay open so a
+ * lapsed customer can still get their data out, which the privacy policy
+ * promises. Only actions that consume resources are blocked.
+ */
+export class SubscriptionRequiredError extends Error {
+  constructor(public readonly status: string) {
+    super(
+      status === 'trialing'
+        ? 'Your free trial has ended. Choose a plan to keep running checks.'
+        : status === 'past_due'
+          ? 'Your last payment failed. Update your card to keep running checks.'
+          : 'Your subscription is not active. Choose a plan to keep running checks.',
+    );
+    this.name = 'SubscriptionRequiredError';
+  }
+}
+
 export class PlanLimitError extends Error {
   constructor(
     public readonly resource: keyof Usage,
@@ -95,8 +117,10 @@ export async function assertWithinLimit(
   resource: keyof Usage,
   adding = 1,
 ): Promise<void> {
+  await assertEntitled(orgId);
+
   const org = await db.organization.findUnique({ where: { id: orgId } });
-  const plan = getPlan(org?.plan ?? 'growth');
+  const plan = getPlan(org?.plan ?? 'starter');
   const limit = plan[resource];
 
   if (limit === Infinity) return;
@@ -107,15 +131,30 @@ export async function assertWithinLimit(
   }
 }
 
+/**
+ * Guards any action that consumes resources — running engine checks, crawling,
+ * publishing. Reads and exports deliberately do not call this.
+ */
+export async function assertEntitled(orgId: string): Promise<void> {
+  const subscription = await getSubscription(orgId);
+  if (!subscription.entitled) {
+    throw new SubscriptionRequiredError(subscription.status);
+  }
+}
+
 /** Remaining headroom per resource, for the settings screen. */
 export async function getEntitlements(orgId: string) {
-  const org = await db.organization.findUnique({ where: { id: orgId } });
-  const plan = getPlan(org?.plan ?? 'growth');
-  const usage = await getUsage(orgId);
+  const [org, usage, subscription] = await Promise.all([
+    db.organization.findUnique({ where: { id: orgId } }),
+    getUsage(orgId),
+    getSubscription(orgId),
+  ]);
+  const plan = getPlan(org?.plan ?? 'starter');
 
   return {
     plan,
-    planId: (org?.plan ?? 'growth') as PlanId,
+    planId: (org?.plan ?? 'starter') as PlanId,
+    subscription,
     usage,
     remaining: {
       projects: plan.projects === Infinity ? Infinity : Math.max(0, plan.projects - usage.projects),

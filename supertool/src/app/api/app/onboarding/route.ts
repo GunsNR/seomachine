@@ -3,8 +3,8 @@ import { z } from 'zod';
 import { generatePromptSet } from '@/lib/ai/prompts';
 import { db } from '@/lib/db';
 import { assertWithinLimit } from '@/lib/plan';
-import { estimateKeyword } from '@/lib/seo/estimate';
-import { classifyIntent, extractTerms } from '@/lib/seo/keywords';
+import { extractTerms } from '@/lib/seo/keywords';
+import { fetchKeywordMetrics } from '@/lib/seo/providers/keyword-data';
 import { fetchPage, normalizeUrl } from '@/lib/seo/crawler';
 import { withSession } from '@/lib/route-helpers';
 
@@ -127,22 +127,20 @@ export const POST = withSession(Body, async ({ session, body }) => {
   if (freshKeywords.length) {
     try {
       await assertWithinLimit(session.orgId, 'keywords', freshKeywords.length);
+      const metrics = await fetchKeywordMetrics(freshKeywords);
       await db.keyword.createMany({
-        data: freshKeywords.map((phrase) => {
-          const est = estimateKeyword(phrase, project!.domain);
-          return {
-            projectId: project!.id,
-            phrase,
-            volume: est.volume,
-            difficulty: est.difficulty,
-            cpc: est.cpc,
-            intent: classifyIntent(phrase),
-            trend: JSON.stringify(est.trend),
-            dataSource: est.source,
-          };
-        }),
+        data: metrics.map((m) => ({
+          projectId: project!.id,
+          phrase: m.phrase,
+          volume: m.volume,
+          difficulty: m.difficulty,
+          cpc: m.cpc,
+          intent: m.intent,
+          trend: JSON.stringify(m.trend),
+          dataSource: m.source,
+        })),
       });
-      keywordsAdded = freshKeywords.length;
+      keywordsAdded = metrics.length;
     } catch {
       // A plan limit here should not abort onboarding; the workspace is still
       // usable and the limit is reported on the keywords screen.

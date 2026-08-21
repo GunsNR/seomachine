@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db';
+import { assertEntitled } from '@/lib/plan';
 import { fail, withSession } from '@/lib/route-helpers';
 import { publishPost } from '@/lib/wordpress';
 
@@ -15,6 +16,8 @@ const Body = z.object({
 
 /** Pushes an article to the project's connected WordPress site. */
 export const POST = withSession(Body, async ({ session, body }) => {
+  await assertEntitled(session.orgId);
+
   const article = await db.article.findFirst({
     where: { id: body.articleId, project: { orgId: session.orgId } },
     include: { project: { include: { connections: true } } },

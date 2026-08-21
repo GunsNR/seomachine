@@ -59,8 +59,44 @@ full list with explanations.
 | `AUTH_SECRET` | Required. The app refuses to boot in production without it. |
 | `ENCRYPTION_KEY` | Falls back to `AUTH_SECRET` for encrypting stored credentials. |
 | `CRON_SECRET` | Scheduled runs stay disabled rather than defaulting open. |
+| `STRIPE_SECRET_KEY` | Self-hosted mode: billing disabled, every feature unlocked. |
+| `STRIPE_WEBHOOK_SECRET` | The webhook refuses to run rather than trusting unsigned events. |
+| `RESEND_API_KEY` / `POSTMARK_SERVER_TOKEN` | Mail is logged to the console instead of sent. **Password reset will not reach real users.** |
 | `OPENAI_API_KEY` and the other five | That engine runs simulated instead of live. |
-| `DATAFORSEO_LOGIN` / `SEMRUSH_API_KEY` | Keyword metrics are modelled in-product and labelled "estimated". |
+| `DATAFORSEO_LOGIN` + `DATAFORSEO_PASSWORD` | Keyword metrics are modelled in-product and labelled "est." in the UI. |
+
+### Billing
+
+Entitlements follow the Stripe subscription — the `plan` column is a cache that
+only the webhook writes, so nothing on the client can grant itself a tier.
+
+Set `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` and a price id per plan and
+interval, then point a Stripe webhook at `/api/billing/webhook` subscribed to
+`checkout.session.completed`, `customer.subscription.*` and `invoice.*`.
+
+Locally: `stripe listen --forward-to localhost:3000/api/billing/webhook`.
+
+A lapsed trial or failed payment does **not** lock a customer out. Reads and
+exports stay open — the privacy policy promises they can retrieve their data —
+and only the actions that consume resources (engine checks, crawls, publishing)
+are paused.
+
+### Email
+
+Set either `RESEND_API_KEY` or `POSTMARK_SERVER_TOKEN`, plus an `EMAIL_FROM` on
+a domain you have verified with that provider. With neither, mail is printed to
+the server console rather than silently dropped, which is fine in development
+but means **password reset cannot reach a locked-out user** — set one before
+launch. `/api/health` reports which provider is active.
+
+### Keyword data
+
+Without a provider, volume, difficulty and CPC come from an in-product model
+driven by phrase length and commercial intent. Those rows are labelled `est.`
+in the UI and carry `dataSource: "estimated"` in exports, so they are never
+presented as measurements. With DataForSEO credentials set, real figures are
+fetched and a provider outage degrades to the model rather than failing the
+request.
 
 ### Scheduled visibility runs
 
@@ -93,12 +129,15 @@ and run `npx prisma db push`. No schema changes are needed.
 
 1. Set `AUTH_SECRET` to a real random value, and `NEXT_PUBLIC_SITE_URL` to your
    domain — canonicals, sitemaps and Open Graph tags all read from it.
-2. Set `CRON_SECRET` and schedule the endpoint above.
-3. Replace the placeholder marketing figures in `src/content/site.ts` — review
+2. **Configure an email provider.** Without one, a locked-out user cannot
+   reset their password.
+3. Configure Stripe if you intend to charge, and register the webhook.
+4. Set `CRON_SECRET` and schedule the endpoint above.
+5. Replace the placeholder marketing figures in `src/content/site.ts` — review
    counts, result percentages and testimonials are illustrative, not real.
-4. Rebrand in `brand.config.ts`. Name, domain, colours, contact details and
+6. Rebrand in `brand.config.ts`. Name, domain, colours, contact details and
    schema markup all derive from that one file.
-5. Move rate limiting to a shared store if you run more than one instance. The
+7. Move rate limiting to a shared store if you run more than one instance. The
    built-in limiter is per-process by design; the trade-off is documented at
    `src/lib/rate-limit.ts`.
 
@@ -129,7 +168,7 @@ no front-end CSS and takes over none of your existing metadata. Setup guide at
 
 ```bash
 npm run dev          # dev server
-npm test             # 203 tests
+npm test             # 241 tests
 npm run typecheck
 npm run lint
 npm run build
@@ -160,3 +199,10 @@ refuses an unauthenticated request.
   internal networks.
 - Lead attribution re-derives the engine from the referrer server-side, so a
   forged field cannot invent a channel.
+- Password reset tokens are random bytes stored only as a SHA-256 digest,
+  single-use, and expire in an hour. Requesting a new one retires outstanding
+  links. The request endpoint returns the same response whether or not the
+  address is registered, so it cannot be used to enumerate accounts.
+- Stripe webhooks are signature-verified against the raw body, and processed
+  event ids are recorded so a redelivery is a no-op rather than a double
+  upgrade.

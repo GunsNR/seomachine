@@ -5,6 +5,7 @@ import { ENGINES } from '@/lib/ai/engines';
 import { ask } from '@/lib/ai/providers';
 import { getSession } from '@/lib/auth';
 import { db } from '@/lib/db';
+import { assertEntitled } from '@/lib/plan';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -31,6 +32,8 @@ export async function POST(req: Request) {
     include: { competitors: true, prompts: true },
   });
   if (!project) return NextResponse.json({ error: 'Project not found.' }, { status: 404 });
+
+  await assertEntitled(session.orgId);
 
   if (!project.prompts.length) {
     return NextResponse.json({ error: 'This project has no prompts to run yet.' }, { status: 422 });

@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createSession, hashPassword } from '@/lib/auth';
+import { TRIAL_DAYS } from '@/lib/billing';
 import { db } from '@/lib/db';
+import { sendEmail, welcomeEmail } from '@/lib/email';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -37,7 +39,14 @@ export async function POST(req: Request) {
   // one transaction, so a partial signup can never leave an orphaned user.
   const user = await db.$transaction(async (tx) => {
     const org = await tx.organization.create({
-      data: { name: input.company?.trim() || `${input.name}'s workspace`, plan: 'growth' },
+      data: {
+        name: input.company?.trim() || `${input.name}'s workspace`,
+        // Everyone starts on Growth for the trial so the product can be
+        // evaluated properly; the webhook sets the real tier on subscribe.
+        plan: 'growth',
+        subscriptionStatus: 'trialing',
+        trialEndsAt: new Date(Date.now() + TRIAL_DAYS * 86_400_000),
+      },
     });
 
     const created = await tx.user.create({
@@ -62,5 +71,10 @@ export async function POST(req: Request) {
   });
 
   await createSession(user);
+
+  // Fire and forget: a mail failure must never fail the signup that caused it.
+  const welcome = await sendEmail(welcomeEmail(user.email, user.name));
+  if (!welcome.ok) console.error('signup: welcome email failed', welcome.error);
+
   return NextResponse.json({ ok: true });
 }

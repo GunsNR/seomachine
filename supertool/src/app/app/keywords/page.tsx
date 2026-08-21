@@ -5,6 +5,7 @@ import { ExportButton } from '@/components/app/ExportButton';
 import { getSession, resolveProject } from '@/lib/auth';
 import { getKeywords } from '@/lib/dashboard';
 import { getEntitlements } from '@/lib/plan';
+import { providerConfigured } from '@/lib/seo/providers/keyword-data';
 import { compact, money, pct } from '@/lib/utils';
 import { BriefButton } from './BriefButton';
 import { DeleteKeyword, KeywordManager } from './KeywordManager';
@@ -26,6 +27,8 @@ export default async function KeywordsPage() {
     getEntitlements(session.orgId),
   ]);
 
+  const estimatedCount = rows.filter((r) => r.dataSource !== 'measured').length;
+
   return (
     <>
       <PageHeader
@@ -42,6 +45,19 @@ export default async function KeywordsPage() {
           <StatTile label="Traffic value" value={money(summary.value)} sub="Equivalent paid-search cost" />
           <StatTile label="Quick wins" value={summary.quickWins} sub="Positions 4-20, low difficulty" tone="good" />
         </div>
+
+        {estimatedCount > 0 && (
+          <p className="rounded-xl bg-warn/10 p-4 text-[0.84rem] leading-relaxed text-ink ring-1 ring-warn/25">
+            <strong className="font-semibold">
+              {estimatedCount === rows.length
+                ? 'Volume, difficulty and CPC are modelled, not measured.'
+                : `${estimatedCount} of ${rows.length} keywords use modelled metrics.`}
+            </strong>{' '}
+            {providerConfigured()
+              ? 'Your data provider had no figures for these terms, so the in-product model filled the gap. Rows marked "est." are modelled.'
+              : 'No keyword data provider is connected, so these come from the in-product model — derived from phrase length and commercial intent. They are internally consistent and fine for ranking work against each other, but they are not search-volume measurements. Connect DataForSEO to replace them.'}
+          </p>
+        )}
 
         <KeywordManager projectId={project.id} remaining={entitlements.remaining.keywords} />
 
@@ -95,7 +111,17 @@ export default async function KeywordsPage() {
                       <td className="px-5 py-3">
                         <Sparkline points={k.history} invert color={k.delta >= 0 ? '#12A150' : '#E5484D'} />
                       </td>
-                      <td className="px-5 py-3 text-right text-[0.85rem] tabular-nums text-body">{compact(k.volume)}</td>
+                      <td className="px-5 py-3 text-right text-[0.85rem] tabular-nums text-body">
+                        {compact(k.volume)}
+                        {k.dataSource !== 'measured' && (
+                          <span
+                            className="ml-1 text-[0.65rem] font-bold uppercase text-warn"
+                            title="Modelled, not measured"
+                          >
+                            est.
+                          </span>
+                        )}
+                      </td>
                       <td className="px-5 py-3 text-right text-[0.85rem] tabular-nums text-body">{k.difficulty}</td>
                       <td className="px-5 py-3 text-right text-[0.85rem] tabular-nums text-body">{compact(k.traffic)}</td>
                       <td className="px-5 py-3 text-right text-[0.85rem] tabular-nums text-body">{money(k.value)}</td>

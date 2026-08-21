@@ -2,8 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db';
 import { assertWithinLimit } from '@/lib/plan';
-import { classifyIntent } from '@/lib/seo/keywords';
-import { estimateKeyword } from '@/lib/seo/estimate';
+import { fetchKeywordMetrics } from '@/lib/seo/providers/keyword-data';
 import { fail, loadProject, withSession } from '@/lib/route-helpers';
 
 export const runtime = 'nodejs';
@@ -44,22 +43,28 @@ export const POST = withSession(AddBody, async ({ session, body }) => {
 
   await assertWithinLimit(session.orgId, 'keywords', fresh.length);
 
+  // Measured metrics where a provider is configured; the model fills the rest.
+  const metrics = await fetchKeywordMetrics(fresh);
+
   await db.keyword.createMany({
-    data: fresh.map((phrase) => {
-      const est = estimateKeyword(phrase, project.domain);
-      return {
-        projectId: project.id,
-        phrase,
-        volume: est.volume,
-        difficulty: est.difficulty,
-        cpc: est.cpc,
-        intent: classifyIntent(phrase),
-        trend: JSON.stringify(est.trend),
-      };
-    }),
+    data: metrics.map((m) => ({
+      projectId: project.id,
+      phrase: m.phrase,
+      volume: m.volume,
+      difficulty: m.difficulty,
+      cpc: m.cpc,
+      intent: m.intent,
+      trend: JSON.stringify(m.trend),
+      dataSource: m.source,
+    })),
   });
 
-  return NextResponse.json({ ok: true, added: fresh.length, skipped: phrases.length - fresh.length });
+  return NextResponse.json({
+    ok: true,
+    added: metrics.length,
+    skipped: phrases.length - metrics.length,
+    measured: metrics.filter((m) => m.source === 'measured').length,
+  });
 });
 
 export const DELETE = withSession(null, async ({ session, req }) => {

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getSession } from '@/lib/auth';
 import { db } from '@/lib/db';
+import { assertEntitled } from '@/lib/plan';
 import { auditPages } from '@/lib/seo/audit';
 import { crawlSite, normalizeUrl } from '@/lib/seo/crawler';
 
@@ -27,6 +28,8 @@ export async function POST(req: Request) {
     where: { id: input.projectId, orgId: session.orgId },
   });
   if (!project) return NextResponse.json({ error: 'Project not found.' }, { status: 404 });
+
+  await assertEntitled(session.orgId);
 
   const run = await db.auditRun.create({
     data: { projectId: project.id, status: 'running' },
