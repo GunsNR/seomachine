@@ -4,7 +4,9 @@ import { Badge, EmptyState, PageHeader, Panel, SimulationNotice, StatTile } from
 import { RunCheckButton } from './RunCheckButton';
 import { getSession, resolveProject } from '@/lib/auth';
 import { getAiVisibility } from '@/lib/dashboard';
+import { getEntitlements } from '@/lib/plan';
 import { pct } from '@/lib/utils';
+import { DeletePrompt, PromptManager } from './PromptManager';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,7 +16,10 @@ export default async function AiVisibilityPage() {
   const project = await resolveProject(session.orgId);
   if (!project) redirect('/app');
 
-  const v = await getAiVisibility(project.id);
+  const [v, entitlements] = await Promise.all([
+    getAiVisibility(project.id),
+    getEntitlements(session.orgId),
+  ]);
   const delta = v.rollup.score - v.previousScore;
 
   return (
@@ -72,6 +77,12 @@ export default async function AiVisibilityPage() {
           </div>
         </Panel>
 
+        <PromptManager
+          projectId={project.id}
+          category={project.description || 'SEO software'}
+          remaining={entitlements.remaining.prompts}
+        />
+
         <Panel title="Prompt performance" sub="Sorted by mention rate, weakest first — these are your content gaps">
           {v.promptRows.length ? (
             <div className="overflow-x-auto">
@@ -84,6 +95,7 @@ export default async function AiVisibilityPage() {
                     <th scope="col" className="table-head px-5 py-3 text-right">Engines</th>
                     <th scope="col" className="table-head px-5 py-3 text-right">Mentioned</th>
                     <th scope="col" className="table-head px-5 py-3 text-right">Cited</th>
+                    <th scope="col" className="px-5 py-3"><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
@@ -98,6 +110,9 @@ export default async function AiVisibilityPage() {
                         </span>
                       </td>
                       <td className="px-5 py-3.5 text-right text-[0.85rem] tabular-nums text-body">{pct(p.citationRate)}</td>
+                      <td className="px-5 py-3.5 text-right">
+                        <DeletePrompt id={p.id} text={p.text} />
+                      </td>
                     </tr>
                   ))}
                 </tbody>

@@ -5,6 +5,8 @@ import { ApiKeyManager } from './ApiKeyManager';
 import { ENGINES, isEngineLive } from '@/lib/ai/engines';
 import { getSession, resolveProject } from '@/lib/auth';
 import { db } from '@/lib/db';
+import { getEntitlements } from '@/lib/plan';
+import { CompetitorManager, ProjectForm } from './WorkspaceForms';
 import { brand } from '../../../../brand.config';
 
 export const dynamic = 'force-dynamic';
@@ -15,7 +17,7 @@ export default async function SettingsPage() {
   const project = await resolveProject(session.orgId);
   if (!project) redirect('/app');
 
-  const [org, competitors, connection, apiKeys, counts] = await Promise.all([
+  const [org, competitors, connection, apiKeys, counts, entitlements] = await Promise.all([
     db.organization.findUnique({ where: { id: session.orgId } }),
     db.competitor.findMany({ where: { projectId: project.id } }),
     db.siteConnection.findFirst({ where: { projectId: project.id } }),
@@ -25,6 +27,7 @@ export default async function SettingsPage() {
       db.aiPrompt.count({ where: { projectId: project.id } }),
       db.article.count({ where: { projectId: project.id } }),
     ]),
+    getEntitlements(session.orgId),
   ]);
 
   const [keywordCount, promptCount, articleCount] = counts;
@@ -43,17 +46,38 @@ export default async function SettingsPage() {
           <StatTile label="Content pieces" value={articleCount} sub="Draft through published" />
         </div>
 
-        <Panel title="Project">
+        <Panel title="Plan usage" sub={`${entitlements.plan.label} plan`}>
           <dl className="divide-y divide-line">
-            <Row label="Name" value={project.name} />
-            <Row label="Domain" value={project.domain} />
-            <Row label="Country" value={project.country.toUpperCase()} />
-            <Row
-              label="Competitors"
-              value={competitors.length ? competitors.map((c) => c.label || c.domain).join(', ') : 'None configured'}
+            <UsageRow
+              label="Projects" used={entitlements.usage.projects} limit={entitlements.plan.projects}
             />
+            <UsageRow
+              label="Tracked prompts" used={entitlements.usage.prompts} limit={entitlements.plan.prompts}
+            />
+            <UsageRow
+              label="Tracked keywords" used={entitlements.usage.keywords} limit={entitlements.plan.keywords}
+            />
+            <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
+              <dt className="text-[0.85rem] font-semibold text-ink">Check frequency</dt>
+              <dd className="text-[0.875rem] text-body">{entitlements.plan.frequency}</dd>
+            </div>
           </dl>
         </Panel>
+
+        <ProjectForm
+          project={{
+            id: project.id,
+            name: project.name,
+            domain: project.domain,
+            description: project.description,
+            country: project.country,
+          }}
+        />
+
+        <CompetitorManager
+          projectId={project.id}
+          competitors={competitors.map((c) => ({ id: c.id, domain: c.domain, label: c.label || c.domain }))}
+        />
 
         <Panel
           title="Answer engine credentials"
@@ -140,6 +164,31 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
     <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
       <dt className="text-[0.85rem] font-semibold text-ink">{label}</dt>
       <dd className="text-[0.875rem] text-body">{value}</dd>
+    </div>
+  );
+}
+
+/** Consumption against an entitlement, with a bar once a limit is finite. */
+function UsageRow({ label, used, limit }: { label: string; used: number; limit: number }) {
+  const unlimited = !Number.isFinite(limit);
+  const ratio = unlimited ? 0 : Math.min(1, used / Math.max(1, limit));
+
+  return (
+    <div className="px-5 py-3.5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <dt className="text-[0.85rem] font-semibold text-ink">{label}</dt>
+        <dd className="text-[0.875rem] tabular-nums text-body">
+          {used.toLocaleString()} / {unlimited ? 'Unlimited' : limit.toLocaleString()}
+        </dd>
+      </div>
+      {!unlimited && (
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-surface-alt">
+          <div
+            className={`h-full rounded-full ${ratio >= 0.9 ? 'bg-bad' : ratio >= 0.7 ? 'bg-warn' : 'bg-brand'}`}
+            style={{ width: `${Math.max(2, ratio * 100)}%` }}
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -3,7 +3,9 @@ import { Sparkline } from '@/components/app/Chart';
 import { Badge, EmptyState, PageHeader, Panel, StatTile } from '@/components/app/ui';
 import { getSession, resolveProject } from '@/lib/auth';
 import { getKeywords } from '@/lib/dashboard';
+import { getEntitlements } from '@/lib/plan';
 import { compact, money, pct } from '@/lib/utils';
+import { DeleteKeyword, KeywordManager } from './KeywordManager';
 
 export const dynamic = 'force-dynamic';
 
@@ -17,7 +19,10 @@ export default async function KeywordsPage() {
   const project = await resolveProject(session.orgId);
   if (!project) redirect('/app');
 
-  const { rows, summary } = await getKeywords(project.id);
+  const [{ rows, summary }, entitlements] = await Promise.all([
+    getKeywords(project.id),
+    getEntitlements(session.orgId),
+  ]);
 
   return (
     <>
@@ -34,6 +39,8 @@ export default async function KeywordsPage() {
           <StatTile label="Traffic value" value={money(summary.value)} sub="Equivalent paid-search cost" />
           <StatTile label="Quick wins" value={summary.quickWins} sub="Positions 4-20, low difficulty" tone="good" />
         </div>
+
+        <KeywordManager projectId={project.id} remaining={entitlements.remaining.keywords} />
 
         <Panel
           title="All keywords"
@@ -55,6 +62,7 @@ export default async function KeywordsPage() {
                     <th scope="col" className="table-head px-5 py-3 text-right">Traffic</th>
                     <th scope="col" className="table-head px-5 py-3 text-right">Value</th>
                     <th scope="col" className="table-head px-5 py-3 text-right">Opportunity</th>
+                    <th scope="col" className="px-5 py-3"><span className="sr-only">Actions</span></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
@@ -92,6 +100,9 @@ export default async function KeywordsPage() {
                         <span className="font-heading text-[1rem] font-extrabold tabular-nums text-brand">
                           {k.opportunity}
                         </span>
+                      </td>
+                      <td className="px-5 py-3 text-right">
+                        <DeleteKeyword id={k.id} phrase={k.phrase} />
                       </td>
                     </tr>
                   ))}
