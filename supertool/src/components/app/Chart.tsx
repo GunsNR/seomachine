@@ -25,9 +25,15 @@ export function LineChart({
   label: string;
 }) {
   if (points.length < 2) {
+    // Collapse rather than reserving the full chart height for one sentence.
     return (
-      <div className={cn('flex items-center justify-center text-[0.85rem] text-body', className)} style={{ height }}>
-        Not enough data yet — check back after the next run.
+      <div className={cn('rounded-lg bg-surface-alt px-4 py-8 text-center', className)}>
+        <p className="text-[0.875rem] font-semibold text-ink">
+          {points.length === 1 ? 'One run recorded so far' : 'No runs recorded yet'}
+        </p>
+        <p className="mt-1 text-[0.82rem] text-body">
+          A trend line needs at least two runs. This fills in after the next one.
+        </p>
       </div>
     );
   }

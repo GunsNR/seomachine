@@ -129,8 +129,18 @@ export default async function OverviewPage() {
                   </li>
                 ))}
               </ul>
+            ) : keywords.summary.total > 0 ? (
+              <EmptyState
+                title="Nothing scoring high yet"
+                body={`All ${keywords.summary.total} tracked keywords are currently low or medium opportunity — usually because none of them rank yet, so there is no position to improve on. Rankings populate after the first tracking run.`}
+                cta={{ label: 'Review keywords', href: '/app/keywords' }}
+              />
             ) : (
-              <EmptyState title="No opportunities yet" body="Add keywords to start scoring opportunities." cta={{ label: 'Add keywords', href: '/app/keywords' }} />
+              <EmptyState
+                title="No keywords tracked"
+                body="Add the terms you want to rank for and they will be scored against the eight-factor opportunity model."
+                cta={{ label: 'Add keywords', href: '/app/keywords' }}
+              />
             )}
           </Panel>
 
