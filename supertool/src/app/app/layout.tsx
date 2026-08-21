@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation';
+import { headers } from 'next/headers';
 import { Sidebar } from '@/components/app/Sidebar';
 import { getSession, resolveProject } from '@/lib/auth';
+import { db } from '@/lib/db';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,6 +16,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (!session) redirect('/login');
 
   const project = await resolveProject(session.orgId);
+
+  // A workspace with no prompts has never been set up. Send them through
+  // onboarding rather than showing an empty dashboard they cannot populate.
+  const pathname = (await headers()).get('x-pathname') ?? '';
+  if (!pathname.startsWith('/app/onboarding')) {
+    const configured = project ? await db.aiPrompt.count({ where: { projectId: project.id } }) : 0;
+    if (configured === 0) redirect('/app/onboarding');
+  }
 
   return (
     <div className="flex min-h-screen flex-col bg-surface-alt lg:flex-row">

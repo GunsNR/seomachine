@@ -75,6 +75,8 @@ model Keyword {
   cpc        Float    @default(0)
   intent     String   @default("informational")
   trend      String   @default("[]") // JSON array of 12 monthly volumes
+  /// "estimated" when modelled in-product, "measured" from a connected provider.
+  dataSource String   @default("estimated")
   createdAt  DateTime @default(now())
 
   project   Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
