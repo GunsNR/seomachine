@@ -1,0 +1,282 @@
+// Rank Logic SuperTool data model.
+// SQLite by default so the product runs with zero infrastructure; swap the
+// provider to postgresql and the same schema deploys to a hosted database.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String       @id @default(cuid())
+  email        String       @unique
+  name         String
+  passwordHash String
+  role         String       @default("owner")
+  createdAt    DateTime     @default(now())
+  memberships  Membership[]
+}
+
+model Organization {
+  id        String       @id @default(cuid())
+  name      String
+  plan      String       @default("growth")
+  createdAt DateTime     @default(now())
+  members   Membership[]
+  projects  Project[]
+}
+
+model Membership {
+  id     String       @id @default(cuid())
+  userId String
+  orgId  String
+  role   String       @default("owner")
+  user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  org    Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, orgId])
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  orgId       String
+  name        String
+  domain      String
+  description String   @default("")
+  country     String   @default("us")
+  createdAt   DateTime @default(now())
+
+  org         Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  keywords    Keyword[]
+  prompts     AiPrompt[]
+  competitors Competitor[]
+  audits      AuditRun[]
+  articles    Article[]
+  briefs      ContentBrief[]
+  backlinks   Backlink[]
+  leads       Lead[]
+  connections SiteConnection[]
+  apiKeys     ApiKey[]
+
+  @@index([orgId])
+}
+
+model Keyword {
+  id         String   @id @default(cuid())
+  projectId  String
+  phrase     String
+  volume     Int      @default(0)
+  difficulty Int      @default(0)
+  cpc        Float    @default(0)
+  intent     String   @default("informational")
+  trend      String   @default("[]") // JSON array of 12 monthly volumes
+  createdAt  DateTime @default(now())
+
+  project   Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  snapshots RankSnapshot[]
+
+  @@unique([projectId, phrase])
+  @@index([projectId])
+}
+
+model RankSnapshot {
+  id         String   @id @default(cuid())
+  keywordId  String
+  engine     String   @default("google")
+  position   Int // 0 == not in top 100
+  url        String   @default("")
+  capturedAt DateTime @default(now())
+
+  keyword Keyword @relation(fields: [keywordId], references: [id], onDelete: Cascade)
+
+  @@index([keywordId, capturedAt])
+}
+
+/// A question a real buyer would ask an AI assistant. Visibility is measured
+/// by how often the brand is named or cited in the answers.
+model AiPrompt {
+  id        String   @id @default(cuid())
+  projectId String
+  text      String
+  cluster   String   @default("general")
+  intent    String   @default("informational")
+  createdAt DateTime @default(now())
+
+  project Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  checks  AiCheck[]
+
+  @@index([projectId])
+}
+
+model AiCheck {
+  id             String   @id @default(cuid())
+  promptId       String
+  engine         String // chatgpt | perplexity | claude | gemini | grok | google-ai-mode
+  brandMentioned Boolean  @default(false)
+  brandCited     Boolean  @default(false)
+  mentionRank    Int      @default(0) // 1-based order the brand appears among named vendors
+  sentiment      String   @default("neutral")
+  shareOfVoice   Float    @default(0)
+  citedUrls      String   @default("[]") // JSON array
+  competitors    String   @default("[]") // JSON array of competitor domains named
+  excerpt        String   @default("")
+  simulated      Boolean  @default(true)
+  runAt          DateTime @default(now())
+
+  prompt AiPrompt @relation(fields: [promptId], references: [id], onDelete: Cascade)
+
+  @@index([promptId, runAt])
+  @@index([engine, runAt])
+}
+
+model Competitor {
+  id        String   @id @default(cuid())
+  projectId String
+  domain    String
+  label     String   @default("")
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, domain])
+}
+
+model AuditRun {
+  id           String    @id @default(cuid())
+  projectId    String
+  status       String    @default("running")
+  score        Int       @default(0)
+  pagesCrawled Int       @default(0)
+  startedAt    DateTime  @default(now())
+  finishedAt   DateTime?
+
+  project Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  issues  AuditIssue[]
+
+  @@index([projectId, startedAt])
+}
+
+model AuditIssue {
+  id       String @id @default(cuid())
+  auditId  String
+  url      String
+  code     String
+  severity String @default("notice") // critical | warning | notice
+  title    String
+  detail   String @default("")
+  category String @default("onpage") // crawlability | onpage | performance | schema | ai-readiness
+
+  audit AuditRun @relation(fields: [auditId], references: [id], onDelete: Cascade)
+
+  @@index([auditId, severity])
+}
+
+model ContentBrief {
+  id            String   @id @default(cuid())
+  projectId     String
+  topic         String
+  targetKeyword String
+  intent        String   @default("informational")
+  outline       String   @default("[]") // JSON array of H2/H3
+  questions     String   @default("[]") // JSON array of AI-cited questions to answer
+  targetWords   Int      @default(1800)
+  status        String   @default("ready")
+  createdAt     DateTime @default(now())
+
+  project  Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  articles Article[]
+}
+
+model Article {
+  id              String    @id @default(cuid())
+  projectId       String
+  briefId         String?
+  title           String
+  slug            String
+  body            String    @default("")
+  metaTitle       String    @default("")
+  metaDescription String    @default("")
+  status          String    @default("draft") // draft | review | scheduled | published
+  seoScore        Int       @default(0)
+  aiReadyScore    Int       @default(0)
+  readability     Float     @default(0)
+  wordCount       Int       @default(0)
+  wpPostId        Int?
+  publishedUrl    String    @default("")
+  publishedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  project Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  brief   ContentBrief? @relation(fields: [briefId], references: [id])
+
+  @@unique([projectId, slug])
+  @@index([projectId, status])
+}
+
+model Backlink {
+  id        String   @id @default(cuid())
+  projectId String
+  sourceUrl String
+  targetUrl String
+  anchor    String   @default("")
+  dofollow  Boolean  @default(true)
+  authority Int      @default(0)
+  firstSeen DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+/// A visit or enquiry attributed back to an AI assistant or organic search.
+model Lead {
+  id         String   @id @default(cuid())
+  projectId  String
+  source     String   @default("ai") // ai | organic | direct
+  engine     String   @default("")
+  landingUrl String   @default("")
+  email      String   @default("")
+  name       String   @default("")
+  value      Float    @default(0)
+  status     String   @default("new")
+  capturedAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, capturedAt])
+}
+
+/// A connected publishing target — today WordPress via the SuperTool plugin.
+model SiteConnection {
+  id          String    @id @default(cuid())
+  projectId   String
+  platform    String    @default("wordpress")
+  siteUrl     String
+  username    String    @default("")
+  appPassword String    @default("")
+  status      String    @default("pending")
+  lastSyncAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model ApiKey {
+  id         String    @id @default(cuid())
+  projectId  String
+  label      String    @default("WordPress plugin")
+  prefix     String
+  hashedKey  String
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}

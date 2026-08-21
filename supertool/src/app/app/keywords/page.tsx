@@ -1,0 +1,108 @@
+import { redirect } from 'next/navigation';
+import { Sparkline } from '@/components/app/Chart';
+import { Badge, EmptyState, PageHeader, Panel, StatTile } from '@/components/app/ui';
+import { getSession, resolveProject } from '@/lib/auth';
+import { getKeywords } from '@/lib/dashboard';
+import { compact, money, pct } from '@/lib/utils';
+
+export const dynamic = 'force-dynamic';
+
+const INTENT_TONE = {
+  transactional: 'good', commercial: 'brand', navigational: 'neutral', informational: 'neutral',
+} as const;
+
+export default async function KeywordsPage() {
+  const session = await getSession();
+  if (!session) redirect('/login');
+  const project = await resolveProject(session.orgId);
+  if (!project) redirect('/app');
+
+  const { rows, summary } = await getKeywords(project.id);
+
+  return (
+    <>
+      <PageHeader
+        title="Keywords"
+        sub="Every tracked term with its difficulty, forecast traffic and eight-factor opportunity score."
+      />
+
+      <div className="mt-6 space-y-6">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+          <StatTile label="Tracked" value={summary.total} sub={`${summary.top100} ranking in top 100`} />
+          <StatTile label="Top 3" value={summary.top3} sub={`${summary.top10} in the top 10`} tone="good" />
+          <StatTile label="Est. monthly traffic" value={summary.traffic} sub="AI-Overview-aware forecast" />
+          <StatTile label="Traffic value" value={money(summary.value)} sub="Equivalent paid-search cost" />
+          <StatTile label="Quick wins" value={summary.quickWins} sub="Positions 4-20, low difficulty" tone="good" />
+        </div>
+
+        <Panel
+          title="All keywords"
+          sub={`Sorted by opportunity score · share of voice ${pct(summary.shareOfVoice)}`}
+        >
+          {rows.length ? (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[62rem]">
+                <caption className="sr-only">Tracked keywords with position, volume, difficulty and opportunity</caption>
+                <thead>
+                  <tr className="border-b border-line">
+                    <th scope="col" className="table-head px-5 py-3 text-left">Keyword</th>
+                    <th scope="col" className="table-head px-5 py-3 text-left">Intent</th>
+                    <th scope="col" className="table-head px-5 py-3 text-right">Position</th>
+                    <th scope="col" className="table-head px-5 py-3 text-right">30d</th>
+                    <th scope="col" className="table-head px-5 py-3 text-left">Trend</th>
+                    <th scope="col" className="table-head px-5 py-3 text-right">Volume</th>
+                    <th scope="col" className="table-head px-5 py-3 text-right">KD</th>
+                    <th scope="col" className="table-head px-5 py-3 text-right">Traffic</th>
+                    <th scope="col" className="table-head px-5 py-3 text-right">Value</th>
+                    <th scope="col" className="table-head px-5 py-3 text-right">Opportunity</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-line">
+                  {rows.map((k) => (
+                    <tr key={k.id} className="hover:bg-surface-alt/60">
+                      <td className="px-5 py-3 text-[0.875rem] font-semibold text-ink">
+                        {k.phrase}
+                        {k.band === 'quick-win' && <span className="ml-2"><Badge tone="good">Quick win</Badge></span>}
+                      </td>
+                      <td className="px-5 py-3">
+                        <Badge tone={INTENT_TONE[k.intent as keyof typeof INTENT_TONE] ?? 'neutral'}>
+                          {k.intent.slice(0, 4)}
+                        </Badge>
+                      </td>
+                      <td className="px-5 py-3 text-right text-[0.875rem] font-bold tabular-nums text-ink">
+                        {k.position || '—'}
+                      </td>
+                      <td className="px-5 py-3 text-right text-[0.8rem] tabular-nums">
+                        {k.delta === 0 ? (
+                          <span className="text-body/50">—</span>
+                        ) : (
+                          <span className={k.delta > 0 ? 'font-bold text-ok' : 'font-bold text-bad'}>
+                            {k.delta > 0 ? '▲' : '▼'} {Math.abs(k.delta)}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-5 py-3">
+                        <Sparkline points={k.history} invert color={k.delta >= 0 ? '#12A150' : '#E5484D'} />
+                      </td>
+                      <td className="px-5 py-3 text-right text-[0.85rem] tabular-nums text-body">{compact(k.volume)}</td>
+                      <td className="px-5 py-3 text-right text-[0.85rem] tabular-nums text-body">{k.difficulty}</td>
+                      <td className="px-5 py-3 text-right text-[0.85rem] tabular-nums text-body">{compact(k.traffic)}</td>
+                      <td className="px-5 py-3 text-right text-[0.85rem] tabular-nums text-body">{money(k.value)}</td>
+                      <td className="px-5 py-3 text-right">
+                        <span className="font-heading text-[1rem] font-extrabold tabular-nums text-brand">
+                          {k.opportunity}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <EmptyState title="No keywords yet" body="Import a keyword list or connect Search Console to populate this view." cta={{ label: 'Settings', href: '/app/settings' }} />
+          )}
+        </Panel>
+      </div>
+    </>
+  );
+}

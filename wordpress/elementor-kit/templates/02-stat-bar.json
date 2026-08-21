@@ -1,0 +1,202 @@
+{
+  "version": "0.4",
+  "title": "SuperTool — Stat Bar",
+  "type": "section",
+  "content": [
+    {
+      "id": "10a81a7",
+      "elType": "section",
+      "elements": [
+        {
+          "id": "1062e26",
+          "elType": "column",
+          "elements": [
+            {
+              "id": "1058fef",
+              "elType": "widget",
+              "widgetType": "counter",
+              "settings": {
+                "starting_number": 0,
+                "ending_number": 6,
+                "suffix": "",
+                "title": "Answer engines tracked",
+                "number_color": "#1466D8",
+                "title_color": "#0B1220",
+                "typography_typography": "custom",
+                "typography_font_family": "Manrope",
+                "typography_font_size": {
+                  "unit": "px",
+                  "size": 44,
+                  "sizes": []
+                },
+                "typography_font_weight": "800",
+                "title_typography_typography": "custom",
+                "title_typography_font_family": "Inter",
+                "title_typography_font_size": {
+                  "unit": "px",
+                  "size": 15,
+                  "sizes": []
+                },
+                "title_typography_font_weight": "600"
+              },
+              "elements": [],
+              "isInner": false
+            }
+          ],
+          "isInner": false,
+          "settings": {
+            "_column_size": 100,
+            "_inline_size": 25
+          }
+        },
+        {
+          "id": "1076a94",
+          "elType": "column",
+          "elements": [
+            {
+              "id": "106cc5d",
+              "elType": "widget",
+              "widgetType": "counter",
+              "settings": {
+                "starting_number": 0,
+                "ending_number": 41,
+                "suffix": "%",
+                "title": "Average citation lift",
+                "number_color": "#1466D8",
+                "title_color": "#0B1220",
+                "typography_typography": "custom",
+                "typography_font_family": "Manrope",
+                "typography_font_size": {
+                  "unit": "px",
+                  "size": 44,
+                  "sizes": []
+                },
+                "typography_font_weight": "800",
+                "title_typography_typography": "custom",
+                "title_typography_font_family": "Inter",
+                "title_typography_font_size": {
+                  "unit": "px",
+                  "size": 15,
+                  "sizes": []
+                },
+                "title_typography_font_weight": "600"
+              },
+              "elements": [],
+              "isInner": false
+            }
+          ],
+          "isInner": false,
+          "settings": {
+            "_column_size": 100,
+            "_inline_size": 25
+          }
+        },
+        {
+          "id": "108a702",
+          "elType": "column",
+          "elements": [
+            {
+              "id": "10808cb",
+              "elType": "widget",
+              "widgetType": "counter",
+              "settings": {
+                "starting_number": 0,
+                "ending_number": 5,
+                "suffix": "",
+                "title": "Minute WordPress setup",
+                "number_color": "#1466D8",
+                "title_color": "#0B1220",
+                "typography_typography": "custom",
+                "typography_font_family": "Manrope",
+                "typography_font_size": {
+                  "unit": "px",
+                  "size": 44,
+                  "sizes": []
+                },
+                "typography_font_weight": "800",
+                "title_typography_typography": "custom",
+                "title_typography_font_family": "Inter",
+                "title_typography_font_size": {
+                  "unit": "px",
+                  "size": 15,
+                  "sizes": []
+                },
+                "title_typography_font_weight": "600"
+              },
+              "elements": [],
+              "isInner": false
+            }
+          ],
+          "isInner": false,
+          "settings": {
+            "_column_size": 100,
+            "_inline_size": 25
+          }
+        },
+        {
+          "id": "109e370",
+          "elType": "column",
+          "elements": [
+            {
+              "id": "1094539",
+              "elType": "widget",
+              "widgetType": "counter",
+              "settings": {
+                "starting_number": 0,
+                "ending_number": 1200,
+                "suffix": "+",
+                "title": "Pages scored daily",
+                "number_color": "#1466D8",
+                "title_color": "#0B1220",
+                "typography_typography": "custom",
+                "typography_font_family": "Manrope",
+                "typography_font_size": {
+                  "unit": "px",
+                  "size": 44,
+                  "sizes": []
+                },
+                "typography_font_weight": "800",
+                "title_typography_typography": "custom",
+                "title_typography_font_family": "Inter",
+                "title_typography_font_size": {
+                  "unit": "px",
+                  "size": 15,
+                  "sizes": []
+                },
+                "title_typography_font_weight": "600"
+              },
+              "elements": [],
+              "isInner": false
+            }
+          ],
+          "isInner": false,
+          "settings": {
+            "_column_size": 100,
+            "_inline_size": 25
+          }
+        }
+      ],
+      "isInner": false,
+      "settings": {
+        "structure": "40",
+        "content_width": "boxed",
+        "gap": "extended",
+        "padding": {
+          "unit": "px",
+          "top": "56",
+          "right": "0",
+          "bottom": "56",
+          "left": "undefined",
+          "isLinked": false
+        },
+        "background_background": "classic",
+        "background_color": "#F6F9FD"
+      }
+    }
+  ],
+  "page_settings": [],
+  "metadata": {
+    "generator": "Rank Logic SuperTool kit builder",
+    "elementor_min": "3.0.0"
+  }
+}

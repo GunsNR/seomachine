@@ -1,0 +1,200 @@
+{
+  "version": "0.4",
+  "title": "SuperTool — Hero",
+  "type": "section",
+  "content": [
+    {
+      "id": "104f1b8",
+      "elType": "section",
+      "elements": [
+        {
+          "id": "1031713",
+          "elType": "column",
+          "elements": [
+            {
+              "id": "1009e37",
+              "elType": "widget",
+              "widgetType": "text-editor",
+              "settings": {
+                "editor": "<p>GENERATIVE ENGINE OPTIMIZATION</p>",
+                "align": "left",
+                "text_color": "#8FBBF8",
+                "typography_typography": "custom",
+                "typography_font_family": "Inter",
+                "typography_font_size": {
+                  "unit": "px",
+                  "size": 12,
+                  "sizes": []
+                },
+                "typography_line_height": {
+                  "unit": "em",
+                  "size": 1.7,
+                  "sizes": []
+                },
+                "typography_letter_spacing": {
+                  "unit": "px",
+                  "size": 2,
+                  "sizes": []
+                },
+                "typography_font_weight": "700"
+              },
+              "elements": [],
+              "isInner": false
+            },
+            {
+              "id": "1013c6e",
+              "elType": "widget",
+              "widgetType": "heading",
+              "settings": {
+                "title": "Get cited by AI. Get ranked by Google.",
+                "header_size": "h1",
+                "align": "left",
+                "title_color": "#FFFFFF",
+                "typography_typography": "custom",
+                "typography_font_family": "Manrope",
+                "typography_font_size": {
+                  "unit": "px",
+                  "size": 62,
+                  "sizes": []
+                },
+                "typography_font_weight": "800",
+                "typography_line_height": {
+                  "unit": "em",
+                  "size": 1.12,
+                  "sizes": []
+                },
+                "typography_letter_spacing": {
+                  "unit": "px",
+                  "size": -2,
+                  "sizes": []
+                }
+              },
+              "elements": [],
+              "isInner": false
+            },
+            {
+              "id": "101daa5",
+              "elType": "widget",
+              "widgetType": "text-editor",
+              "settings": {
+                "editor": "<p>Half your buyers now ask an assistant before they ever open a search results page. Rank Logic SuperTool writes content tuned to how those assistants pick sources, publishes it to your site in one click, and tracks every citation, ranking and lead it earns.</p>",
+                "align": "left",
+                "text_color": "rgba(255,255,255,0.75)",
+                "typography_typography": "custom",
+                "typography_font_family": "Inter",
+                "typography_font_size": {
+                  "unit": "px",
+                  "size": 18,
+                  "sizes": []
+                },
+                "typography_line_height": {
+                  "unit": "em",
+                  "size": 1.7,
+                  "sizes": []
+                }
+              },
+              "elements": [],
+              "isInner": false
+            },
+            {
+              "id": "10278dc",
+              "elType": "widget",
+              "widgetType": "button",
+              "settings": {
+                "text": "Start free trial",
+                "link": {
+                  "url": "/signup",
+                  "is_external": "",
+                  "nofollow": ""
+                },
+                "align": "left",
+                "size": "lg",
+                "background_color": "#FF6B2C",
+                "button_text_color": "#FFFFFF",
+                "border_radius": {
+                  "unit": "px",
+                  "top": "999",
+                  "right": "999",
+                  "bottom": "999",
+                  "left": "999",
+                  "isLinked": false
+                },
+                "text_padding": {
+                  "unit": "px",
+                  "top": "20",
+                  "right": "34",
+                  "bottom": "20",
+                  "left": "34",
+                  "isLinked": false
+                },
+                "typography_typography": "custom",
+                "typography_font_family": "Inter",
+                "typography_font_size": {
+                  "unit": "px",
+                  "size": 17,
+                  "sizes": []
+                },
+                "typography_font_weight": "600"
+              },
+              "elements": [],
+              "isInner": false
+            }
+          ],
+          "isInner": false,
+          "settings": {
+            "_column_size": 100,
+            "_inline_size": 55
+          }
+        },
+        {
+          "id": "1045381",
+          "elType": "column",
+          "elements": [
+            {
+              "id": "103b54a",
+              "elType": "widget",
+              "widgetType": "image",
+              "settings": {
+                "image": {
+                  "url": "",
+                  "id": ""
+                },
+                "image_size": "full",
+                "align": "center",
+                "caption": "Drop a dashboard screenshot here"
+              },
+              "elements": [],
+              "isInner": false
+            }
+          ],
+          "isInner": false,
+          "settings": {
+            "_column_size": 100,
+            "_inline_size": 45
+          }
+        }
+      ],
+      "isInner": false,
+      "settings": {
+        "structure": "20",
+        "content_width": "boxed",
+        "gap": "extended",
+        "padding": {
+          "unit": "px",
+          "top": "104",
+          "right": "0",
+          "bottom": "104",
+          "left": "undefined",
+          "isLinked": false
+        },
+        "background_background": "classic",
+        "background_color": "#07182E"
+      }
+    }
+  ],
+  "page_settings": [],
+  "metadata": {
+    "generator": "Rank Logic SuperTool kit builder",
+    "elementor_min": "3.0.0"
+  }
+}

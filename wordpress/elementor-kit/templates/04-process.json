@@ -1,0 +1,330 @@
+{
+  "version": "0.4",
+  "title": "SuperTool — Process Steps",
+  "type": "section",
+  "content": [
+    {
+      "id": "1181a61",
+      "elType": "section",
+      "elements": [
+        {
+          "id": "1177c2a",
+          "elType": "column",
+          "elements": [
+            {
+              "id": "1163fbc",
+              "elType": "widget",
+              "widgetType": "heading",
+              "settings": {
+                "title": "From blind spot to booked pipeline in four steps",
+                "header_size": "h2",
+                "align": "center",
+                "title_color": "#FFFFFF",
+                "typography_typography": "custom",
+                "typography_font_family": "Manrope",
+                "typography_font_size": {
+                  "unit": "px",
+                  "size": 42,
+                  "sizes": []
+                },
+                "typography_font_weight": "800",
+                "typography_line_height": {
+                  "unit": "em",
+                  "size": 1.12,
+                  "sizes": []
+                },
+                "typography_letter_spacing": {
+                  "unit": "px",
+                  "size": -1,
+                  "sizes": []
+                }
+              },
+              "elements": [],
+              "isInner": false
+            },
+            {
+              "id": "116ddf3",
+              "elType": "widget",
+              "widgetType": "text-editor",
+              "settings": {
+                "editor": "<p>No migration, no re-platforming, no new CMS. Point it at the site you already have.</p>",
+                "align": "center",
+                "text_color": "rgba(255,255,255,0.7)",
+                "typography_typography": "custom",
+                "typography_font_family": "Inter",
+                "typography_font_size": {
+                  "unit": "px",
+                  "size": 17,
+                  "sizes": []
+                },
+                "typography_line_height": {
+                  "unit": "em",
+                  "size": 1.7,
+                  "sizes": []
+                }
+              },
+              "elements": [],
+              "isInner": false
+            }
+          ],
+          "isInner": false,
+          "settings": {
+            "_column_size": 100,
+            "_inline_size": null
+          }
+        }
+      ],
+      "isInner": false,
+      "settings": {
+        "structure": "10",
+        "content_width": "boxed",
+        "gap": "extended",
+        "padding": {
+          "unit": "px",
+          "top": "104",
+          "right": "0",
+          "bottom": "24",
+          "left": "undefined",
+          "isLinked": false
+        },
+        "background_background": "classic",
+        "background_color": "#07182E"
+      }
+    },
+    {
+      "id": "11daa50",
+      "elType": "section",
+      "elements": [
+        {
+          "id": "11956cf",
+          "elType": "column",
+          "elements": [
+            {
+              "id": "118b898",
+              "elType": "widget",
+              "widgetType": "icon-box",
+              "settings": {
+                "title_text": "01 · Connect and baseline",
+                "description_text": "We crawl the site, pull your keyword set, generate a prompt set and run every engine once to establish a baseline.",
+                "selected_icon": {
+                  "value": "fas fa-bolt",
+                  "library": "fa-solid"
+                },
+                "view": "framed",
+                "shape": "square",
+                "position": "top",
+                "primary_color": "#1466D8",
+                "title_color": "#0B1220",
+                "description_color": "#4A5568",
+                "title_typography_typography": "custom",
+                "title_typography_font_family": "Manrope",
+                "title_typography_font_size": {
+                  "unit": "px",
+                  "size": 19,
+                  "sizes": []
+                },
+                "title_typography_font_weight": "700",
+                "description_typography_typography": "custom",
+                "description_typography_font_family": "Inter",
+                "description_typography_font_size": {
+                  "unit": "px",
+                  "size": 15,
+                  "sizes": []
+                },
+                "description_typography_line_height": {
+                  "unit": "em",
+                  "size": 1.7,
+                  "sizes": []
+                }
+              },
+              "elements": [],
+              "isInner": false
+            }
+          ],
+          "isInner": false,
+          "settings": {
+            "_column_size": 100,
+            "_inline_size": 25
+          }
+        },
+        {
+          "id": "11a933d",
+          "elType": "column",
+          "elements": [
+            {
+              "id": "119f506",
+              "elType": "widget",
+              "widgetType": "icon-box",
+              "settings": {
+                "title_text": "02 · Find the gaps",
+                "description_text": "See which questions you lose, which competitor wins them, and which page is closest to being citable.",
+                "selected_icon": {
+                  "value": "fas fa-bolt",
+                  "library": "fa-solid"
+                },
+                "view": "framed",
+                "shape": "square",
+                "position": "top",
+                "primary_color": "#1466D8",
+                "title_color": "#0B1220",
+                "description_color": "#4A5568",
+                "title_typography_typography": "custom",
+                "title_typography_font_family": "Manrope",
+                "title_typography_font_size": {
+                  "unit": "px",
+                  "size": 19,
+                  "sizes": []
+                },
+                "title_typography_font_weight": "700",
+                "description_typography_typography": "custom",
+                "description_typography_font_family": "Inter",
+                "description_typography_font_size": {
+                  "unit": "px",
+                  "size": 15,
+                  "sizes": []
+                },
+                "description_typography_line_height": {
+                  "unit": "em",
+                  "size": 1.7,
+                  "sizes": []
+                }
+              },
+              "elements": [],
+              "isInner": false
+            }
+          ],
+          "isInner": false,
+          "settings": {
+            "_column_size": 100,
+            "_inline_size": 25
+          }
+        },
+        {
+          "id": "11bcfab",
+          "elType": "column",
+          "elements": [
+            {
+              "id": "11b3174",
+              "elType": "widget",
+              "widgetType": "icon-box",
+              "settings": {
+                "title_text": "03 · Publish what gets cited",
+                "description_text": "Briefs pre-loaded with the statistics, sources and question headings the winning answers contain.",
+                "selected_icon": {
+                  "value": "fas fa-bolt",
+                  "library": "fa-solid"
+                },
+                "view": "framed",
+                "shape": "square",
+                "position": "top",
+                "primary_color": "#1466D8",
+                "title_color": "#0B1220",
+                "description_color": "#4A5568",
+                "title_typography_typography": "custom",
+                "title_typography_font_family": "Manrope",
+                "title_typography_font_size": {
+                  "unit": "px",
+                  "size": 19,
+                  "sizes": []
+                },
+                "title_typography_font_weight": "700",
+                "description_typography_typography": "custom",
+                "description_typography_font_family": "Inter",
+                "description_typography_font_size": {
+                  "unit": "px",
+                  "size": 15,
+                  "sizes": []
+                },
+                "description_typography_line_height": {
+                  "unit": "em",
+                  "size": 1.7,
+                  "sizes": []
+                }
+              },
+              "elements": [],
+              "isInner": false
+            }
+          ],
+          "isInner": false,
+          "settings": {
+            "_column_size": 100,
+            "_inline_size": 25
+          }
+        },
+        {
+          "id": "11d0c19",
+          "elType": "column",
+          "elements": [
+            {
+              "id": "11c6de2",
+              "elType": "widget",
+              "widgetType": "icon-box",
+              "settings": {
+                "title_text": "04 · Measure the revenue",
+                "description_text": "Leads arriving from an assistant are tagged at the source, so AI pipeline reports like any other channel.",
+                "selected_icon": {
+                  "value": "fas fa-bolt",
+                  "library": "fa-solid"
+                },
+                "view": "framed",
+                "shape": "square",
+                "position": "top",
+                "primary_color": "#1466D8",
+                "title_color": "#0B1220",
+                "description_color": "#4A5568",
+                "title_typography_typography": "custom",
+                "title_typography_font_family": "Manrope",
+                "title_typography_font_size": {
+                  "unit": "px",
+                  "size": 19,
+                  "sizes": []
+                },
+                "title_typography_font_weight": "700",
+                "description_typography_typography": "custom",
+                "description_typography_font_family": "Inter",
+                "description_typography_font_size": {
+                  "unit": "px",
+                  "size": 15,
+                  "sizes": []
+                },
+                "description_typography_line_height": {
+                  "unit": "em",
+                  "size": 1.7,
+                  "sizes": []
+                }
+              },
+              "elements": [],
+              "isInner": false
+            }
+          ],
+          "isInner": false,
+          "settings": {
+            "_column_size": 100,
+            "_inline_size": 25
+          }
+        }
+      ],
+      "isInner": false,
+      "settings": {
+        "structure": "40",
+        "content_width": "boxed",
+        "gap": "extended",
+        "padding": {
+          "unit": "px",
+          "top": "0",
+          "right": "0",
+          "bottom": "104",
+          "left": "undefined",
+          "isLinked": false
+        },
+        "background_background": "classic",
+        "background_color": "#07182E"
+      }
+    }
+  ],
+  "page_settings": [],
+  "metadata": {
+    "generator": "Rank Logic SuperTool kit builder",
+    "elementor_min": "3.0.0"
+  }
+}

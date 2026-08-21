@@ -1,0 +1,108 @@
+import { NextResponse } from 'next/server';
+import { z } from 'zod';
+import { auditPages } from '@/lib/seo/audit';
+import { crawlSite, normalizeUrl } from '@/lib/seo/crawler';
+import { scoreAiReadiness } from '@/lib/seo/ai-readiness';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60;
+
+const Body = z.object({
+  url: z.string().min(3).max(2048),
+  maxPages: z.number().int().min(1).max(10).optional(),
+});
+
+/** Public, rate-limited technical audit used by the free tool page. */
+export async function POST(req: Request) {
+  let parsed: z.infer<typeof Body>;
+  try {
+    parsed = Body.parse(await req.json());
+  } catch {
+    return NextResponse.json({ error: 'Provide a valid { url } payload.' }, { status: 400 });
+  }
+
+  const target = normalizeUrl(parsed.url.trim());
+
+  let host: URL;
+  try {
+    host = new URL(target);
+  } catch {
+    return NextResponse.json({ error: 'That does not look like a valid URL.' }, { status: 400 });
+  }
+
+  // Refuse to crawl private address space — a public endpoint must not be
+  // usable as a probe against internal networks (SSRF).
+  if (isPrivateHost(host.hostname)) {
+    return NextResponse.json({ error: 'Only public websites can be audited.' }, { status: 400 });
+  }
+
+  const pages = await crawlSite(target, {
+    maxPages: parsed.maxPages ?? 5,
+    concurrency: 3,
+    timeoutMs: 12_000,
+  });
+
+  if (!pages.length || pages.every((p) => !p.ok)) {
+    return NextResponse.json(
+      { error: `Could not fetch ${host.hostname}. Check the URL is public and reachable.` },
+      { status: 422 },
+    );
+  }
+
+  const report = auditPages(pages);
+  const home = pages.find((p) => p.ok)!;
+
+  const aiReadiness = scoreAiReadiness({
+    body: home.bodyText,
+    title: home.title,
+    headings: home.headings,
+    outboundLinks: home.externalLinks.map((l) => ({ href: l.href, text: l.text })),
+    schemaTypes: home.schemaTypes,
+  });
+
+  return NextResponse.json({
+    url: target,
+    scannedAt: new Date().toISOString(),
+    score: report.score,
+    grade: report.grade,
+    pagesCrawled: report.pagesCrawled,
+    pagesOk: report.pagesOk,
+    totals: report.totals,
+    byCategory: report.byCategory,
+    aiReadiness: {
+      score: aiReadiness.score,
+      grade: aiReadiness.grade,
+      signals: aiReadiness.signals.map((s) => ({
+        label: s.label, score: s.score, detail: s.detail, fix: s.fix,
+      })),
+    },
+    findings: report.findings.slice(0, 30),
+    homepage: {
+      title: home.title,
+      metaDescription: home.metaDescription,
+      wordCount: home.wordCount,
+      h1: home.h1,
+      schemaTypes: home.schemaTypes,
+      responseMs: home.fetchMs,
+    },
+  });
+}
+
+/** Block loopback, link-local and RFC1918 targets. */
+function isPrivateHost(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.internal') || h.endsWith('.local')) return true;
+
+  const v4 = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (v4) {
+    const [a, b] = v4.slice(1).map(Number);
+    if (a === 10 || a === 127 || a === 0) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 169 && b === 254) return true;
+    if (a === 100 && b >= 64 && b <= 127) return true;
+  }
+  if (h === '::1' || h.startsWith('fc') || h.startsWith('fd') || h.startsWith('fe80')) return true;
+  return false;
+}
