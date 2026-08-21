@@ -42,7 +42,9 @@ export default async function BillingPage({
     tagline: TAGLINES[id],
     current: id === planId,
     features: [
-      `${PLANS[id].projects === Infinity ? 'Unlimited' : PLANS[id].projects} projects`,
+      PLANS[id].projects === Infinity
+        ? 'Unlimited projects'
+        : `${PLANS[id].projects} project${PLANS[id].projects === 1 ? '' : 's'}`,
       `${PLANS[id].prompts.toLocaleString()} tracked prompts`,
       `${PLANS[id].keywords.toLocaleString()} keywords`,
       `${PLANS[id].frequency} checks`,
