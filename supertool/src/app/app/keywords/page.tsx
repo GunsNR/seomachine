@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { Sparkline } from '@/components/app/Chart';
 import { Badge, EmptyState, PageHeader, Panel, StatTile } from '@/components/app/ui';
+import { ExportButton } from '@/components/app/ExportButton';
 import { getSession, resolveProject } from '@/lib/auth';
 import { getKeywords } from '@/lib/dashboard';
 import { getEntitlements } from '@/lib/plan';
@@ -29,6 +30,7 @@ export default async function KeywordsPage() {
       <PageHeader
         title="Keywords"
         sub="Every tracked term with its difficulty, forecast traffic and eight-factor opportunity score."
+        action={<ExportButton resource="keywords" />}
       />
 
       <div className="mt-6 space-y-6">

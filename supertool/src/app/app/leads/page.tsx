@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { BarList, LineChart } from '@/components/app/Chart';
 import { Badge, EmptyState, PageHeader, Panel, StatTile } from '@/components/app/ui';
 import { engineName } from '@/lib/ai/engines';
+import { ExportButton } from '@/components/app/ExportButton';
 import { getSession, resolveProject } from '@/lib/auth';
 import { getLeads } from '@/lib/dashboard';
 import { money, pct } from '@/lib/utils';
@@ -28,6 +29,7 @@ export default async function LeadsPage() {
       <PageHeader
         title="Leads"
         sub="Enquiries attributed back to the channel and the page that earned them — including the AI referrals analytics buckets as direct."
+        action={<ExportButton resource="leads" />}
       />
 
       <div className="mt-6 space-y-6">

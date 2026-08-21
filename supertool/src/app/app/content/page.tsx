@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation';
 import { Badge, EmptyState, PageHeader, Panel, StatTile } from '@/components/app/ui';
 import { ScoreDraft } from './ScoreDraft';
+import { ExportButton } from '@/components/app/ExportButton';
 import { getSession, resolveProject } from '@/lib/auth';
 import { getArticles } from '@/lib/dashboard';
 import { compact } from '@/lib/utils';
@@ -28,6 +29,7 @@ export default async function ContentPage() {
       <PageHeader
         title="Content"
         sub="Every piece with its on-page SEO score and its GEO score — the grade that decides whether an answer engine can quote it."
+        action={<ExportButton resource="articles" />}
       />
 
       <div className="mt-6 space-y-6">

@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { Badge, EmptyState, PageHeader, Panel, SimulationNotice, StatTile } from '@/components/app/ui';
 import { BarList } from '@/components/app/Chart';
 import { engineName, ENGINES } from '@/lib/ai/engines';
+import { ExportButton } from '@/components/app/ExportButton';
 import { getSession, resolveProject } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { parseJson, pct } from '@/lib/utils';
@@ -76,6 +77,7 @@ export default async function CitationsPage() {
       <PageHeader
         title="Citations"
         sub="Which of your URLs answer engines quote — and which competitor page took the citation when they did not."
+        action={<ExportButton resource="citations" />}
       />
 
       <div className="mt-6 space-y-6">
