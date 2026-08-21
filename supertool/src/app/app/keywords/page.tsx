@@ -6,6 +6,7 @@ import { getSession, resolveProject } from '@/lib/auth';
 import { getKeywords } from '@/lib/dashboard';
 import { getEntitlements } from '@/lib/plan';
 import { compact, money, pct } from '@/lib/utils';
+import { BriefButton } from './BriefButton';
 import { DeleteKeyword, KeywordManager } from './KeywordManager';
 
 export const dynamic = 'force-dynamic';
@@ -103,8 +104,11 @@ export default async function KeywordsPage() {
                           {k.opportunity}
                         </span>
                       </td>
-                      <td className="px-5 py-3 text-right">
-                        <DeleteKeyword id={k.id} phrase={k.phrase} />
+                      <td className="px-5 py-3">
+                        <span className="flex items-center justify-end gap-0.5">
+                          <BriefButton projectId={project.id} keywordId={k.id} phrase={k.phrase} />
+                          <DeleteKeyword id={k.id} phrase={k.phrase} />
+                        </span>
                       </td>
                     </tr>
                   ))}
