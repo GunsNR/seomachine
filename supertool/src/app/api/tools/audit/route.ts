@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { auditPages } from '@/lib/seo/audit';
 import { crawlSite, normalizeUrl } from '@/lib/seo/crawler';
 import { scoreAiReadiness } from '@/lib/seo/ai-readiness';
+import { checkPublicHost } from '@/lib/net-guard';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -43,7 +44,8 @@ export async function POST(req: Request) {
 
   // Refuse to crawl private address space — a public endpoint must not be
   // usable as a probe against internal networks (SSRF).
-  if (isPrivateHost(host.hostname)) {
+  const reachable = checkPublicHost(host.hostname);
+  if (!reachable.allowed) {
     return NextResponse.json({ error: 'Only public websites can be audited.' }, { status: 400 });
   }
 
@@ -97,22 +99,4 @@ export async function POST(req: Request) {
       responseMs: home.fetchMs,
     },
   });
-}
-
-/** Block loopback, link-local and RFC1918 targets. */
-function isPrivateHost(hostname: string): boolean {
-  const h = hostname.toLowerCase();
-  if (h === 'localhost' || h.endsWith('.localhost') || h.endsWith('.internal') || h.endsWith('.local')) return true;
-
-  const v4 = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-  if (v4) {
-    const [a, b] = v4.slice(1).map(Number);
-    if (a === 10 || a === 127 || a === 0) return true;
-    if (a === 172 && b >= 16 && b <= 31) return true;
-    if (a === 192 && b === 168) return true;
-    if (a === 169 && b === 254) return true;
-    if (a === 100 && b >= 64 && b <= 127) return true;
-  }
-  if (h === '::1' || h.startsWith('fc') || h.startsWith('fd') || h.startsWith('fe80')) return true;
-  return false;
 }

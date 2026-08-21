@@ -1,9 +1,11 @@
 import { redirect } from 'next/navigation';
 import { Badge, EmptyState, PageHeader, Panel, StatTile } from '@/components/app/ui';
+import { PublishButton } from './PublishButton';
 import { ScoreDraft } from './ScoreDraft';
 import { ExportButton } from '@/components/app/ExportButton';
 import { getSession, resolveProject } from '@/lib/auth';
 import { getArticles } from '@/lib/dashboard';
+import { db } from '@/lib/db';
 import { compact } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
@@ -22,7 +24,11 @@ export default async function ContentPage() {
   const project = await resolveProject(session.orgId);
   if (!project) redirect('/app');
 
-  const { articles, summary } = await getArticles(project.id);
+  const [{ articles, summary }, connection] = await Promise.all([
+    getArticles(project.id),
+    db.siteConnection.findFirst({ where: { projectId: project.id, platform: 'wordpress' } }),
+  ]);
+  const wpConnected = connection?.status === 'connected';
 
   return (
     <>
@@ -57,6 +63,7 @@ export default async function ContentPage() {
                     <th scope="col" className="table-head px-5 py-3 text-right">GEO</th>
                     <th scope="col" className="table-head px-5 py-3 text-right">Flesch</th>
                     <th scope="col" className="table-head px-5 py-3 text-left">Published</th>
+                    <th scope="col" className="table-head px-5 py-3 text-right">WordPress</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-line">
@@ -79,6 +86,14 @@ export default async function ContentPage() {
                         {a.publishedAt
                           ? a.publishedAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
                           : '—'}
+                      </td>
+                      <td className="px-5 py-3.5 text-right">
+                        <PublishButton
+                          articleId={a.id}
+                          hasBody={a.body.trim().length > 0}
+                          connected={wpConnected}
+                          publishedUrl={a.publishedUrl}
+                        />
                       </td>
                     </tr>
                   ))}

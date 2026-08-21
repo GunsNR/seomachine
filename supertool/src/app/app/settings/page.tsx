@@ -1,13 +1,13 @@
 import { redirect } from 'next/navigation';
 import { CheckCircle2, XCircle } from 'lucide-react';
-import { Badge, PageHeader, Panel, StatTile } from '@/components/app/ui';
+import { PageHeader, Panel, StatTile } from '@/components/app/ui';
 import { ApiKeyManager } from './ApiKeyManager';
 import { ENGINES, isEngineLive } from '@/lib/ai/engines';
 import { getSession, resolveProject } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { getEntitlements } from '@/lib/plan';
 import { CompetitorManager, ProjectForm } from './WorkspaceForms';
-import { brand } from '../../../../brand.config';
+import { WordPressConnect } from './WordPressConnect';
 
 export const dynamic = 'force-dynamic';
 
@@ -115,34 +115,19 @@ export default async function SettingsPage() {
           </p>
         </Panel>
 
-        <Panel title="WordPress connection" sub="Publish articles and render Elementor widgets on your site">
-          <dl className="divide-y divide-line">
-            <Row
-              label="Status"
-              value={
-                connection ? (
-                  <Badge tone={connection.status === 'connected' ? 'good' : 'warn'}>{connection.status}</Badge>
-                ) : (
-                  <Badge tone="warn">Not connected</Badge>
-                )
-              }
-            />
-            <Row label="Site URL" value={connection?.siteUrl ?? '—'} />
-            <Row
-              label="Last sync"
-              value={connection?.lastSyncAt ? connection.lastSyncAt.toLocaleString('en-US') : 'Never'}
-            />
-            <Row
-              label="Plugin"
-              value={
-                <span className="text-[0.85rem] text-body">
-                  Install from <code className="rounded bg-surface-alt px-1.5 py-0.5">wordpress/{brand.slug}</code>, then paste a
-                  project key below. Setup guide at <code className="rounded bg-surface-alt px-1.5 py-0.5">/docs/wordpress</code>.
-                </span>
-              }
-            />
-          </dl>
-        </Panel>
+        <WordPressConnect
+          projectId={project.id}
+          connection={
+            connection
+              ? {
+                  siteUrl: connection.siteUrl,
+                  username: connection.username,
+                  status: connection.status,
+                  lastSyncAt: connection.lastSyncAt?.toISOString() ?? null,
+                }
+              : null
+          }
+        />
 
         <ApiKeyManager
           projectId={project.id}
@@ -156,15 +141,6 @@ export default async function SettingsPage() {
         />
       </div>
     </>
-  );
-}
-
-function Row({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
-      <dt className="text-[0.85rem] font-semibold text-ink">{label}</dt>
-      <dd className="text-[0.875rem] text-body">{value}</dd>
-    </div>
   );
 }
 
