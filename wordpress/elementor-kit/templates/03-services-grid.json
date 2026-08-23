@@ -1,0 +1,450 @@
+{
+  "version": "0.4",
+  "title": "SuperTool — Services Grid",
+  "type": "section",
+  "content": [
+    {
+      "id": "10cfa83",
+      "elType": "section",
+      "elements": [
+        {
+          "id": "10c5c4c",
+          "elType": "column",
+          "elements": [
+            {
+              "id": "10b1fde",
+              "elType": "widget",
+              "widgetType": "heading",
+              "settings": {
+                "title": "Everything you need to win both channels",
+                "header_size": "h2",
+                "align": "center",
+                "title_color": "#0B1220",
+                "typography_typography": "custom",
+                "typography_font_family": "Manrope",
+                "typography_font_size": {
+                  "unit": "px",
+                  "size": 42,
+                  "sizes": []
+                },
+                "typography_font_weight": "800",
+                "typography_line_height": {
+                  "unit": "em",
+                  "size": 1.12,
+                  "sizes": []
+                },
+                "typography_letter_spacing": {
+                  "unit": "px",
+                  "size": -1,
+                  "sizes": []
+                }
+              },
+              "elements": [],
+              "isInner": false
+            },
+            {
+              "id": "10bbe15",
+              "elType": "widget",
+              "widgetType": "text-editor",
+              "settings": {
+                "editor": "<p>Most teams bolt an AI-tracking tool onto an audit tool onto a writing tool, then reconcile three dashboards by hand. SuperTool measures, audits, briefs and publishes in one place — with the source of every figure shown beside it.</p>",
+                "align": "center",
+                "text_color": "#4A5568",
+                "typography_typography": "custom",
+                "typography_font_family": "Inter",
+                "typography_font_size": {
+                  "unit": "px",
+                  "size": 17,
+                  "sizes": []
+                },
+                "typography_line_height": {
+                  "unit": "em",
+                  "size": 1.7,
+                  "sizes": []
+                }
+              },
+              "elements": [],
+              "isInner": false
+            }
+          ],
+          "isInner": false,
+          "settings": {
+            "_column_size": 100,
+            "_inline_size": null
+          }
+        }
+      ],
+      "isInner": false,
+      "settings": {
+        "structure": "10",
+        "content_width": "boxed",
+        "gap": "extended",
+        "padding": {
+          "unit": "px",
+          "top": "96",
+          "right": "0",
+          "bottom": "24",
+          "left": "undefined",
+          "isLinked": false
+        }
+      }
+    },
+    {
+      "id": "1114e04",
+      "elType": "section",
+      "elements": [
+        {
+          "id": "10e36f1",
+          "elType": "column",
+          "elements": [
+            {
+              "id": "10d98ba",
+              "elType": "widget",
+              "widgetType": "icon-box",
+              "settings": {
+                "title_text": "AI Visibility Tracking",
+                "description_text": "Run a fixed prompt set across every connected answer engine on a schedule. See mention rate, citation rate and share of voice.",
+                "selected_icon": {
+                  "value": "fas fa-wand-magic-sparkles",
+                  "library": "fa-solid"
+                },
+                "view": "framed",
+                "shape": "square",
+                "position": "top",
+                "primary_color": "#1466D8",
+                "title_color": "#0B1220",
+                "description_color": "#4A5568",
+                "title_typography_typography": "custom",
+                "title_typography_font_family": "Manrope",
+                "title_typography_font_size": {
+                  "unit": "px",
+                  "size": 19,
+                  "sizes": []
+                },
+                "title_typography_font_weight": "700",
+                "description_typography_typography": "custom",
+                "description_typography_font_family": "Inter",
+                "description_typography_font_size": {
+                  "unit": "px",
+                  "size": 15,
+                  "sizes": []
+                },
+                "description_typography_line_height": {
+                  "unit": "em",
+                  "size": 1.7,
+                  "sizes": []
+                }
+              },
+              "elements": [],
+              "isInner": false
+            }
+          ],
+          "isInner": false,
+          "settings": {
+            "_column_size": 100,
+            "_inline_size": 33.33
+          }
+        },
+        {
+          "id": "10f735f",
+          "elType": "column",
+          "elements": [
+            {
+              "id": "10ed528",
+              "elType": "widget",
+              "widgetType": "icon-box",
+              "settings": {
+                "title_text": "Citation Monitoring",
+                "description_text": "Know which of your URLs answer engines actually quote — and which competitor page took the citation when they did not.",
+                "selected_icon": {
+                  "value": "fas fa-quote-left",
+                  "library": "fa-solid"
+                },
+                "view": "framed",
+                "shape": "square",
+                "position": "top",
+                "primary_color": "#1466D8",
+                "title_color": "#0B1220",
+                "description_color": "#4A5568",
+                "title_typography_typography": "custom",
+                "title_typography_font_family": "Manrope",
+                "title_typography_font_size": {
+                  "unit": "px",
+                  "size": 19,
+                  "sizes": []
+                },
+                "title_typography_font_weight": "700",
+                "description_typography_typography": "custom",
+                "description_typography_font_family": "Inter",
+                "description_typography_font_size": {
+                  "unit": "px",
+                  "size": 15,
+                  "sizes": []
+                },
+                "description_typography_line_height": {
+                  "unit": "em",
+                  "size": 1.7,
+                  "sizes": []
+                }
+              },
+              "elements": [],
+              "isInner": false
+            }
+          ],
+          "isInner": false,
+          "settings": {
+            "_column_size": 100,
+            "_inline_size": 33.33
+          }
+        },
+        {
+          "id": "110afcd",
+          "elType": "column",
+          "elements": [
+            {
+              "id": "1101196",
+              "elType": "widget",
+              "widgetType": "icon-box",
+              "settings": {
+                "title_text": "Content Engine",
+                "description_text": "Briefs built from live SERP and prompt data, then a GEO score that tells you exactly what to change before you publish.",
+                "selected_icon": {
+                  "value": "fas fa-pen-nib",
+                  "library": "fa-solid"
+                },
+                "view": "framed",
+                "shape": "square",
+                "position": "top",
+                "primary_color": "#1466D8",
+                "title_color": "#0B1220",
+                "description_color": "#4A5568",
+                "title_typography_typography": "custom",
+                "title_typography_font_family": "Manrope",
+                "title_typography_font_size": {
+                  "unit": "px",
+                  "size": 19,
+                  "sizes": []
+                },
+                "title_typography_font_weight": "700",
+                "description_typography_typography": "custom",
+                "description_typography_font_family": "Inter",
+                "description_typography_font_size": {
+                  "unit": "px",
+                  "size": 15,
+                  "sizes": []
+                },
+                "description_typography_line_height": {
+                  "unit": "em",
+                  "size": 1.7,
+                  "sizes": []
+                }
+              },
+              "elements": [],
+              "isInner": false
+            }
+          ],
+          "isInner": false,
+          "settings": {
+            "_column_size": 100,
+            "_inline_size": 33.34
+          }
+        }
+      ],
+      "isInner": false,
+      "settings": {
+        "structure": "30",
+        "content_width": "boxed",
+        "gap": "extended",
+        "padding": {
+          "unit": "px",
+          "top": "0",
+          "right": "0",
+          "bottom": "24",
+          "left": "undefined",
+          "isLinked": false
+        }
+      }
+    },
+    {
+      "id": "115a185",
+      "elType": "section",
+      "elements": [
+        {
+          "id": "1128a72",
+          "elType": "column",
+          "elements": [
+            {
+              "id": "111ec3b",
+              "elType": "widget",
+              "widgetType": "icon-box",
+              "settings": {
+                "title_text": "Rank Tracking",
+                "description_text": "Classic position tracking with click forecasts that account for AI Overviews, featured snippets and ad blocks.",
+                "selected_icon": {
+                  "value": "fas fa-magnifying-glass-chart",
+                  "library": "fa-solid"
+                },
+                "view": "framed",
+                "shape": "square",
+                "position": "top",
+                "primary_color": "#1466D8",
+                "title_color": "#0B1220",
+                "description_color": "#4A5568",
+                "title_typography_typography": "custom",
+                "title_typography_font_family": "Manrope",
+                "title_typography_font_size": {
+                  "unit": "px",
+                  "size": 19,
+                  "sizes": []
+                },
+                "title_typography_font_weight": "700",
+                "description_typography_typography": "custom",
+                "description_typography_font_family": "Inter",
+                "description_typography_font_size": {
+                  "unit": "px",
+                  "size": 15,
+                  "sizes": []
+                },
+                "description_typography_line_height": {
+                  "unit": "em",
+                  "size": 1.7,
+                  "sizes": []
+                }
+              },
+              "elements": [],
+              "isInner": false
+            }
+          ],
+          "isInner": false,
+          "settings": {
+            "_column_size": 100,
+            "_inline_size": 33.33
+          }
+        },
+        {
+          "id": "113c6e0",
+          "elType": "column",
+          "elements": [
+            {
+              "id": "11328a9",
+              "elType": "widget",
+              "widgetType": "icon-box",
+              "settings": {
+                "title_text": "Site Audit",
+                "description_text": "Crawlability, on-page, performance and schema — plus an answer-readiness category no other audit runs.",
+                "selected_icon": {
+                  "value": "fas fa-shield-halved",
+                  "library": "fa-solid"
+                },
+                "view": "framed",
+                "shape": "square",
+                "position": "top",
+                "primary_color": "#1466D8",
+                "title_color": "#0B1220",
+                "description_color": "#4A5568",
+                "title_typography_typography": "custom",
+                "title_typography_font_family": "Manrope",
+                "title_typography_font_size": {
+                  "unit": "px",
+                  "size": 19,
+                  "sizes": []
+                },
+                "title_typography_font_weight": "700",
+                "description_typography_typography": "custom",
+                "description_typography_font_family": "Inter",
+                "description_typography_font_size": {
+                  "unit": "px",
+                  "size": 15,
+                  "sizes": []
+                },
+                "description_typography_line_height": {
+                  "unit": "em",
+                  "size": 1.7,
+                  "sizes": []
+                }
+              },
+              "elements": [],
+              "isInner": false
+            }
+          ],
+          "isInner": false,
+          "settings": {
+            "_column_size": 100,
+            "_inline_size": 33.33
+          }
+        },
+        {
+          "id": "115034e",
+          "elType": "column",
+          "elements": [
+            {
+              "id": "1146517",
+              "elType": "widget",
+              "widgetType": "icon-box",
+              "settings": {
+                "title_text": "WordPress Publishing",
+                "description_text": "Install the plugin, paste one key, publish. Native blocks with schema and meta intact, Elementor widgets included.",
+                "selected_icon": {
+                  "value": "fas fa-plug",
+                  "library": "fa-solid"
+                },
+                "view": "framed",
+                "shape": "square",
+                "position": "top",
+                "primary_color": "#1466D8",
+                "title_color": "#0B1220",
+                "description_color": "#4A5568",
+                "title_typography_typography": "custom",
+                "title_typography_font_family": "Manrope",
+                "title_typography_font_size": {
+                  "unit": "px",
+                  "size": 19,
+                  "sizes": []
+                },
+                "title_typography_font_weight": "700",
+                "description_typography_typography": "custom",
+                "description_typography_font_family": "Inter",
+                "description_typography_font_size": {
+                  "unit": "px",
+                  "size": 15,
+                  "sizes": []
+                },
+                "description_typography_line_height": {
+                  "unit": "em",
+                  "size": 1.7,
+                  "sizes": []
+                }
+              },
+              "elements": [],
+              "isInner": false
+            }
+          ],
+          "isInner": false,
+          "settings": {
+            "_column_size": 100,
+            "_inline_size": 33.34
+          }
+        }
+      ],
+      "isInner": false,
+      "settings": {
+        "structure": "30",
+        "content_width": "boxed",
+        "gap": "extended",
+        "padding": {
+          "unit": "px",
+          "top": "0",
+          "right": "0",
+          "bottom": "96",
+          "left": "undefined",
+          "isLinked": false
+        }
+      }
+    }
+  ],
+  "page_settings": [],
+  "metadata": {
+    "generator": "Rank Logic SuperTool kit builder",
+    "elementor_min": "3.0.0"
+  }
+}

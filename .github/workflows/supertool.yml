@@ -1,0 +1,120 @@
+name: SuperTool CI
+
+# Runs only when the app itself changes, so unrelated content commits in this
+# workspace do not queue a build.
+on:
+  push:
+    branches: [main]
+    paths: ['supertool/**', 'docs/**', '.github/workflows/supertool.yml']
+  pull_request:
+    paths: ['supertool/**', 'docs/**', '.github/workflows/supertool.yml']
+
+concurrency:
+  group: supertool-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: supertool
+
+    env:
+      DATABASE_URL: file:./ci.db
+      # Never a real secret; the app refuses to boot in production without one.
+      AUTH_SECRET: ci-only-secret-value-at-least-32-characters-long
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: supertool/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit and integration tests
+        run: npm test
+
+      - name: Create database schema
+        run: npx prisma db push --skip-generate
+
+      - name: Production build
+        run: npm run build
+
+      - name: Smoke-test the running server
+        run: |
+          npm start &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+
+          for i in $(seq 1 45); do
+            if curl -sf -o /dev/null http://127.0.0.1:3000/; then
+              echo "Server up after ${i}s"
+              break
+            fi
+            if [ "$i" -eq 45 ]; then
+              echo "Server did not start within 45s"
+              exit 1
+            fi
+            sleep 1
+          done
+
+          # Health endpoint must report the database as reachable.
+          curl -sf http://127.0.0.1:3000/api/health | tee /dev/stderr | grep -q '"status":"ok"'
+
+          # Key public routes must render.
+          for path in / /pricing /platform /blog /tools/site-audit /robots.txt /sitemap.xml; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:3000${path}")
+            echo "${path} -> ${code}"
+            [ "$code" = "200" ] || exit 1
+          done
+
+          # The dashboard must refuse an unauthenticated request.
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/app)
+          echo "/app (signed out) -> ${code}"
+          [ "$code" = "307" ] || [ "$code" = "302" ] || exit 1
+
+  php:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '7.4'
+
+      - name: Lint the WordPress plugin
+        run: |
+          found=0
+          while IFS= read -r file; do
+            found=1
+            php -l "$file"
+          done < <(find wordpress -name '*.php' -type f)
+          [ "$found" = "1" ] || { echo "No plugin PHP files found"; exit 1; }
+
+      - name: Validate the Elementor kit JSON
+        run: |
+          found=0
+          while IFS= read -r file; do
+            found=1
+            python3 -c "import json,sys; json.load(open(sys.argv[1]))" "$file"
+            echo "valid: $file"
+          done < <(find wordpress -name '*.json' -type f)
+          [ "$found" = "1" ] || { echo "No Elementor kit JSON found"; exit 1; }

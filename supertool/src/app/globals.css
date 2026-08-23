@@ -1,0 +1,82 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --font-heading: 'Manrope', system-ui, sans-serif;
+    --font-body: 'Inter', system-ui, sans-serif;
+  }
+
+  * { @apply border-line; }
+
+  html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+
+  body {
+    @apply bg-surface text-body font-sans antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  h1, h2, h3, h4, h5, h6 { @apply font-heading text-ink; }
+
+  /* Keyboard users get a visible ring; pointer users do not. */
+  :focus-visible { @apply outline-none ring-2 ring-brand ring-offset-2 ring-offset-white rounded-sm; }
+
+  ::selection { @apply bg-brand text-white; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: .01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: .01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  .container-x { @apply mx-auto w-full max-w-container px-5 sm:px-6 lg:px-8; }
+
+  /* ---- Buttons ------------------------------------------------------- */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-full font-semibold
+           transition-all duration-200 whitespace-nowrap disabled:opacity-55
+           disabled:pointer-events-none;
+  }
+  .btn-lg { @apply h-14 px-8 text-[1.0625rem]; }
+  .btn-md { @apply h-12 px-6 text-[0.9375rem]; }
+  .btn-sm { @apply h-9 px-4 text-sm; }
+
+  .btn-accent  { @apply bg-accent text-white shadow-[0_10px_30px_-10px_rgba(255,107,44,.75)] hover:bg-accent-dark hover:-translate-y-0.5; }
+  .btn-primary { @apply bg-brand text-white shadow-glow hover:bg-brand-dark hover:-translate-y-0.5; }
+  .btn-dark    { @apply bg-navy text-white hover:bg-navy-soft hover:-translate-y-0.5; }
+  .btn-ghost   { @apply bg-white text-ink ring-1 ring-inset ring-line hover:ring-brand hover:text-brand; }
+  .btn-onnavy  { @apply bg-white/10 text-white ring-1 ring-inset ring-white/25 backdrop-blur hover:bg-white/20; }
+
+  /* ---- Surfaces ------------------------------------------------------ */
+  .card { @apply rounded-2xl bg-white ring-1 ring-line shadow-card; }
+  .card-hover { @apply transition-all duration-300 hover:-translate-y-1 hover:shadow-lift hover:ring-brand/35; }
+
+  .eyebrow {
+    @apply inline-flex items-center gap-2 rounded-full bg-brand-light px-3.5 py-1.5
+           text-[0.72rem] font-bold uppercase tracking-[0.13em] text-brand-dark;
+  }
+  .eyebrow-dark { @apply bg-white/10 text-brand-200 ring-1 ring-inset ring-white/15; }
+
+  .section { @apply py-16 sm:py-20 lg:py-28; }
+
+  .prose-body { @apply text-[1.0625rem] leading-[1.75] text-body; }
+
+  /* Dashboard chrome */
+  .stat-tile { @apply rounded-xl bg-white p-5 ring-1 ring-line shadow-card; }
+  .table-head { @apply text-[0.7rem] font-bold uppercase tracking-[0.09em] text-body/70; }
+}
+
+@layer utilities {
+  .text-balance { text-wrap: balance; }
+  .text-pretty { text-wrap: pretty; }
+  .mask-fade-x {
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+  }
+}

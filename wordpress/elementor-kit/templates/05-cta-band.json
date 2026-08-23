@@ -1,0 +1,143 @@
+{
+  "version": "0.4",
+  "title": "SuperTool — CTA Band",
+  "type": "section",
+  "content": [
+    {
+      "id": "120c163",
+      "elType": "section",
+      "elements": [
+        {
+          "id": "120232c",
+          "elType": "column",
+          "elements": [
+            {
+              "id": "11e4887",
+              "elType": "widget",
+              "widgetType": "heading",
+              "settings": {
+                "title": "Find out what the assistants say about you",
+                "header_size": "h2",
+                "align": "center",
+                "title_color": "#FFFFFF",
+                "typography_typography": "custom",
+                "typography_font_family": "Manrope",
+                "typography_font_size": {
+                  "unit": "px",
+                  "size": 42,
+                  "sizes": []
+                },
+                "typography_font_weight": "800",
+                "typography_line_height": {
+                  "unit": "em",
+                  "size": 1.12,
+                  "sizes": []
+                },
+                "typography_letter_spacing": {
+                  "unit": "px",
+                  "size": -1,
+                  "sizes": []
+                }
+              },
+              "elements": [],
+              "isInner": false
+            },
+            {
+              "id": "11ee6be",
+              "elType": "widget",
+              "widgetType": "text-editor",
+              "settings": {
+                "editor": "<p>Run one full check across every connected answer engine, free. It takes about a minute and needs nothing but your domain.</p>",
+                "align": "center",
+                "text_color": "rgba(255,255,255,0.85)",
+                "typography_typography": "custom",
+                "typography_font_family": "Inter",
+                "typography_font_size": {
+                  "unit": "px",
+                  "size": 17,
+                  "sizes": []
+                },
+                "typography_line_height": {
+                  "unit": "em",
+                  "size": 1.7,
+                  "sizes": []
+                }
+              },
+              "elements": [],
+              "isInner": false
+            },
+            {
+              "id": "11f84f5",
+              "elType": "widget",
+              "widgetType": "button",
+              "settings": {
+                "text": "Start free trial",
+                "link": {
+                  "url": "/signup",
+                  "is_external": "",
+                  "nofollow": ""
+                },
+                "align": "center",
+                "size": "lg",
+                "background_color": "#FF6B2C",
+                "button_text_color": "#FFFFFF",
+                "border_radius": {
+                  "unit": "px",
+                  "top": "999",
+                  "right": "999",
+                  "bottom": "999",
+                  "left": "999",
+                  "isLinked": false
+                },
+                "text_padding": {
+                  "unit": "px",
+                  "top": "20",
+                  "right": "34",
+                  "bottom": "20",
+                  "left": "34",
+                  "isLinked": false
+                },
+                "typography_typography": "custom",
+                "typography_font_family": "Inter",
+                "typography_font_size": {
+                  "unit": "px",
+                  "size": 17,
+                  "sizes": []
+                },
+                "typography_font_weight": "600"
+              },
+              "elements": [],
+              "isInner": false
+            }
+          ],
+          "isInner": false,
+          "settings": {
+            "_column_size": 100,
+            "_inline_size": null
+          }
+        }
+      ],
+      "isInner": false,
+      "settings": {
+        "structure": "10",
+        "content_width": "boxed",
+        "gap": "extended",
+        "padding": {
+          "unit": "px",
+          "top": "80",
+          "right": "0",
+          "bottom": "80",
+          "left": "undefined",
+          "isLinked": false
+        },
+        "background_background": "classic",
+        "background_color": "#1466D8"
+      }
+    }
+  ],
+  "page_settings": [],
+  "metadata": {
+    "generator": "Rank Logic SuperTool kit builder",
+    "elementor_min": "3.0.0"
+  }
+}

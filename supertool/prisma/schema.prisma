@@ -1,0 +1,375 @@
+// Rank Logic SuperTool data model.
+// SQLite by default so the product runs with zero infrastructure; swap the
+// provider to postgresql and the same schema deploys to a hosted database.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String               @id @default(cuid())
+  email        String               @unique
+  name         String
+  passwordHash String
+  role         String               @default("owner")
+  createdAt    DateTime             @default(now())
+  memberships  Membership[]
+  resetTokens  PasswordResetToken[]
+}
+
+/// Single-use, expiring password reset token. Only the hash is stored, so a
+/// database leak does not hand out working reset links.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/// Records a processed Stripe event so a redelivered webhook is a no-op.
+model ProcessedWebhookEvent {
+  id          String   @id
+  type        String
+  processedAt DateTime @default(now())
+
+  @@index([processedAt])
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  /// Entitlement tier. Written by the Stripe webhook, never by the client.
+  plan      String   @default("starter")
+  /// "live" for every real workspace; "demo" only for the seeded sample org.
+  /// Simulated observations may exist under "demo" and nowhere else.
+  dataMode  String   @default("live")
+  createdAt DateTime @default(now())
+
+  // --- Billing -------------------------------------------------------------
+  stripeCustomerId     String?   @unique
+  stripeSubscriptionId String?   @unique
+  /// Mirrors Stripe: trialing | active | past_due | canceled | incomplete | none
+  subscriptionStatus   String    @default("trialing")
+  /// When the current paid period or trial ends.
+  currentPeriodEnd     DateTime?
+  trialEndsAt          DateTime?
+  /// Set when the customer cancels but the period has not yet elapsed.
+  cancelAtPeriodEnd    Boolean   @default(false)
+
+  members  Membership[]
+  projects Project[]
+}
+
+model Membership {
+  id     String       @id @default(cuid())
+  userId String
+  orgId  String
+  role   String       @default("owner")
+  user   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  org    Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, orgId])
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  orgId       String
+  name        String
+  domain      String
+  description String   @default("")
+  country     String   @default("us")
+  /// Denormalised from the owning organization so every per-project query can
+  /// scope demo data out without a join. Always equal to org.dataMode.
+  dataMode    String   @default("live")
+  createdAt   DateTime @default(now())
+
+  org         Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  keywords    Keyword[]
+  prompts     AiPrompt[]
+  competitors Competitor[]
+  audits      AuditRun[]
+  articles    Article[]
+  briefs      ContentBrief[]
+  backlinks   Backlink[]
+  leads       Lead[]
+  connections SiteConnection[]
+  apiKeys     ApiKey[]
+
+  @@index([orgId])
+}
+
+model Keyword {
+  id               String   @id @default(cuid())
+  projectId        String
+  phrase           String
+  volume           Int      @default(0)
+  difficulty       Int      @default(0)
+  cpc              Float    @default(0)
+  intent           String   @default("informational")
+  trend            String   @default("[]") // JSON array of 12 monthly volumes
+  /// Summary provenance: "measured" only when every field came from a
+  /// provider, otherwise "blended" or "estimated".
+  dataSource       String   @default("estimated")
+  /// Per-field provenance, because one row can mix measured and modelled
+  /// inputs. Each is "measured" | "estimated" | "blended".
+  volumeSource     String   @default("estimated")
+  difficultySource String   @default("estimated")
+  cpcSource        String   @default("estimated")
+  /// Provider that supplied the measured fields, e.g. "dataforseo".
+  dataProvider     String   @default("")
+  createdAt        DateTime @default(now())
+
+  project   Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  snapshots RankSnapshot[]
+
+  @@unique([projectId, phrase])
+  @@index([projectId])
+}
+
+model RankSnapshot {
+  id         String   @id @default(cuid())
+  keywordId  String
+  engine     String   @default("google")
+  position   Int // 0 == not in top 100
+  url        String   @default("")
+  capturedAt DateTime @default(now())
+
+  keyword Keyword @relation(fields: [keywordId], references: [id], onDelete: Cascade)
+
+  @@index([keywordId, capturedAt])
+}
+
+/// A question a real buyer would ask an AI assistant. Visibility is measured
+/// by how often the brand is named or cited in the answers.
+model AiPrompt {
+  id        String   @id @default(cuid())
+  projectId String
+  text      String
+  cluster   String   @default("general")
+  intent    String   @default("informational")
+  createdAt DateTime @default(now())
+
+  project Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  checks  AiCheck[]
+
+  @@index([projectId])
+}
+
+model AiCheck {
+  id             String   @id @default(cuid())
+  promptId       String
+  engine         String // chatgpt | perplexity | claude | gemini | grok | google-ai-mode
+  brandMentioned Boolean  @default(false)
+  brandCited     Boolean  @default(false)
+  mentionRank    Int      @default(0) // 1-based order the brand appears among named vendors
+  sentiment      String   @default("neutral")
+  shareOfVoice   Float    @default(0)
+  citedUrls      String   @default("[]") // JSON array
+  competitors    String   @default("[]") // JSON array of competitor domains named
+  excerpt        String   @default("")
+  /// live | simulated | failed | unavailable. Only live and simulated rows
+  /// carry an answer; failed and unavailable rows are missing observations and
+  /// must never be counted as "the brand was absent".
+  ///
+  /// Defaults to "unavailable" on purpose. Every writer sets this explicitly,
+  /// so the default only ever applies to a row that predates this column — and
+  /// a row whose provenance is unknown must not be counted as a live
+  /// measurement. Failing closed here means an un-backfilled legacy row is
+  /// excluded from the numbers rather than silently inflating them.
+  status         String   @default("unavailable")
+  /// Populated for failed/unavailable rows: auth | rate_limit | quota |
+  /// timeout | network | empty_response | http_error | no_credential |
+  /// surface_unavailable | unsupported_engine | unknown.
+  errorCategory  String   @default("")
+  /// Operator-facing failure detail. Never contains a credential.
+  errorDetail    String   @default("")
+  /// Exact model asked, when a call was made.
+  model          String   @default("")
+  latencyMs      Int      @default(0)
+  runAt          DateTime @default(now())
+
+  prompt AiPrompt @relation(fields: [promptId], references: [id], onDelete: Cascade)
+
+  @@index([promptId, runAt])
+  @@index([engine, runAt])
+}
+
+model Competitor {
+  id        String   @id @default(cuid())
+  projectId String
+  domain    String
+  label     String   @default("")
+  createdAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, domain])
+}
+
+model AuditRun {
+  id           String    @id @default(cuid())
+  projectId    String
+  status       String    @default("running")
+  score        Int       @default(0)
+  pagesCrawled Int       @default(0)
+  startedAt    DateTime  @default(now())
+  finishedAt   DateTime?
+
+  project Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  issues  AuditIssue[]
+
+  @@index([projectId, startedAt])
+}
+
+model AuditIssue {
+  id       String @id @default(cuid())
+  auditId  String
+  url      String
+  code     String
+  severity String @default("notice") // critical | warning | notice
+  title    String
+  detail   String @default("")
+  category String @default("onpage") // crawlability | onpage | performance | schema | ai-readiness
+
+  audit AuditRun @relation(fields: [auditId], references: [id], onDelete: Cascade)
+
+  @@index([auditId, severity])
+}
+
+model ContentBrief {
+  id            String   @id @default(cuid())
+  projectId     String
+  topic         String
+  targetKeyword String
+  intent        String   @default("informational")
+  outline       String   @default("[]") // JSON array of H2/H3
+  questions     String   @default("[]") // JSON array of AI-cited questions to answer
+  targetWords   Int      @default(1800)
+  status        String   @default("ready")
+  createdAt     DateTime @default(now())
+
+  project  Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  articles Article[]
+}
+
+model Article {
+  id              String    @id @default(cuid())
+  projectId       String
+  briefId         String?
+  title           String
+  slug            String
+  body            String    @default("")
+  metaTitle       String    @default("")
+  metaDescription String    @default("")
+  status          String    @default("draft") // draft | review | scheduled | published
+  seoScore        Int       @default(0)
+  aiReadyScore    Int       @default(0)
+  readability     Float     @default(0)
+  wordCount       Int       @default(0)
+  wpPostId        Int?
+  publishedUrl    String    @default("")
+  publishedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  project Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  brief   ContentBrief? @relation(fields: [briefId], references: [id])
+
+  @@unique([projectId, slug])
+  @@index([projectId, status])
+}
+
+model Backlink {
+  id        String   @id @default(cuid())
+  projectId String
+  sourceUrl String
+  targetUrl String
+  anchor    String   @default("")
+  dofollow  Boolean  @default(true)
+  authority Int      @default(0)
+  firstSeen DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+/// A visit or enquiry attributed back to an AI assistant or organic search.
+model Lead {
+  id         String   @id @default(cuid())
+  projectId  String
+  source     String   @default("ai") // ai | organic | direct
+  engine     String   @default("")
+  landingUrl String   @default("")
+  email      String   @default("")
+  name       String   @default("")
+  value      Float    @default(0)
+  status     String   @default("new")
+  capturedAt DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, capturedAt])
+}
+
+/// A connected publishing target — today WordPress via the SuperTool plugin.
+model SiteConnection {
+  id          String    @id @default(cuid())
+  projectId   String
+  platform    String    @default("wordpress")
+  siteUrl     String
+  username    String    @default("")
+  appPassword String    @default("")
+  status      String    @default("pending")
+  lastSyncAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model ApiKey {
+  id         String    @id @default(cuid())
+  projectId  String
+  label      String    @default("WordPress plugin")
+  prefix     String
+  hashedKey  String
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+/// A marketing-site enquiry.
+///
+/// Deliberately unrelated to Organization, Project or Lead: a public,
+/// unauthenticated form must never be able to write into a customer's
+/// workspace or inflate their lead numbers. Nothing in the app reads this
+/// model into a tenant view.
+model ContactInquiry {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  company   String   @default("")
+  website   String   @default("")
+  message   String
+  /// Coarse source label for triage only, e.g. "contact-form".
+  channel   String   @default("contact-form")
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}

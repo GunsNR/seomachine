@@ -1,0 +1,182 @@
+# Release truth audit — Rank Logic SuperTool
+
+**Baseline commit:** `82c171b0c13a09cbfa5ff77a42f27cf43ab7cdba`
+**Gate:** 0 (truth, containment, one source of product truth)
+**Last verified against source:** 2026-08-23
+**Owner:** product-owner
+
+This document and `supertool/src/lib/capabilities.ts` are the same statement in
+two forms. The registry is the machine-readable one and drives what pricing and
+plan copy are allowed to say; this file is the human-readable one and carries
+the reasoning. `supertool/tests/capabilities.test.ts` fails the build if they
+disagree, so neither can drift without the other noticing.
+
+**This product is not market-ready.** It is a working prototype with real,
+tested internals and a large amount of unvalidated surface area. Gates 1–5 —
+measurement validity, production data and security, the pilot product, pilot
+evidence, and the controlled-improvement control plane — have not been started.
+Nothing below should be read as a claim that a capability is ready for a paying
+customer.
+
+---
+
+## How to read the status column
+
+| Status | Meaning |
+| --- | --- |
+| `verified` | Implemented, covered by automated tests, and exercised against the real external dependency it needs — or it has none. |
+| `beta` | Implemented and tested in-repo, but never validated against the live third-party system it depends on. |
+| `demo_only` | Exists and can be demonstrated with sample data, but must not be relied on as a measurement of anything real. |
+| `unavailable` | Not usable today. Several of these were advertised before this pass and have now been withdrawn. |
+| `planned` | Intended, not started. |
+
+Only `verified` and `beta` may appear in a plan, a price, or any public claim.
+`planFeatureLabel()` throws for anything else, so an unshippable feature cannot
+reach a pricing table by accident.
+
+---
+
+## Capability matrix
+
+### Sellable today
+
+| Capability | Status | Actual source / data | User-visible label | Test evidence | External validation | Permitted marketing language |
+| --- | --- | --- | --- | --- | --- | --- |
+| `ai_visibility_tracking` | `beta` | Live calls to OpenAI, Anthropic, Google Gemini, Perplexity and xAI developer APIs. One row per prompt per surface. A surface without a credential is recorded `unavailable`, never simulated. | AI visibility tracking | `tests/ai.test.ts`, `tests/provenance.test.ts` | **None.** No provider credential has been exercised in this environment, so no live provider response has ever been parsed. Sampling design, repeat counts and confidence intervals do not exist (Gate 1). | "Runs a fixed prompt set against the answer engines you have connected and records whether your brand was named or cited." |
+| `citation_monitoring` | `beta` | Citation URLs returned by a provider, plus URLs parsed from answer text. | Citation monitoring | `tests/ai.test.ts` | Never validated against real provider citation payloads. | "Records which URLs an answer pointed at, and whether one of them was yours." |
+| `competitor_share_of_voice` | `beta` | Prose mentions of each named competitor within observed answers, URLs excluded from the count. | Competitor share of voice | `tests/ai.test.ts` | Never validated against real answers. | "Shows which competitors were named alongside you in the answers you observed." |
+| `site_audit` | `verified` | SuperTool crawls the URL you give it and applies a fixed 25-rule set to what it fetches. | Site audit | `tests/crawler.integration.test.ts`, `tests/scoring.test.ts` | None required — the audit reads only the site under test. | "Crawls your pages and reports technical, on-page, schema and answer-readiness issues with a fix for each." |
+| `geo_scoring` | `beta` | A nine-signal heuristic over page text. Weights were chosen by hand. | Answer-readiness scoring | `tests/scoring.test.ts` | **No held-out dataset, no outcome data.** The score is not known to predict citations or anything else. | "Grades a draft against nine structural signals and names what to change. It is a heuristic, not a prediction of citations." |
+| `content_briefs` | `beta` | Generated from the project keyword set and prompt set. | Content briefs | `tests/brief.test.ts` | Not benchmarked against live SERP data — no SERP provider is connected. | "Produces an outline, target questions and a word-count target for a page you plan to write." |
+| `keyword_research` | `beta` | DataForSEO volume and CPC when credentials are configured; an in-product model otherwise. Difficulty is *always* partly modelled. | Keyword research | `tests/keyword-data.test.ts`, `tests/keywords.test.ts`, `tests/estimate.test.ts` | The DataForSEO adapter has never been run against the live API from this environment. | "Volume and CPC from DataForSEO when you connect it, clearly labelled estimates when you do not." |
+| `csv_export` | `verified` | Your own stored rows, written out unchanged. | CSV and JSON export | `tests/csv.test.ts` | None required. | "Export every project — prompts, checks, keywords, audits and articles — as CSV or JSON at any time." |
+| `scheduled_runs` | `beta` | A cron endpoint that works out which projects are due and runs their prompt sets. | Scheduled runs | CI boot check in `.github/workflows/supertool.yml` | Single process, no durable queue, no retry, no partial-run persistence. A crash mid-run loses the run (Gate 1). | "Re-runs your prompt set on a schedule so you have a trend rather than a snapshot." |
+| `wordpress_publishing` | `beta` | WordPress core REST API with an application password, posting native block markup. | WordPress publishing | `tests/wordpress.test.ts`, `tests/wordpress.integration.test.ts` — both against a **stubbed** API | **Never executed against a real WordPress installation.** No PHPUnit suite, no plugin activation test (Gate 3). | "Publishes drafts to WordPress as native blocks through the REST API. Validated against a stubbed API, not yet against a live site." |
+| `elementor_widgets` | `beta` | Six template JSON files and free-tier widget registration in the plugin. | Elementor templates | CI JSON validation | **Never imported into, or rendered by, a real Elementor installation.** Compatibility is inferred from file format only. | "Ships Elementor templates and widgets. Not yet verified against a live Elementor install." |
+| `public_api` | `beta` | Hashed per-project keys authenticating the `/api/v1` endpoints the WordPress plugin uses. | Project API keys | `tests/crypto.test.ts` | Keys have no scopes, no per-key quota and no rotation flow (Gate 2). | "Issue a per-project API key so the WordPress plugin — or your own scripts — can read your data." |
+| `billing` | `beta` | Stripe Checkout and Billing Portal, idempotent webhook handling. | Subscriptions and billing | `tests/billing.test.ts` | **Never run against a real Stripe account, not even in test mode.** | "Subscriptions are handled by Stripe Checkout." |
+| `transactional_email` | `beta` | Resend or SMTP, whichever is configured. | Transactional email | `tests/email.test.ts`, `tests/password-reset.test.ts` | No message has been delivered through a real provider from this environment. | "Sends password resets and account email through your configured provider." |
+
+### Not sellable — shown in-product with an explicit limitation
+
+| Capability | Status | Actual source / data | User-visible label | Test evidence | External validation | Permitted marketing language |
+| --- | --- | --- | --- | --- | --- | --- |
+| `lead_attribution` | `demo_only` | A public endpoint the WordPress plugin calls with a **caller-supplied** referrer. Forgeable by anyone, matched by substring rather than parsed hostname, and records an anonymous visit rather than a verified lead. | Referral events (renamed from "Leads") | None — there is no test asserting the events are trustworthy, because they are not. | The chain from an assistant answer to a real conversion has never been demonstrated end to end. | **Not sold.** Shown only with a standing in-product notice, and never described as leads. |
+
+### Withdrawn — previously advertised, does not exist
+
+| Capability | Status | Actual source / data | User-visible label | Test evidence | External validation | Permitted marketing language |
+| --- | --- | --- | --- | --- | --- | --- |
+| `rank_tracking` | `unavailable` | No SERP provider integration. The only ranking rows anywhere are seeded demo data. | "Rank tracking is not available" panel | `tests/provenance.test.ts` | n/a — the capability does not exist. | "Not available. SuperTool does not track search positions today." |
+| `backlink_tracking` | `unavailable` | No backlink provider, no crawl index. Existing rows are seeded demo data. | "Backlink data is not available" panel | `tests/provenance.test.ts` | n/a | "Not available. SuperTool has no backlink index and no provider integration." |
+| `content_generation` | `unavailable` | Nothing writes article body copy. Briefs and scoring exist; drafting does not. | — (claim removed) | No route or library generates article text. | n/a | "Not available. SuperTool briefs and scores content; it does not write it." |
+| `google_ai_mode` | `unavailable` | No official API, no compliant third-party source. **Previously answered by the Gemini developer API** — a different surface with different retrieval. That mapping has been removed, not relabelled. | Listed as Unavailable in Settings, with the reason | `tests/provenance.test.ts` | n/a | "Not available. Google AI Mode cannot be measured compliantly today, so SuperTool does not claim to measure it." |
+| `google_search_console` | `planned` | None. | — | None. | Not started. | "Not available." |
+| `google_analytics` | `planned` | None. | — | None. | Not started. | "Not available." |
+| `local_device_tracking` | `planned` | None. Runs carry no locale, city or device dimension at all. | — | None. | Not started. | "Not available." |
+| `approval_workflow` | `planned` | None. Publishing goes straight from the dashboard to WordPress with no review step. | — | None. | Not started. | "Not available." |
+| `teams_rbac` | `planned` | `Membership` rows carry a `role` column, but no code reads it, there is no invitation flow, and every member has full access. | — | None. | Not started. | "Not available. Roles exist in the schema but are not enforced." |
+| `white_label_reporting` | `planned` | None. | — | None. | Not started. | "Not available." |
+| `byo_provider_keys` | `planned` | Provider credentials are read from deployment environment variables only. There is no per-tenant credential store. | — | None. | Not started. | "Not available." |
+
+---
+
+## Proof and claims removed in this pass
+
+Everything below was present in the product and was **invented**. It was
+deleted rather than rewritten, because there is nothing real to replace it
+with yet.
+
+| Removed | Where it lived | Why |
+| --- | --- | --- |
+| Four named testimonials with roles and companies | `TESTIMONIALS` in `src/content/site.ts`, `Testimonials.tsx` | No customers exist. The people and companies were fictional. |
+| Three case results (`+312%`, `4.2x`, `-63%`) with client descriptions | `RESULTS` in `src/content/site.ts`, `Results.tsx` | No engagements exist. The figures were invented. |
+| `aggregateRating` of 4.9 from 384 reviews, emitted as JSON-LD on the home and pricing pages | `softwareApplicationSchema()` | No reviews exist. Fabricated review markup is a Google structured-data policy violation as well as a false statement to the reader. |
+| Five trust badges: Google Premier Partner, Microsoft Advertising Select, Inc. 5000 2025, G2 High Performer, SOC 2 Type II | `TRUST_BADGES`, site footer | No partnership, award, listing or audit has taken place. SOC 2 in particular asserts a completed third-party audit. |
+| "41% average citation lift — first 90 days across onboarded sites" | `STATS` | No onboarded sites, no measurement. |
+| "1,200+ pages scored daily" | `STATS` | Not measured, and not true of any deployment. |
+| "Half your buyers now ask an assistant before they ever open a search results page" | Hero | Unsourced statistic presented as fact. |
+| "5-minute WordPress setup" (hero, home page, WordPress docs) | Hero, home, docs | The plugin has never been installed on a live WordPress site from this codebase. |
+| "Rewrites typically move citation rate within two to six weeks" | Multiple feature pages | No outcome data links a scored rewrite to a later citation. |
+| "Above 85 puts you in the band where citation rate reliably improves" | Content feature page | The GEO score has never been validated against any outcome. |
+| "All 6 answer engines" on every plan | `PRICING`, pricing comparison table | Only five surfaces are measurable, and only those with a configured credential. |
+| White-label reporting, multi-seat workspaces, per-client API keys, bring-your-own provider keys | Scale plan, agencies solution page, FAQs | None is implemented. |
+| Lead attribution as a sold feature | Growth/Scale plans, attribution feature page | The underlying telemetry is forgeable and records visits, not leads. |
+| Search Console and GA4 integration claims | Keywords feature page, in-house solution page, recover-traffic FAQ | Neither integration exists. |
+| "Import historical Search Console data to backfill sixteen months" | Recover-traffic solution page | No import exists. |
+| Whole pages: `/platform/rank-tracking`, `/platform/attribution`, `/solutions/agencies`, `/solutions/scale-content` | `src/content/platform.ts` | Each page existed solely to sell a capability that does not exist. Removed rather than reduced to a placeholder. |
+| Placeholder postal address and phone number emitted as `Organization` structured data | `organizationSchema()` | Publishing placeholder contact details as structured data asserts a real-world business location that does not exist. Now gated on `brand.identityVerified`. |
+
+---
+
+## Containment: how demo data is kept out of real workspaces
+
+1. **Schema.** `Organization.dataMode` and `Project.dataMode` are `live` by
+   default. Only the seed script writes `demo`.
+2. **Provider layer.** `ask()` takes an explicit `mode`. `demo` always
+   simulates and never touches a provider endpoint; `live` never simulates,
+   whatever goes wrong. The two paths are mutually exclusive.
+3. **Row level.** `AiCheck.status` is one of `live | simulated | failed |
+   unavailable`, alongside `errorCategory`, `errorDetail`, `model` and
+   `latencyMs`. A failed or unavailable row carries no metrics.
+4. **Aggregation.** Every rate is computed over *observed* rows only. A failed
+   call is a hole in coverage, never a zero — the previous behaviour would have
+   reported a provider outage as a collapse in brand visibility.
+5. **Presentation.** `summarizeProvenance()` labels a set `live` only when
+   every row is a successful live call. A mixed set is `mixed` and is flagged
+   as unusable. Coverage is shown next to every headline number, and the
+   `/api/v1` widget endpoint returns the same provenance so an embedded score
+   on a customer's website cannot render demo data as live.
+6. **Free tool.** With no engine connected, `/api/tools/ai-check` returns 503
+   and says so, rather than producing a simulated baseline a visitor cannot
+   distinguish from a real one.
+
+---
+
+## Known defects fixed in this pass
+
+| Defect | Fix |
+| --- | --- |
+| "Google AI Mode" dispatched to the Gemini developer API using `SERP_API_KEY`, and its output was stored and scored as AI Mode data. | Surface marked `unavailable`; the Gemini mapping removed; never called, never simulated, excluded from every score. |
+| A failed live provider call silently returned simulated text with the error tucked into a string field. | Four explicit statuses; a failure is stored as `failed` with a categorised reason and no answer. |
+| A missing credential silently produced simulated data in a real workspace. | Recorded as `unavailable`; simulation requires `mode: 'demo'`. |
+| A run was called "simulated" only when *every* row was simulated, so one live result could hide five simulated ones. | A set is `live` only when every row is live; any mixture is reported as such. |
+| `/api/contact` wrote every public enquiry into `project.findFirst()` — the oldest project in the database — as a `Lead`. | Enquiries now go to a tenant-neutral `ContactInquiry` model that touches no customer data, behind a rate limit. |
+| Keyword rows carried one row-level `dataSource` even though volume, CPC and difficulty have different provenance, and blended paid competition was labelled organic difficulty. | Per-field `volumeSource`, `difficultySource`, `cpcSource` and `dataProvider`; difficulty is labelled `blended` whenever a provider is involved. |
+| Rank and backlink screens rendered seeded demo rows, or empty tables that read as "you have no backlinks". | Both are gated on a provider that does not exist; a live workspace sees an explicit unavailable panel with the reason. |
+| Traffic and monetary forecasts were shown with false precision and no label. | Shown as approximations, explicitly labelled modelled, and `null` (not zero) when no position exists to forecast from. |
+| Provider error strings could carry a credential into stored data and logs. | `redact()` strips `?key=` parameters and common key prefixes before any error is stored or logged. |
+
+---
+
+## What Gate 0 did *not* fix
+
+These are real and remain open. They are Gate 1–3 work and are listed here so
+nobody mistakes this pass for a clean bill of health.
+
+- `ChatGPT` is still pinned to the retired `gpt-4o-search-preview` model.
+- No adapter enables its provider's current grounded web-search tool.
+- Stored observations still lack a run ID, prompt version, locale, token usage
+  and cost. Runs are still grouped by UTC date, so two runs on one day merge.
+- The simulator is still seeded by day, so repeated same-day demo runs are
+  identical.
+- The composite visibility score still uses unvalidated fixed weights and
+  exposes no uncertainty. It is labelled a convenience index in the UI, but it
+  has not been removed or replaced.
+- No repeated sampling, no confidence intervals, no minimum-sample rule.
+- Live checks still run inside request handlers. No durable queue, no retry, no
+  partial-run persistence, no distributed lock.
+- SQLite with `db push` and **no migration history**.
+- SSRF guard does not resolve DNS or defend against rebinding; redirects are
+  not revalidated per hop.
+- Rate limiting is per process and keyed on spoofable proxy headers.
+- Password changes do not revoke sessions on other devices.
+- Membership roles are not enforced; there is no invitation flow.
+- API keys have no scopes and no quotas. `/api/v1` still has wildcard CORS.
+- Missing Stripe configuration still unlocks all workspaces implicitly, and
+  `past_due` remains fully entitled.
+- The health endpoint still exposes more configuration detail than it should.
+- The public referral endpoint still accepts a caller-supplied referrer and
+  matches it by substring. It is now labelled, not fixed.
+- Legal documents are drafts and are marked as requiring counsel review. **No
+  compliance claim is made or implied.**

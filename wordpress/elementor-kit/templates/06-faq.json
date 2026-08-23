@@ -1,0 +1,121 @@
+{
+  "version": "0.4",
+  "title": "SuperTool — FAQ",
+  "type": "section",
+  "content": [
+    {
+      "id": "125b31b",
+      "elType": "section",
+      "elements": [
+        {
+          "id": "12514e4",
+          "elType": "column",
+          "elements": [
+            {
+              "id": "1215f9a",
+              "elType": "widget",
+              "widgetType": "heading",
+              "settings": {
+                "title": "Everything teams ask before they switch",
+                "header_size": "h2",
+                "align": "center",
+                "title_color": "#0B1220",
+                "typography_typography": "custom",
+                "typography_font_family": "Manrope",
+                "typography_font_size": {
+                  "unit": "px",
+                  "size": 40,
+                  "sizes": []
+                },
+                "typography_font_weight": "800",
+                "typography_line_height": {
+                  "unit": "em",
+                  "size": 1.12,
+                  "sizes": []
+                },
+                "typography_letter_spacing": {
+                  "unit": "px",
+                  "size": -1,
+                  "sizes": []
+                }
+              },
+              "elements": [],
+              "isInner": false
+            },
+            {
+              "id": "12476ad",
+              "elType": "widget",
+              "widgetType": "accordion",
+              "settings": {
+                "tabs": [
+                  {
+                    "_id": "121fdd1",
+                    "tab_title": "What is AI search visibility?",
+                    "tab_content": "<p>AI search visibility is the share of AI-generated answers in which your brand is named or cited as a source. Unlike a blue-link ranking there is no position one — an assistant either includes you in its answer or it does not.</p>"
+                  },
+                  {
+                    "_id": "1229c08",
+                    "tab_title": "Does this replace a rank tracker?",
+                    "tab_content": "<p>A rank tracker tells you where a URL sits in a list of ten links. An answer engine returns one synthesised answer and a handful of sources. SuperTool measures the second — it does not track search positions today.</p>"
+                  },
+                  {
+                    "_id": "1233a3f",
+                    "tab_title": "Do I need my own API keys?",
+                    "tab_content": "<p>SuperTool runs the engine checks using the credentials configured on the deployment. There is no per-tenant credential store, so bringing your own provider keys is not supported on any plan.</p>"
+                  },
+                  {
+                    "_id": "123d876",
+                    "tab_title": "Will the WordPress plugin break my theme or SEO plugin?",
+                    "tab_content": "<p>It is designed not to: no front-end CSS, and it takes over none of your existing metadata. It writes SEO fields through whichever plugin you already run — Yoast and Rank Math are both handled. That behaviour is covered by tests against a stubbed API, not yet against a live install, so treat it as beta.</p>"
+                  }
+                ],
+                "title_color": "#0B1220",
+                "tab_active_color": "#1466D8",
+                "border_width": {
+                  "unit": "px",
+                  "size": 1,
+                  "sizes": []
+                },
+                "border_color": "#E3E8EF",
+                "title_typography_typography": "custom",
+                "title_typography_font_family": "Manrope",
+                "title_typography_font_size": {
+                  "unit": "px",
+                  "size": 17,
+                  "sizes": []
+                },
+                "title_typography_font_weight": "700"
+              },
+              "elements": [],
+              "isInner": false
+            }
+          ],
+          "isInner": false,
+          "settings": {
+            "_column_size": 100,
+            "_inline_size": null
+          }
+        }
+      ],
+      "isInner": false,
+      "settings": {
+        "structure": "10",
+        "content_width": "boxed",
+        "gap": "extended",
+        "padding": {
+          "unit": "px",
+          "top": "96",
+          "right": "0",
+          "bottom": "96",
+          "left": "undefined",
+          "isLinked": false
+        }
+      }
+    }
+  ],
+  "page_settings": [],
+  "metadata": {
+    "generator": "Rank Logic SuperTool kit builder",
+    "elementor_min": "3.0.0"
+  }
+}
