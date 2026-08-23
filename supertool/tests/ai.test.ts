@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { analyzeAnswer, rollUpVisibility } from '@/lib/ai/analysis';
 import { ask, askAll, seededRandom } from '@/lib/ai/providers';
 import { generatePromptSet } from '@/lib/ai/prompts';
-import { ENGINE_IDS, ENGINES } from '@/lib/ai/engines';
+import { ENGINE_IDS, ENGINES, MEASURABLE_ENGINES, MEASURABLE_ENGINE_IDS } from '@/lib/ai/engines';
 
 const competitors = [{ name: 'Semrush', domain: 'semrush.com' }, { name: 'Ahrefs', domain: 'ahrefs.com' }];
 
@@ -131,15 +131,25 @@ describe('seededRandom', () => {
   });
 });
 
-describe('ask (simulated path)', () => {
-  it('returns a deterministic, analysable answer with no credentials set', async () => {
+/**
+ * These expectations changed deliberately in the Gate 0 truth pass.
+ *
+ * Previously `ask()` returned simulated text whenever a credential was
+ * missing or a live call failed, and the caller could only tell via a boolean.
+ * That made a provider outage indistinguishable from a real answer. The
+ * contract is now four explicit statuses, and simulation happens only when the
+ * caller asks for demo mode.
+ */
+describe('ask (demo mode)', () => {
+  it('returns a deterministic, analysable answer', async () => {
     const input = {
       prompt: 'What is the best AI SEO platform?', engine: 'chatgpt' as const,
       brand: 'SuperTool', domain: 'ranklogicsupertool.com', competitors, seed: 'p1',
+      mode: 'demo' as const,
     };
     const a = await ask(input);
     const b = await ask(input);
-    expect(a.simulated).toBe(true);
+    expect(a.status).toBe('simulated');
     expect(a.answer).toBe(b.answer);
     expect(a.answer.length).toBeGreaterThan(50);
     expect(a.model).toContain('simulated');
@@ -148,26 +158,30 @@ describe('ask (simulated path)', () => {
   it('varies by engine', async () => {
     const base = {
       prompt: 'What is the best AI SEO platform?', brand: 'SuperTool',
-      domain: 'ranklogicsupertool.com', competitors, seed: 'p1',
+      domain: 'ranklogicsupertool.com', competitors, seed: 'p1', mode: 'demo' as const,
     };
-    const answers = await Promise.all(ENGINE_IDS.map((engine) => ask({ ...base, engine })));
+    const answers = await Promise.all(
+      MEASURABLE_ENGINE_IDS.map((engine) => ask({ ...base, engine })),
+    );
     expect(new Set(answers.map((a) => a.answer)).size).toBeGreaterThan(1);
   });
 
   it('askAll covers every registered engine', async () => {
     const all = await askAll({
       prompt: 'Best AI SEO platform?', brand: 'SuperTool',
-      domain: 'ranklogicsupertool.com', competitors, seed: 's',
+      domain: 'ranklogicsupertool.com', competitors, seed: 's', mode: 'demo',
     });
     expect(Object.keys(all).sort()).toEqual([...ENGINE_IDS].sort());
   });
 
-  it('falls back to simulation for an unknown engine instead of throwing', async () => {
+  it('reports an unknown engine as unavailable rather than simulating it', async () => {
     const r = await ask({
-      prompt: 'x', engine: 'nope' as never, brand: 'B', domain: 'b.com', competitors: [], seed: 's',
+      prompt: 'x', engine: 'nope' as never, brand: 'B', domain: 'b.com', competitors: [],
+      seed: 's', mode: 'demo',
     });
-    expect(r.simulated).toBe(true);
-    expect(r.error).toContain('Unknown engine');
+    expect(r.status).toBe('unavailable');
+    expect(r.errorCategory).toBe('unsupported_engine');
+    expect(r.answer).toBe('');
   });
 });
 
@@ -214,13 +228,24 @@ describe('generatePromptSet', () => {
 });
 
 describe('engine registry', () => {
-  it('has six engines whose audience weights sum to 1', () => {
+  it('knows six surfaces but only measures the five with a compliant source', () => {
     expect(ENGINES).toHaveLength(6);
-    const sum = ENGINES.reduce((s, e) => s + e.audienceWeight, 0);
-    expect(sum).toBeCloseTo(1, 5);
+    expect(MEASURABLE_ENGINE_IDS).toHaveLength(5);
+    expect(MEASURABLE_ENGINE_IDS).not.toContain('google-ai-mode');
   });
-  it('uses unique ids and credential keys', () => {
+
+  it('uses unique ids and unique credential keys among measurable surfaces', () => {
     expect(new Set(ENGINES.map((e) => e.id)).size).toBe(6);
-    expect(new Set(ENGINES.map((e) => e.envKey)).size).toBe(6);
+    const keys = MEASURABLE_ENGINES.map((e) => e.envKey);
+    expect(keys.every(Boolean)).toBe(true);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it('gives every unavailable surface a stated reason', () => {
+    for (const e of ENGINES) {
+      if (e.availability === 'unavailable') {
+        expect(e.unavailableReason && e.unavailableReason.length).toBeGreaterThan(20);
+      }
+    }
   });
 });

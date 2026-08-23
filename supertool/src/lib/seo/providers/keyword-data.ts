@@ -5,11 +5,30 @@ import { estimateKeyword } from '../estimate';
 /**
  * Keyword metrics, from a real provider where one is configured.
  *
- * Every row carries its own `source`, so the UI can state whether a number was
- * measured or modelled rather than presenting both as fact. A provider failure
- * degrades to the model instead of failing the request — a user adding
- * keywords should not be blocked by someone else's API being down.
+ * Provenance is per field, not per row, because a single row genuinely mixes
+ * sources: DataForSEO supplies search volume and CPC, but nobody publishes
+ * organic difficulty, so difficulty is always partly modelled. Labelling the
+ * whole row "measured" would state that a blended number came from a provider.
+ *
+ * A provider failure degrades to the model instead of failing the request — a
+ * user adding keywords should not be blocked by someone else's API being down
+ * — but the resulting row says "estimated" on every field.
  */
+
+/** Where one number came from. */
+export type FieldSource =
+  /** Straight from a provider. */
+  | 'measured'
+  /** Modelled in-product from the phrase itself. */
+  | 'estimated'
+  /** A provider input combined with a modelled one. */
+  | 'blended';
+
+export interface FieldSources {
+  volume: FieldSource;
+  difficulty: FieldSource;
+  cpc: FieldSource;
+}
 
 export interface KeywordMetrics {
   phrase: string;
@@ -19,8 +38,18 @@ export interface KeywordMetrics {
   intent: string;
   /** 12 monthly volumes, oldest first. */
   trend: number[];
-  source: 'measured' | 'estimated';
+  /** Row summary: 'measured' only when every field is measured. */
+  source: FieldSource;
+  sources: FieldSources;
   provider?: string;
+}
+
+/** Roll per-field provenance up into one honest row-level label. */
+export function summarizeFieldSources(s: FieldSources): FieldSource {
+  const values = [s.volume, s.difficulty, s.cpc];
+  if (values.every((v) => v === 'measured')) return 'measured';
+  if (values.every((v) => v === 'estimated')) return 'estimated';
+  return 'blended';
 }
 
 export function activeProvider(): 'dataforseo' | null {
@@ -65,6 +94,7 @@ function modelled(phrase: string): KeywordMetrics {
     intent: classifyIntent(phrase),
     trend: estimate.trend,
     source: 'estimated',
+    sources: { volume: 'estimated', difficulty: 'estimated', cpc: 'estimated' },
   };
 }
 
@@ -178,6 +208,12 @@ function toMetrics(phrase: string, row: DfsKeywordResult): KeywordMetrics {
       ? monthly.slice(-12)
       : [...Array.from({ length: 12 - monthly.length }, () => volume), ...monthly];
 
+  // Volume and CPC come straight from the provider. Difficulty does not: it
+  // blends the provider's *paid* competition index with the modelled organic
+  // figure, so it is labelled 'blended' and never sold as measured organic
+  // difficulty.
+  const sources: FieldSources = { volume: 'measured', cpc: 'measured', difficulty: 'blended' };
+
   return {
     phrase,
     volume,
@@ -185,7 +221,8 @@ function toMetrics(phrase: string, row: DfsKeywordResult): KeywordMetrics {
     cpc,
     intent: classifyIntent(phrase),
     trend,
-    source: 'measured',
+    source: summarizeFieldSources(sources),
+    sources,
     provider: 'dataforseo',
   };
 }

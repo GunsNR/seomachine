@@ -8,7 +8,20 @@ import { AlertCircle, Loader2 } from 'lucide-react';
 const inputCls =
   'h-12 w-full rounded-xl border-0 bg-surface-alt px-4 text-[0.95rem] text-ink ring-1 ring-inset ring-line placeholder:text-body/45 focus:ring-2 focus:ring-brand';
 
-export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
+export function AuthForm({
+  mode,
+  showDemoCredentials = false,
+}: {
+  mode: 'login' | 'signup';
+  /**
+   * Whether to print the seeded demo account's credentials on the page.
+   *
+   * Off unless the server says a demo workspace exists. Publishing a working
+   * login on a production sign-in page invites anyone to walk into the
+   * workspace, and on a deployment with no demo data the hint is simply false.
+   */
+  showDemoCredentials?: boolean;
+}) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -116,7 +129,7 @@ export function AuthForm({ mode }: { mode: 'login' | 'signup' }) {
         )}
       </p>
 
-      {mode === 'login' && (
+      {mode === 'login' && showDemoCredentials && (
         <div className="mt-8 rounded-xl bg-surface-alt p-4 text-[0.82rem] leading-relaxed text-body">
           <strong className="font-semibold text-ink">Demo workspace:</strong>{' '}
           <code className="rounded bg-white px-1.5 py-0.5 ring-1 ring-line">demo@ranklogicsupertool.com</code>{' '}

@@ -1,4 +1,5 @@
 import type { LegalSection } from '@/content/legal';
+import { brand } from '../../../brand.config';
 
 export function LegalPage({
   title, updated, intro, sections,
@@ -21,6 +22,20 @@ export function LegalPage({
 
       <div className="container-x py-14 lg:py-20">
         <div className="mx-auto max-w-3xl">
+          {!brand.identityVerified && (
+            <div
+              className="mb-8 rounded-xl bg-warn/10 p-5 text-[0.875rem] leading-relaxed text-ink ring-1 ring-warn/25"
+              role="note"
+            >
+              <strong className="font-semibold">Draft — not yet reviewed by counsel.</strong>{' '}
+              This document was drafted in-product and has not been reviewed by a qualified
+              lawyer. The company identity and contact details it references are placeholders
+              pending owner confirmation. It is not legal advice and should not be relied on as a
+              binding agreement or as evidence of regulatory compliance until it has been reviewed
+              and the identity details verified.
+            </div>
+          )}
+
           <p className="prose-body text-pretty">{intro}</p>
 
           <nav aria-label="On this page" className="mt-10 rounded-2xl bg-surface-alt p-6">

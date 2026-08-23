@@ -16,7 +16,9 @@
  * - Adds no front-end CSS and enqueues no libraries.
  * - Writes SEO fields through Yoast or Rank Math when present rather than
  *   replacing them, so the site's existing SEO configuration stays authoritative.
- * - The attribution snippet sets no cookies and collects no personal data.
+ * - The attribution snippet sets no cookies. It does send the full document
+ * referrer, which can contain query parameters, so it is not claimed to be
+ * free of personal data.
  */
 
 defined( 'ABSPATH' ) || exit;

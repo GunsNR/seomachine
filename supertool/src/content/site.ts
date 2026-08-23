@@ -1,4 +1,20 @@
 import { brand } from '../../brand.config';
+import type { CapabilityId } from '@/lib/capabilities';
+
+/**
+ * Marketing copy.
+ *
+ * Feature claims here are not free-form prose: a plan lists capability ids,
+ * and the labels are rendered from the capability registry. A capability that
+ * is not `verified` or `beta` cannot be listed, because `planFeatureLabel()`
+ * throws — so an unshipped feature breaks the build instead of appearing on
+ * the pricing page.
+ *
+ * Testimonials, customer results, review ratings, award badges and partner
+ * logos were removed in the Gate 0 truth pass rather than rewritten. All of
+ * them were invented. There are no customers to quote yet, and inventing
+ * quotes to fill the layout is the specific thing this pass exists to stop.
+ */
 
 /** Primary navigation, including the mega-menu columns. */
 export const NAV = [
@@ -9,25 +25,23 @@ export const NAV = [
       {
         heading: 'AI Search',
         links: [
-          { label: 'AI Visibility Tracking', href: '/platform/ai-visibility', desc: 'Monitor 6 answer engines daily' },
-          { label: 'Citation Monitoring', href: '/platform/citations', desc: 'See exactly which pages get cited' },
+          { label: 'AI Visibility Tracking', href: '/platform/ai-visibility', desc: 'Measure inclusion across connected engines' },
+          { label: 'Citation Monitoring', href: '/platform/citations', desc: 'See which URLs an answer pointed at' },
           { label: 'Prompt Sets', href: '/platform/prompt-sets', desc: 'Track the questions buyers actually ask' },
         ],
       },
       {
-        heading: 'Classic SEO',
+        heading: 'Content & Technical',
         links: [
-          { label: 'Rank Tracking', href: '/platform/rank-tracking', desc: 'Daily positions, any location' },
-          { label: 'Site Audit', href: '/platform/site-audit', desc: '20+ technical and GEO checks' },
+          { label: 'Site Audit', href: '/platform/site-audit', desc: '25 technical and answer-readiness checks' },
           { label: 'Keyword Explorer', href: '/platform/keywords', desc: 'Volume, difficulty, opportunity' },
+          { label: 'Content Briefs', href: '/platform/content', desc: 'Brief and score — you write it' },
         ],
       },
       {
-        heading: 'Content & Revenue',
+        heading: 'Publishing',
         links: [
-          { label: 'Content Engine', href: '/platform/content', desc: 'Brief, write, score, publish' },
-          { label: 'WordPress Publishing', href: '/platform/wordpress', desc: 'One-click, Elementor-ready' },
-          { label: 'Lead Attribution', href: '/platform/attribution', desc: 'Tie AI answers to pipeline' },
+          { label: 'WordPress Publishing', href: '/platform/wordpress', desc: 'Native blocks, Elementor templates' },
         ],
       },
     ],
@@ -39,7 +53,6 @@ export const NAV = [
       {
         heading: 'By team',
         links: [
-          { label: 'Agencies', href: '/solutions/agencies', desc: 'Multi-client, white-label reporting' },
           { label: 'In-house marketing', href: '/solutions/in-house', desc: 'One platform, no tool sprawl' },
           { label: 'Founders', href: '/solutions/founders', desc: 'Ship content without a team' },
         ],
@@ -49,7 +62,6 @@ export const NAV = [
         links: [
           { label: 'Get cited by ChatGPT', href: '/solutions/get-cited', desc: 'Win the answer, not the link' },
           { label: 'Recover lost traffic', href: '/solutions/recover-traffic', desc: 'Fix decay before it compounds' },
-          { label: 'Scale content ops', href: '/solutions/scale-content', desc: 'From 4 to 40 posts a month' },
         ],
       },
     ],
@@ -59,12 +71,18 @@ export const NAV = [
   { label: 'Company', href: '/about' },
 ] as const;
 
-/** Headline proof points shown under the hero. */
+/**
+ * Facts about the product, checkable in this repository.
+ *
+ * The previous version of this list carried an "average citation lift" and a
+ * "pages scored daily" figure. Neither was measured; there were no customers
+ * to measure. Everything below is a count you can verify by reading the code.
+ */
 export const STATS = [
-  { value: 6, suffix: '', label: 'Answer engines tracked', sub: 'ChatGPT, Perplexity, Claude, Gemini, Grok, AI Mode' },
-  { value: 41, suffix: '%', label: 'Average citation lift', sub: 'First 90 days across onboarded sites' },
-  { value: 5, suffix: ' min', label: 'WordPress setup', sub: 'No code, no theme changes' },
-  { value: 1200, suffix: '+', label: 'Pages scored daily', sub: 'Per workspace on the Scale plan' },
+  { value: 5, suffix: '', label: 'Answer engines measurable', sub: 'ChatGPT, Perplexity, Claude, Gemini, Grok — when you connect them' },
+  { value: 25, suffix: '', label: 'Site audit rules', sub: 'Technical, on-page, schema and answer-readiness' },
+  { value: 9, suffix: '', label: 'Answer-readiness signals', sub: 'A heuristic checklist, not a prediction' },
+  { value: 8, suffix: '', label: 'Opportunity factors', sub: 'Volume, position, intent, competition and four more' },
 ] as const;
 
 export const SERVICES = [
@@ -73,48 +91,48 @@ export const SERVICES = [
     title: 'AI Visibility Tracking',
     href: '/platform/ai-visibility',
     blurb:
-      'Run a fixed prompt set across all six answer engines on a schedule. See mention rate, citation rate, share of voice and where you sit against every competitor named alongside you.',
-    bullets: ['Daily automated runs', 'Per-engine breakdown', 'Competitor share of voice'],
+      'Run a fixed prompt set across the answer engines you have connected, on a schedule. See mention rate, citation rate, share of voice and where you sit against every competitor named alongside you — with the coverage of each run stated next to it.',
+    bullets: ['Scheduled automated runs', 'Per-engine breakdown', 'Coverage shown with every rate'],
   },
   {
     icon: 'Quote',
     title: 'Citation Monitoring',
     href: '/platform/citations',
     blurb:
-      'Know which of your URLs answer engines actually quote — and which competitor page took the citation when they did not. Every check keeps the source text as evidence.',
+      'Know which of your URLs answer engines actually quote — and which competitor page took the citation when they did not. Every check keeps the answer excerpt as evidence.',
     bullets: ['URL-level attribution', 'Answer excerpts stored', 'Sentiment on every mention'],
   },
   {
     icon: 'PenTool',
-    title: 'Content Engine',
+    title: 'Briefs and answer-readiness scoring',
     href: '/platform/content',
     blurb:
-      'Briefs built from live SERP and prompt data, then a GEO score that tells you what to change before you publish: missing statistics, unsourced claims, passages no model can quote.',
-    bullets: ['SERP-benchmarked briefs', '9-signal GEO score', 'Rewrite suggestions inline'],
-  },
-  {
-    icon: 'Search',
-    title: 'Rank Tracking',
-    href: '/platform/rank-tracking',
-    blurb:
-      'Classic position tracking that accounts for the new SERP: AI Overview presence, featured snippets and ad blocks are folded into a click forecast, not just a rank number.',
-    bullets: ['AI Overview-aware CTR', 'Traffic + value forecasts', 'Share of voice by cluster'],
+      'Briefs built from your keyword and prompt sets, then a nine-signal heuristic that names what to change before you publish: missing statistics, unsourced claims, passages no model can quote. SuperTool does not write the draft.',
+    bullets: ['Structured briefs', 'Nine-signal heuristic', 'Concrete fix list per draft'],
   },
   {
     icon: 'ShieldCheck',
     title: 'Site Audit',
     href: '/platform/site-audit',
     blurb:
-      'A crawler that grades crawlability, on-page, performance and schema — plus an answer-readiness category no other audit runs: question structure, sourcing and author attribution.',
-    bullets: ['20+ severity-weighted rules', 'AI-readiness category', 'Fix instructions per issue'],
+      'A crawler that grades crawlability, on-page, performance and schema — plus an answer-readiness category most audits skip: question structure, sourcing and author attribution.',
+    bullets: ['25 severity-weighted rules', 'Answer-readiness category', 'Fix instructions per issue'],
+  },
+  {
+    icon: 'Search',
+    title: 'Keyword Explorer',
+    href: '/platform/keywords',
+    blurb:
+      'Volume and CPC from DataForSEO when you connect it, and a clearly labelled in-product model when you do not. Every figure carries its own source tag, field by field, so a blended number is never presented as a measured one.',
+    bullets: ['Per-field provenance', 'Eight-factor opportunity score', 'Estimates labelled as estimates'],
   },
   {
     icon: 'Plug',
     title: 'WordPress Publishing',
     href: '/platform/wordpress',
     blurb:
-      'Install the plugin, paste one key, publish. Articles land as native blocks with schema, meta and internal links intact — and Elementor widgets render your live scores on any page.',
-    bullets: ['5-minute install', 'Yoast + Rank Math safe', 'Elementor widgets included'],
+      'Install the plugin, paste one key, publish. Articles land as native blocks with schema, meta and internal links intact — and Elementor templates ship alongside for teams that use them.',
+    bullets: ['Native block output', 'Yoast + Rank Math safe', 'Elementor templates included'],
   },
 ] as const;
 
@@ -122,97 +140,55 @@ export const PROCESS = [
   {
     step: '01',
     title: 'Connect and baseline',
-    body: 'Point SuperTool at your domain and name three competitors. We crawl the site, pull your keyword set, generate a funnel-balanced prompt set and run every engine once to establish a baseline.',
+    body: 'Point SuperTool at your domain and name three competitors. We crawl the site, build a keyword set, generate a funnel-balanced prompt set and run every connected engine once to establish a dated baseline.',
     duration: 'Day 1',
   },
   {
     step: '02',
     title: 'Find the gaps',
-    body: 'The dashboard shows exactly which questions you lose, which competitor wins them, and which of your pages is closest to being citable. Opportunities are ranked by an eight-factor score, not gut feel.',
+    body: 'The dashboard shows which questions you lose, which competitor wins them, and which of your pages is closest to being citable. Opportunities are ranked by an eight-factor score rather than gut feel.',
     duration: 'Day 2-3',
   },
   {
     step: '03',
-    title: 'Publish what gets cited',
-    body: 'Briefs come pre-loaded with the statistics, sources and question headings the winning answers contain. Score the draft before publishing, then push it live to WordPress in one click.',
+    title: 'Write, score, publish',
+    body: 'Briefs come pre-loaded with the questions and sourcing targets the winning answers contain. Score your draft against the answer-readiness heuristic, then push it live to WordPress.',
     duration: 'Week 1-2',
   },
   {
     step: '04',
-    title: 'Measure the revenue',
-    body: 'Every published page is tracked in both channels. Leads arriving from an AI assistant are tagged at the source, so you can report pipeline from ChatGPT the same way you report it from Google.',
+    title: 'Re-measure',
+    body: 'Re-run the same prompt set on the same schedule after publishing, so the before and after are measured identically. Whether a change moves anything is the question the measurement exists to answer — not something we promise in advance.',
     duration: 'Ongoing',
   },
 ] as const;
 
-export const RESULTS = [
-  {
-    metric: '+312%',
-    label: 'AI citations in 90 days',
-    client: 'B2B SaaS, 40-person team',
-    detail: 'Rewrote 26 existing posts against the GEO score. Citation rate went from 8% of prompts to 33%.',
-  },
-  {
-    metric: '4.2x',
-    label: 'Pipeline from AI referrals',
-    client: 'Professional services firm',
-    detail: 'Attribution showed Perplexity was already sending qualified traffic. They doubled down and tracked it to closed revenue.',
-  },
-  {
-    metric: '-63%',
-    label: 'Time to publish',
-    client: 'Marketing agency, 22 clients',
-    detail: 'Brief-to-published dropped from 11 days to 4 using SERP-benchmarked briefs and one-click WordPress publishing.',
-  },
-] as const;
+/**
+ * Plans.
+ *
+ * `limits` are quotas — plain numbers, no capability claim attached.
+ * `capabilities` are registry ids; their labels render from the registry, and
+ * listing an unsellable one is a build error.
+ */
+export interface Plan {
+  name: string;
+  price: number;
+  annualPrice: number;
+  tagline: string;
+  limits: readonly string[];
+  capabilities: readonly CapabilityId[];
+  cta: string;
+  highlight: boolean;
+}
 
-export const TESTIMONIALS = [
-  {
-    quote:
-      'We were arguing about whether AI search mattered. SuperTool ended the argument in a week — it showed us Perplexity was already citing a competitor on our three highest-intent questions.',
-    name: 'Dana Whitfield',
-    role: 'VP Marketing',
-    company: 'Northline Systems',
-  },
-  {
-    quote:
-      'The GEO score is the only content grader I have seen that tells you something actionable. "Add two sourced statistics and rewrite these four pronoun-led sentences" is a real instruction.',
-    name: 'Marcus Aiyegbeni',
-    role: 'Head of Content',
-    company: 'Bellwether Group',
-  },
-  {
-    quote:
-      'I run 22 client sites on WordPress. The plugin took five minutes on the first one and about ninety seconds on every one after. Elementor widgets meant no theme surgery.',
-    name: 'Priya Raghunathan',
-    role: 'Founder',
-    company: 'Copperleaf Digital',
-  },
-  {
-    quote:
-      'Being able to show a client the exact ChatGPT answer that named their competitor, with the date and the source list, changed how those meetings go.',
-    name: 'Tom Beckerley',
-    role: 'SEO Director',
-    company: 'Harbourfield Media',
-  },
-] as const;
-
-export const PRICING = [
+export const PRICING: readonly Plan[] = [
   {
     name: 'Starter',
     price: 79,
     annualPrice: 65,
     tagline: 'For founders and single-site brands proving the channel.',
-    features: [
-      '1 project',
-      '25 tracked prompts',
-      'All 6 answer engines',
-      '250 tracked keywords',
-      'Weekly automated runs',
-      '100-page site audit',
-      'WordPress plugin',
-      'Email support',
-    ],
+    limits: ['1 project', '25 tracked prompts', '250 tracked keywords', 'Weekly automated runs', '100-page site audit'],
+    capabilities: ['ai_visibility_tracking', 'citation_monitoring', 'site_audit', 'keyword_research', 'wordpress_publishing', 'csv_export'],
     cta: 'Start free trial',
     highlight: false,
   },
@@ -221,17 +197,11 @@ export const PRICING = [
     price: 249,
     annualPrice: 199,
     tagline: 'For marketing teams running content as a channel.',
-    features: [
-      '5 projects',
-      '150 tracked prompts',
-      'All 6 answer engines',
-      '2,000 tracked keywords',
-      'Daily automated runs',
-      '1,000-page site audit',
-      'Content engine + GEO scoring',
-      'Lead attribution',
-      'Competitor share of voice',
-      'Priority support',
+    limits: ['5 projects', '150 tracked prompts', '2,000 tracked keywords', 'Daily automated runs', '1,000-page site audit'],
+    capabilities: [
+      'ai_visibility_tracking', 'citation_monitoring', 'competitor_share_of_voice', 'site_audit',
+      'keyword_research', 'content_briefs', 'geo_scoring', 'wordpress_publishing',
+      'elementor_widgets', 'scheduled_runs', 'csv_export',
     ],
     cta: 'Start free trial',
     highlight: true,
@@ -240,56 +210,64 @@ export const PRICING = [
     name: 'Scale',
     price: 749,
     annualPrice: 599,
-    tagline: 'For agencies and multi-brand portfolios.',
-    features: [
-      'Unlimited projects',
-      '1,000 tracked prompts',
-      'All 6 answer engines',
-      '20,000 tracked keywords',
-      'Daily runs + API access',
-      'Unlimited site audit',
-      'White-label reporting',
-      'Multi-seat workspaces',
-      'Bring your own API keys',
-      'Dedicated success manager',
+    tagline: 'For portfolios running the same process across many sites.',
+    limits: ['Unlimited projects', '1,000 tracked prompts', '20,000 tracked keywords', 'Daily automated runs', 'Unlimited site audit'],
+    capabilities: [
+      'ai_visibility_tracking', 'citation_monitoring', 'competitor_share_of_voice', 'site_audit',
+      'keyword_research', 'content_briefs', 'geo_scoring', 'wordpress_publishing',
+      'elementor_widgets', 'scheduled_runs', 'csv_export', 'public_api',
     ],
     cta: 'Talk to sales',
     highlight: false,
   },
 ] as const;
 
+/**
+ * Shown under the pricing table. Says what every plan does *not* include, in
+ * the same place as what it does.
+ */
+export const PRICING_DISCLOSURE = [
+  'Answer-engine checks run against the surfaces this deployment has credentials for. A surface without a credential is recorded as unavailable and excluded from your rates — never simulated.',
+  'Search position tracking, backlink data, Search Console and GA4 integrations, article generation, multi-seat roles, white-label reporting and per-tenant provider keys are not built. They are not included on any plan at any price.',
+  'Google AI Mode has no compliant API and is not measured.',
+] as const;
+
 export const FAQS = [
   {
     q: 'What is AI search visibility?',
-    a: 'AI search visibility is the share of AI-generated answers in which your brand is named or cited as a source. Unlike a blue-link ranking there is no position one — an assistant either includes you in its answer or it does not. SuperTool measures inclusion across ChatGPT, Perplexity, Claude, Gemini, Grok and Google AI Mode using a fixed prompt set run on a schedule.',
+    a: 'AI search visibility is the share of AI-generated answers in which your brand is named or cited as a source. Unlike a blue-link ranking there is no position one — an assistant either includes you in its answer or it does not. SuperTool measures inclusion across ChatGPT, Perplexity, Claude, Gemini and Grok using a fixed prompt set run on a schedule, against each vendor’s developer API.',
   },
   {
-    q: 'How is this different from a rank tracker?',
-    a: 'A rank tracker tells you where a URL sits in a list of ten links. An answer engine returns one synthesised answer and a handful of sources. SuperTool tracks both: classic positions with AI-Overview-aware click forecasts, and answer-engine inclusion with mention rate, citation rate and share of voice. The two channels are reported side by side against the same content.',
+    q: 'Which engines can you actually measure?',
+    a: 'Five: ChatGPT, Perplexity, Claude, Gemini and Grok, each through its vendor’s official developer API, and each only when you supply a credential for it. Google AI Mode is not measured — it has no official API, and answering it with a different vendor’s model would make every number derived from it false. A surface you have not connected is recorded as unavailable and left out of your rates rather than guessed at.',
+  },
+  {
+    q: 'Does this replace a rank tracker?',
+    a: 'No, and it does not currently include one. SuperTool has no SERP provider integration, so it does not report search positions at all. What it measures is answer-engine inclusion: mention rate, citation rate and share of voice over a fixed prompt set, with the coverage of each run shown alongside.',
+  },
+  {
+    q: 'How accurate are the keyword numbers?',
+    a: 'Volume and CPC come from DataForSEO when you connect it. Difficulty is never fully measured, because no provider publishes organic difficulty — where a provider is connected, difficulty blends its paid competition index with an in-product model, and is labelled as part-modelled. Without a provider, every field is a labelled estimate derived from the phrase itself. Traffic and value figures are forecasts from those inputs, shown as approximations.',
   },
   {
     q: 'Do I need my own API keys?',
-    a: `No. ${brand.shortName} runs the engine checks for you on every plan. If you would rather use your own OpenAI, Anthropic, Perplexity, Google or xAI credentials — for cost control or data residency — the Scale plan lets you supply them and the platform calls the engines directly under your account.`,
+    a: `${brand.shortName} runs the engine checks using the credentials configured on the deployment. There is no per-tenant credential store today, so bringing your own provider keys is not supported on any plan.`,
   },
   {
     q: 'Will the WordPress plugin break my theme or SEO plugin?',
-    a: 'No. The plugin adds no front-end CSS and takes over none of your existing metadata. It publishes posts through the standard REST API as native blocks, and it writes SEO fields through whichever plugin you already run — Yoast and Rank Math are both supported. If you use Elementor, the widgets are optional and additive.',
+    a: 'It is designed not to. The plugin adds no front-end CSS and takes over none of your existing metadata. It publishes posts through the standard REST API as native blocks, and writes SEO fields through whichever plugin you already run — Yoast and Rank Math are both handled. That behaviour is covered by tests against a stubbed WordPress API; it has not yet been exercised against a live installation, so treat the integration as beta.',
   },
   {
     q: 'How long before I see results?',
-    a: 'Baseline visibility is measured on day one. Because answer engines re-crawl and re-rank far faster than classic search, rewrites scored against the GEO model typically move citation rate within two to six weeks — considerably faster than the three to six months a comparable ranking change takes.',
-  },
-  {
-    q: 'Can I use it for client sites?',
-    a: 'Yes. The Scale plan is built for agencies: unlimited projects, multi-seat workspaces, white-label PDF and link reporting, and per-client API keys. Each project keeps its own prompt set, competitor list and audit history.',
+    a: 'We do not know, and we will not quote you a number. There is no outcome data linking a scored rewrite to a later citation, so any figure would be invented. What you get on day one is a dated baseline and a repeatable way to check whether a change moved anything.',
   },
   {
     q: 'What happens to my data if I cancel?',
-    a: 'You can export every project — prompts, checks, rankings, audits and articles — as CSV or JSON at any time, including after cancellation. We keep your data for 30 days after a cancellation so you can reactivate, then permanently delete it.',
+    a: 'You can export every project — prompts, checks, keywords, audits and articles — as CSV or JSON at any time, including after cancellation.',
   },
   {
     q: 'Is there a free trial?',
-    a: 'Yes — 14 days on any plan, no card required. The trial includes one full prompt-set run across all six engines and a complete site audit, so you can see your actual baseline before deciding.',
+    a: 'Yes — 14 days on any plan, no card required. The trial includes a full prompt-set run across the engines connected on this deployment and a complete site audit, so you can see your actual baseline before deciding.',
   },
 ] as const;
 
@@ -299,16 +277,15 @@ export const FOOTER_COLUMNS = [
     links: [
       { label: 'AI Visibility Tracking', href: '/platform/ai-visibility' },
       { label: 'Citation Monitoring', href: '/platform/citations' },
-      { label: 'Content Engine', href: '/platform/content' },
-      { label: 'Rank Tracking', href: '/platform/rank-tracking' },
+      { label: 'Prompt Sets', href: '/platform/prompt-sets' },
       { label: 'Site Audit', href: '/platform/site-audit' },
+      { label: 'Keyword Explorer', href: '/platform/keywords' },
       { label: 'WordPress Publishing', href: '/platform/wordpress' },
     ],
   },
   {
     heading: 'Solutions',
     links: [
-      { label: 'For agencies', href: '/solutions/agencies' },
       { label: 'For in-house teams', href: '/solutions/in-house' },
       { label: 'For founders', href: '/solutions/founders' },
       { label: 'Get cited by ChatGPT', href: '/solutions/get-cited' },
@@ -335,12 +312,4 @@ export const FOOTER_COLUMNS = [
       { label: 'Terms', href: '/terms' },
     ],
   },
-] as const;
-
-export const TRUST_BADGES = [
-  'Google Premier Partner',
-  'Microsoft Advertising Select',
-  'Inc. 5000 2025',
-  'G2 High Performer',
-  'SOC 2 Type II',
 ] as const;

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db';
+import { clientKey, rateLimit, rateLimitHeaders } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -15,7 +16,28 @@ const Body = z.object({
   fax: z.string().max(0).optional(),
 });
 
+/**
+ * Marketing-site enquiries.
+ *
+ * These are written to `ContactInquiry`, which has no relation to any
+ * Organization, Project or Lead. The previous implementation attached every
+ * enquiry to `project.findFirst()` — the oldest project in the database — so a
+ * stranger filling in the public contact form wrote a row into whichever real
+ * customer happened to have signed up first, and it appeared in their lead
+ * list as though they had earned it. That is a tenant-isolation breach and a
+ * data-integrity one at the same time, and there is no version of it that is
+ * safe to keep.
+ */
 export async function POST(req: Request) {
+  // Unauthenticated write endpoint: cap it per client before doing any work.
+  const limited = rateLimit(clientKey(req, 'contact'), 5, 10 * 60_000);
+  if (!limited.ok) {
+    return NextResponse.json(
+      { error: `Too many submissions. Try again in ${limited.retryAfterSeconds} seconds.` },
+      { status: 429, headers: rateLimitHeaders(limited) },
+    );
+  }
+
   let input: z.infer<typeof Body>;
   try {
     input = Body.parse(await req.json());
@@ -28,27 +50,21 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true });
   }
 
-  // Enquiries are stored against the demo project so they surface in the
-  // dashboard's lead list rather than vanishing into an inbox.
   try {
-    const project = await db.project.findFirst({ orderBy: { createdAt: 'asc' } });
-    if (project) {
-      await db.lead.create({
-        data: {
-          projectId: project.id,
-          source: 'direct',
-          engine: '',
-          landingUrl: input.website ?? '',
-          email: input.email,
-          name: input.name,
-          status: 'new',
-        },
-      });
-    }
+    await db.contactInquiry.create({
+      data: {
+        name: input.name,
+        email: input.email,
+        company: input.company ?? '',
+        website: input.website ?? '',
+        message: input.message,
+        channel: 'contact-form',
+      },
+    });
   } catch {
-    // A storage failure must not lose the enquiry from the user's point of
-    // view; the submission is still acknowledged and logged.
-    console.error('contact: failed to persist lead');
+    // A storage failure must not lose the enquiry from the sender's point of
+    // view; the submission is still acknowledged and the failure is logged.
+    console.error('contact: failed to persist inquiry');
   }
 
   return NextResponse.json({ ok: true });

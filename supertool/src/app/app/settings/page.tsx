@@ -31,8 +31,14 @@ export default async function SettingsPage() {
   ]);
 
   const [keywordCount, promptCount, articleCount] = counts;
-  const engineStatus = ENGINES.map((e) => ({ ...e, live: isEngineLive(e.id) }));
+  const engineStatus = ENGINES.map((e) => ({
+    ...e,
+    live: isEngineLive(e.id),
+    measurable: e.availability === 'available',
+    unavailableReason: 'unavailableReason' in e ? e.unavailableReason : '',
+  }));
   const liveCount = engineStatus.filter((e) => e.live).length;
+  const measurableCount = engineStatus.filter((e) => e.measurable).length;
 
   return (
     <>
@@ -81,7 +87,7 @@ export default async function SettingsPage() {
 
         <Panel
           title="Answer engine credentials"
-          sub={`${liveCount} of ${ENGINES.length} engines are running live. The rest use the built-in simulator.`}
+          sub={`${liveCount} of ${measurableCount} measurable surfaces are connected. An unconnected surface is skipped and recorded as unavailable — it is never simulated in a live workspace.`}
         >
           <ul className="divide-y divide-line">
             {engineStatus.map((e) => (
@@ -90,8 +96,14 @@ export default async function SettingsPage() {
                   <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: e.color }} aria-hidden="true" />
                   <div className="min-w-0">
                     <p className="text-[0.9rem] font-semibold text-ink">{e.name}</p>
-                    <p className="truncate text-[0.75rem] text-body">
-                      {e.vendor} · set <code className="rounded bg-surface-alt px-1.5 py-0.5">{e.envKey}</code> to go live
+                    <p className="text-[0.75rem] text-body">
+                      {e.measurable ? (
+                        <>
+                          {e.vendor} · set <code className="rounded bg-surface-alt px-1.5 py-0.5">{e.envKey}</code> to go live
+                        </>
+                      ) : (
+                        <>{e.vendor} · {e.unavailableReason}</>
+                      )}
                     </p>
                   </div>
                 </div>
@@ -103,7 +115,7 @@ export default async function SettingsPage() {
                 ) : (
                   <span className="flex shrink-0 items-center gap-1.5 text-[0.8rem] font-semibold text-body">
                     <XCircle className="h-4 w-4" aria-hidden="true" />
-                    Simulated
+                    {e.measurable ? 'Not connected' : 'Unavailable'}
                   </span>
                 )}
               </li>

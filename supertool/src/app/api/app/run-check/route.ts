@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { analyzeAnswer } from '@/lib/ai/analysis';
-import { ENGINES } from '@/lib/ai/engines';
-import { ask } from '@/lib/ai/providers';
+import { MEASURABLE_ENGINES } from '@/lib/ai/engines';
+import { ask, isObserved, type DataMode } from '@/lib/ai/providers';
 import { getSession } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { assertEntitled } from '@/lib/plan';
+import { summarizeProvenance } from '@/lib/provenance';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -41,13 +42,16 @@ export async function POST(req: Request) {
 
   const competitors = project.competitors.map((c) => ({ name: c.label, domain: c.domain }));
   const runAt = new Date();
+  // A demo project simulates and never calls a provider; a live project calls
+  // providers and never simulates. There is no path between the two.
+  const mode: DataMode = project.dataMode === 'demo' ? 'demo' : 'live';
 
   // Sequential per prompt, parallel across engines: bounded concurrency that
   // still finishes a 24-prompt set well inside the timeout.
   const created: Array<Record<string, unknown>> = [];
   for (const prompt of project.prompts) {
     const results = await Promise.all(
-      ENGINES.map(async (engine) => {
+      MEASURABLE_ENGINES.map(async (engine) => {
         const result = await ask({
           prompt: prompt.text,
           engine: engine.id,
@@ -55,7 +59,26 @@ export async function POST(req: Request) {
           domain: project.domain,
           competitors,
           seed: `${project.id}|${runAt.toISOString().slice(0, 10)}`,
+          mode,
         });
+
+        const base = {
+          promptId: prompt.id,
+          engine: engine.id as string,
+          status: result.status,
+          errorCategory: result.errorCategory,
+          errorDetail: result.error ?? '',
+          model: result.model,
+          latencyMs: result.latencyMs,
+          runAt,
+        };
+
+        // A failed or unavailable check produced no answer. Storing zeroed
+        // metrics for it would make "we never asked" indistinguishable from
+        // "the assistant did not name you", so the metrics stay at their
+        // defaults and the status is what the aggregation reads.
+        if (!isObserved(result.status)) return base;
+
         const a = analyzeAnswer({
           answer: result.answer,
           brand: project.name,
@@ -64,8 +87,7 @@ export async function POST(req: Request) {
           providedCitations: result.citations,
         });
         return {
-          promptId: prompt.id,
-          engine: engine.id,
+          ...base,
           brandMentioned: a.brandMentioned,
           brandCited: a.brandCited,
           mentionRank: a.mentionRank,
@@ -74,8 +96,6 @@ export async function POST(req: Request) {
           citedUrls: JSON.stringify(a.citedUrls),
           competitors: JSON.stringify(a.competitorsMentioned),
           excerpt: a.excerpt,
-          simulated: result.simulated,
-          runAt,
         };
       }),
     );
@@ -84,10 +104,15 @@ export async function POST(req: Request) {
 
   await db.aiCheck.createMany({ data: created as never });
 
+  const provenance = summarizeProvenance(created as Array<{ status: string }>);
+
   return NextResponse.json({
     ok: true,
     prompts: project.prompts.length,
     checks: created.length,
     runAt: runAt.toISOString(),
+    // The caller is told what the run actually achieved, not just that it
+    // finished. A run where every provider failed is not a successful run.
+    provenance,
   });
 }

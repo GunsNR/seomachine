@@ -53,6 +53,9 @@ model Organization {
   name      String
   /// Entitlement tier. Written by the Stripe webhook, never by the client.
   plan      String   @default("starter")
+  /// "live" for every real workspace; "demo" only for the seeded sample org.
+  /// Simulated observations may exist under "demo" and nowhere else.
+  dataMode  String   @default("live")
   createdAt DateTime @default(now())
 
   // --- Billing -------------------------------------------------------------
@@ -88,6 +91,9 @@ model Project {
   domain      String
   description String   @default("")
   country     String   @default("us")
+  /// Denormalised from the owning organization so every per-project query can
+  /// scope demo data out without a join. Always equal to org.dataMode.
+  dataMode    String   @default("live")
   createdAt   DateTime @default(now())
 
   org         Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
@@ -106,17 +112,25 @@ model Project {
 }
 
 model Keyword {
-  id         String   @id @default(cuid())
-  projectId  String
-  phrase     String
-  volume     Int      @default(0)
-  difficulty Int      @default(0)
-  cpc        Float    @default(0)
-  intent     String   @default("informational")
-  trend      String   @default("[]") // JSON array of 12 monthly volumes
-  /// "estimated" when modelled in-product, "measured" from a connected provider.
-  dataSource String   @default("estimated")
-  createdAt  DateTime @default(now())
+  id               String   @id @default(cuid())
+  projectId        String
+  phrase           String
+  volume           Int      @default(0)
+  difficulty       Int      @default(0)
+  cpc              Float    @default(0)
+  intent           String   @default("informational")
+  trend            String   @default("[]") // JSON array of 12 monthly volumes
+  /// Summary provenance: "measured" only when every field came from a
+  /// provider, otherwise "blended" or "estimated".
+  dataSource       String   @default("estimated")
+  /// Per-field provenance, because one row can mix measured and modelled
+  /// inputs. Each is "measured" | "estimated" | "blended".
+  volumeSource     String   @default("estimated")
+  difficultySource String   @default("estimated")
+  cpcSource        String   @default("estimated")
+  /// Provider that supplied the measured fields, e.g. "dataforseo".
+  dataProvider     String   @default("")
+  createdAt        DateTime @default(now())
 
   project   Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
   snapshots RankSnapshot[]
@@ -166,7 +180,25 @@ model AiCheck {
   citedUrls      String   @default("[]") // JSON array
   competitors    String   @default("[]") // JSON array of competitor domains named
   excerpt        String   @default("")
-  simulated      Boolean  @default(true)
+  /// live | simulated | failed | unavailable. Only live and simulated rows
+  /// carry an answer; failed and unavailable rows are missing observations and
+  /// must never be counted as "the brand was absent".
+  ///
+  /// Defaults to "unavailable" on purpose. Every writer sets this explicitly,
+  /// so the default only ever applies to a row that predates this column — and
+  /// a row whose provenance is unknown must not be counted as a live
+  /// measurement. Failing closed here means an un-backfilled legacy row is
+  /// excluded from the numbers rather than silently inflating them.
+  status         String   @default("unavailable")
+  /// Populated for failed/unavailable rows: auth | rate_limit | quota |
+  /// timeout | network | empty_response | http_error | no_credential |
+  /// surface_unavailable | unsupported_engine | unknown.
+  errorCategory  String   @default("")
+  /// Operator-facing failure detail. Never contains a credential.
+  errorDetail    String   @default("")
+  /// Exact model asked, when a call was made.
+  model          String   @default("")
+  latencyMs      Int      @default(0)
   runAt          DateTime @default(now())
 
   prompt AiPrompt @relation(fields: [promptId], references: [id], onDelete: Cascade)
@@ -320,4 +352,24 @@ model ApiKey {
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
+}
+
+/// A marketing-site enquiry.
+///
+/// Deliberately unrelated to Organization, Project or Lead: a public,
+/// unauthenticated form must never be able to write into a customer's
+/// workspace or inflate their lead numbers. Nothing in the app reads this
+/// model into a tenant view.
+model ContactInquiry {
+  id        String   @id @default(cuid())
+  name      String
+  email     String
+  company   String   @default("")
+  website   String   @default("")
+  message   String
+  /// Coarse source label for triage only, e.g. "contact-form".
+  channel   String   @default("contact-form")
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
 }

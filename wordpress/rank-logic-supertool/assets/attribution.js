@@ -2,8 +2,10 @@
  * Rank Logic SuperTool — AI referral attribution.
  *
  * Reports a page view only when it arrived from a known answer engine.
- * No cookies, no storage, no personal data, and nothing is sent for ordinary
- * visits. Runs once per page load, after paint.
+ * No cookies and no browser storage, and nothing is sent for ordinary visits.
+ * It does send the full document referrer, which can carry query parameters
+ * set by the referring site — so this is not claimed to be free of personal
+ * data. Runs once per page load, after paint.
  */
 (function () {
   'use strict';

@@ -3,7 +3,8 @@
 import Link from 'next/link';
 import { useState } from 'react';
 import { Check, Sparkles } from 'lucide-react';
-import { PRICING } from '@/content/site';
+import { PRICING, PRICING_DISCLOSURE } from '@/content/site';
+import { planFeatureLabel } from '@/lib/capabilities';
 import { cn } from '@/lib/utils';
 
 export function PricingTable({ compact = false }: { compact?: boolean }) {
@@ -87,10 +88,18 @@ export function PricingTable({ compact = false }: { compact?: boolean }) {
               </Link>
 
               <ul className="mt-8 space-y-3 border-t border-line pt-7">
-                {plan.features.map((f) => (
+                {plan.limits.map((f) => (
                   <li key={f} className="flex items-start gap-2.5 text-[0.9rem] text-body">
                     <Check className="mt-0.5 h-4 w-4 shrink-0 text-ok" aria-hidden="true" />
                     {f}
+                  </li>
+                ))}
+                {/* Labels come from the capability registry, which refuses to
+                    render anything that is not shipped and tested. */}
+                {plan.capabilities.map((id) => (
+                  <li key={id} className="flex items-start gap-2.5 text-[0.9rem] text-body">
+                    <Check className="mt-0.5 h-4 w-4 shrink-0 text-ok" aria-hidden="true" />
+                    {planFeatureLabel(id)}
                   </li>
                 ))}
               </ul>
@@ -99,9 +108,18 @@ export function PricingTable({ compact = false }: { compact?: boolean }) {
         })}
       </div>
 
-      <p className="mt-8 text-center text-[0.875rem] text-body">
-        All plans include every answer engine, the WordPress plugin and unlimited team seats on Growth and above.
-      </p>
+      <div className="mx-auto mt-10 max-w-3xl rounded-xl bg-surface-alt p-5 ring-1 ring-line">
+        <p className="text-[0.78rem] font-bold uppercase tracking-[0.1em] text-body/70">
+          What no plan includes
+        </p>
+        <ul className="mt-3 space-y-2">
+          {PRICING_DISCLOSURE.map((line) => (
+            <li key={line} className="text-[0.85rem] leading-relaxed text-body">
+              {line}
+            </li>
+          ))}
+        </ul>
+      </div>
     </div>
   );
 }

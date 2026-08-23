@@ -1,8 +1,11 @@
 import { ENGINES } from '@/lib/ai/engines';
 
 /**
- * A static, honest rendering of what the AI Visibility panel looks like in the
- * product. Numbers are illustrative sample data, labelled as such.
+ * A static rendering of the AI Visibility panel's layout.
+ *
+ * Every number here is invented sample data for a screenshot, and the figure
+ * says so on its face. It is not an average of anything, not a customer's
+ * result, and not a claim about how any assistant behaves.
  */
 const SAMPLE = [
   { engine: 'chatgpt', score: 74, mentions: 31, of: 42 },
@@ -10,15 +13,11 @@ const SAMPLE = [
   { engine: 'claude', score: 61, mentions: 26, of: 42 },
   { engine: 'gemini', score: 69, mentions: 29, of: 42 },
   { engine: 'grok', score: 52, mentions: 22, of: 42 },
-  { engine: 'google-ai-mode', score: 79, mentions: 33, of: 42 },
 ] as const;
 
 export function VisibilityPreview() {
   const blended = Math.round(
-    SAMPLE.reduce((sum, row) => {
-      const weight = ENGINES.find((e) => e.id === row.engine)?.audienceWeight ?? 0;
-      return sum + row.score * weight;
-    }, 0),
+    SAMPLE.reduce((sum, row) => sum + row.score, 0) / SAMPLE.length,
   );
 
   return (
@@ -104,7 +103,7 @@ export function VisibilityPreview() {
       </div>
 
       <figcaption className="sr-only">
-        Sample AI visibility dashboard showing per-engine mention rates across six answer engines.
+        Sample AI visibility dashboard showing per-engine mention rates. The figures are invented sample data.
       </figcaption>
     </figure>
   );

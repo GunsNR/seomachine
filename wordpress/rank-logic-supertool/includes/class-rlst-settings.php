@@ -210,7 +210,7 @@ class RLST_Settings {
 										name="<?php echo esc_attr( RLST_OPTION ); ?>[attribution]"
 										<?php checked( 1, $attribution ); ?>
 									/>
-									<?php esc_html_e( 'Track AI referrals (cookieless, no personal data)', 'rank-logic-supertool' ); ?>
+									<?php esc_html_e( 'Track AI referrals (cookieless; sends the full referrer URL)', 'rank-logic-supertool' ); ?>
 								</label>
 								<br />
 								<label>
@@ -267,18 +267,52 @@ class RLST_Settings {
 			</thead>
 			<tbody>
 				<?php foreach ( $data['engines'] as $engine ) : ?>
+					<?php $measured = isset( $engine['score'] ) && null !== $engine['score']; ?>
 					<tr>
 						<td><?php echo esc_html( $engine['name'] ); ?></td>
-						<td><?php echo esc_html( (string) $engine['score'] ); ?></td>
-						<td><?php echo esc_html( round( $engine['mentionRate'] * 100 ) . '%' ); ?></td>
-						<td><?php echo esc_html( round( $engine['citationRate'] * 100 ) . '%' ); ?></td>
+						<td>
+							<?php
+							echo $measured
+								? esc_html( (string) (int) $engine['score'] )
+								: esc_html__( 'not measured', 'rank-logic-supertool' );
+							?>
+						</td>
+						<td><?php echo $measured ? esc_html( round( (float) $engine['mentionRate'] * 100 ) . '%' ) : '—'; ?></td>
+						<td><?php echo $measured ? esc_html( round( (float) $engine['citationRate'] * 100 ) . '%' ) : '—'; ?></td>
 					</tr>
 				<?php endforeach; ?>
 			</tbody>
 		</table>
-		<?php if ( ! empty( $data['simulated'] ) ) : ?>
+		<?php
+		// Provenance comes straight from the API. A run with gaps, or one made
+		// of demo data, must say so here rather than being summarised away.
+		$provenance = isset( $data['provenance'] ) && is_array( $data['provenance'] ) ? $data['provenance'] : array();
+		$mode       = isset( $provenance['mode'] ) ? (string) $provenance['mode'] : '';
+		$observed   = isset( $provenance['observed'] ) ? (int) $provenance['observed'] : 0;
+		$total      = isset( $provenance['total'] ) ? (int) $provenance['total'] : 0;
+		?>
+		<?php if ( 'demo' === $mode ) : ?>
 			<p class="description">
-				<?php esc_html_e( 'These figures came from the SuperTool simulator because no answer-engine API keys are configured on that deployment.', 'rank-logic-supertool' ); ?>
+				<?php esc_html_e( 'This workspace is running in demo mode. Every figure above is generated sample data, not a measurement of any assistant.', 'rank-logic-supertool' ); ?>
+			</p>
+		<?php elseif ( 'mixed' === $mode ) : ?>
+			<p class="description">
+				<?php esc_html_e( 'This run mixes live and sample data, which should not happen. Treat these figures as unusable.', 'rank-logic-supertool' ); ?>
+			</p>
+		<?php elseif ( 'unavailable' === $mode || 0 === $observed ) : ?>
+			<p class="description">
+				<?php esc_html_e( 'Nothing was observed in the latest run. No answer engine returned a result, so there is nothing to report.', 'rank-logic-supertool' ); ?>
+			</p>
+		<?php elseif ( $total > 0 && $observed < $total ) : ?>
+			<p class="description">
+				<?php
+				printf(
+					/* translators: 1: observed checks, 2: total checks. */
+					esc_html__( 'Partial coverage: %1$d of %2$d checks returned an answer. Rates are calculated over what was observed.', 'rank-logic-supertool' ),
+					$observed,
+					$total
+				);
+				?>
 			</p>
 		<?php endif; ?>
 		<?php

@@ -18,17 +18,22 @@ export async function GET(req: Request) {
 
   return NextResponse.json({
     project: { name: project.name, domain: project.domain },
-    score: v.rollup.score,
+    // null rather than 0 when nothing was observed.
+    score: v.provenance.observed ? v.rollup.score : null,
     previousScore: v.previousScore,
     delta: v.rollup.score - v.previousScore,
     mentionRate: v.rollup.mentionRate,
     citationRate: v.rollup.citationRate,
     shareOfVoice: v.rollup.shareOfVoice,
     checks: v.rollup.checks,
-    simulated: v.simulated,
+    // Consumers embed these numbers on public pages, so they get the same
+    // provenance the dashboard shows. A widget rendering a demo score as if it
+    // were live would put a fabricated number on a customer's website.
+    provenance: v.provenance,
     engines: v.byEngine.map((e) => ({
       id: e.id, name: e.name, color: e.color,
       score: e.score, mentionRate: e.mentionRate, citationRate: e.citationRate,
+      status: e.status, observed: e.observed,
     })),
     trend: v.trend,
     updatedAt: new Date().toISOString(),

@@ -8,7 +8,7 @@ import { AiCheckForm } from './AiCheckForm';
 export const metadata = pageMetadata({
   title: 'Free AI Visibility Check',
   description:
-    'Find out how often ChatGPT, Perplexity, Claude, Gemini, Grok and Google AI Mode name your brand. Free, no account, results in about a minute.',
+    'Find out how often ChatGPT, Perplexity, Claude, Gemini and Grok name your brand. Free, no account, results in about a minute.',
   path: '/tools/ai-visibility-check',
   keywords: ['free AI visibility check', 'ChatGPT brand check', 'AI search visibility test'],
 });
@@ -16,11 +16,11 @@ export const metadata = pageMetadata({
 const FAQS = [
   {
     q: 'Is the free check really free?',
-    a: 'Yes. It runs four buyer questions across all six answer engines and returns your mention rate, citation rate, share of voice and the competitors named alongside you. No account, no card.',
+    a: 'Yes. It runs four buyer questions against every answer engine this deployment has a credential for, and returns your mention rate, citation rate, share of voice and the competitors named alongside you — with the coverage of the run stated alongside. No account, no card. If no engine is connected, the tool says so rather than inventing a score.',
   },
   {
     q: 'How is this different from asking ChatGPT myself?',
-    a: 'Model outputs vary between runs, so a single answer tells you very little. This check runs a structured prompt set across six engines and reports the inclusion rate, which is the number that actually trends.',
+    a: 'Model outputs vary between runs, so a single answer tells you very little. This check runs a structured prompt set across every connected engine and reports the inclusion rate, which is the number that actually trends.',
   },
   {
     q: 'What do I get on a paid plan?',
@@ -49,7 +49,7 @@ export default function AiVisibilityCheckPage() {
             Does AI recommend you, or your competitor?
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-[1.125rem] leading-[1.7] text-white/75 text-pretty">
-            Run four real buyer questions across all six answer engines and see who gets named.
+            Run four real buyer questions across every connected answer engine and see who gets named.
             No account, no card, about a minute.
           </p>
           <EngineRow dark className="mt-9" />
@@ -68,7 +68,7 @@ export default function AiVisibilityCheckPage() {
           <ol className="mt-10 space-y-6">
             {[
               ['We build a prompt set', 'Four questions covering discovery, comparison and brand intent — the kinds of things buyers actually ask an assistant before shortlisting a vendor.'],
-              ['Every engine is asked', 'ChatGPT, Perplexity, Claude, Gemini, Grok and Google AI Mode each answer the same questions, so differences between them are real signal.'],
+              ['Every connected engine is asked', 'ChatGPT, Perplexity, Claude, Gemini and Grok each answer the same questions, so differences between them are real signal. An engine we cannot reach is reported as a gap, not filled in.'],
               ['Answers are parsed', 'We detect whether your brand is named, whether your own domain is cited as a source, which competitors appear, and in what order.'],
               ['You get a score', 'Mention rate, citation rate and share of voice roll into one 0-100 visibility score you can track over time.'],
             ].map(([title, body], i) => (

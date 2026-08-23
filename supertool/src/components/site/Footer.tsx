@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Mail, MapPin, Phone } from 'lucide-react';
-import { FOOTER_COLUMNS, TRUST_BADGES } from '@/content/site';
+import { FOOTER_COLUMNS } from '@/content/site';
 import { brand } from '../../../brand.config';
 import { LogoMark } from './Logo';
 
@@ -18,7 +18,7 @@ export function Footer() {
               See which answers name you — and which name your competitor
             </h2>
             <p className="mt-3 text-[1.0625rem] leading-relaxed text-white/70">
-              Run your first full check across all six answer engines free. No card, no call, results in about a minute.
+              Run your first full check across every connected answer engine, free. No card, no call, results in about a minute.
             </p>
           </div>
           <div className="flex shrink-0 flex-col gap-3 sm:flex-row">
@@ -74,16 +74,6 @@ export function Footer() {
             </ul>
           </nav>
         ))}
-      </div>
-
-      <div className="border-t border-white/10">
-        <div className="container-x flex flex-wrap items-center justify-center gap-x-8 gap-y-3 py-5">
-          {TRUST_BADGES.map((b) => (
-            <span key={b} className="text-[0.7rem] font-bold uppercase tracking-[0.13em] text-white/45">
-              {b}
-            </span>
-          ))}
-        </div>
       </div>
 
       <div className="border-t border-white/10">

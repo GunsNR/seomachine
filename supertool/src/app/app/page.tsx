@@ -2,10 +2,10 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { ArrowRight, Sparkles } from 'lucide-react';
 import { BarList, LineChart } from '@/components/app/Chart';
-import { Badge, EmptyState, PageHeader, Panel, SimulationNotice, StatTile } from '@/components/app/ui';
+import { Badge, EmptyState, PageHeader, Panel, ProvenanceBanner, StatTile } from '@/components/app/ui';
 import { getSession, resolveProject } from '@/lib/auth';
 import { getOverview } from '@/lib/dashboard';
-import { compact, money, pct } from '@/lib/utils';
+import { compact, pct } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,8 +29,10 @@ export default async function OverviewPage() {
     );
   }
 
-  const { visibility, keywords, audit, content, leads, topOpportunities } = await getOverview(project.id);
+  const { visibility, keywords, audit, content, leads, topOpportunities } = await getOverview(project.id, { dataMode: project.dataMode });
   const scoreDelta = visibility.rollup.score - visibility.previousScore;
+  // A run in which nothing came back is not a run with a score of zero.
+  const anyObserved = visibility.provenance.observed > 0;
 
   return (
     <>
@@ -46,38 +48,49 @@ export default async function OverviewPage() {
       />
 
       <div className="mt-6 space-y-6">
-        <SimulationNotice show={visibility.simulated} />
+        <ProvenanceBanner provenance={visibility.provenance} />
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatTile
             label="AI visibility score"
-            value={visibility.rollup.score}
-            delta={scoreDelta}
-            sub={`${visibility.rollup.checks} checks in the latest run`}
-            tone={visibility.rollup.score >= 60 ? 'good' : visibility.rollup.score >= 35 ? 'warn' : 'bad'}
+            value={anyObserved ? visibility.rollup.score : '—'}
+            delta={anyObserved ? scoreDelta : undefined}
+            sub={
+              anyObserved
+                ? `${visibility.rollup.checks} observed of ${visibility.provenance.total} checks`
+                : 'Nothing observed in the latest run'
+            }
+            tone={
+              anyObserved
+                ? visibility.rollup.score >= 60 ? 'good' : visibility.rollup.score >= 35 ? 'warn' : 'bad'
+                : 'default'
+            }
           />
           <StatTile
             label="Citation rate"
-            value={pct(visibility.rollup.citationRate)}
-            sub="Answers citing one of your URLs"
+            value={anyObserved ? pct(visibility.rollup.citationRate) : '—'}
+            sub="Of answers actually observed"
           />
           <StatTile
             label="Keywords in top 10"
-            value={keywords.summary.top10}
-            sub={`of ${keywords.summary.total} tracked · ${pct(keywords.summary.shareOfVoice)} share of voice`}
+            value={keywords.summary.top10 ?? '—'}
+            sub={
+              keywords.summary.top10 === null
+                ? `${keywords.summary.total} tracked · positions need a SERP provider`
+                : `of ${keywords.summary.total} tracked · ${pct(keywords.summary.shareOfVoice ?? 0)} share of voice`
+            }
           />
           <StatTile
-            label="AI-attributed leads"
+            label="Referral events"
             value={leads.summary.ai}
-            sub={`${money(leads.summary.aiValue)} pipeline value`}
-            tone="good"
+            sub="Unverified assistant referrals — not confirmed leads"
           />
         </div>
 
         <div className="grid items-start gap-6 xl:grid-cols-[1.5fr_1fr]">
           <Panel
             title="AI visibility trend"
-            sub="Blended score across all six answer engines"
+            sub="Convenience index across the engines you have connected"
             action={<Link href="/app/ai-visibility" className="text-[0.82rem] font-bold text-brand hover:underline">Details</Link>}
           >
             <div className="p-5">
@@ -91,9 +104,11 @@ export default async function OverviewPage() {
                 <BarList
                   rows={visibility.byEngine.map((e) => ({
                     label: e.name,
-                    value: e.score,
+                    value: e.score ?? 0,
                     color: e.color,
-                    sub: `Named in ${pct(e.mentionRate)} · cited in ${pct(e.citationRate)}`,
+                    sub: e.observed
+                      ? `Named in ${pct(e.mentionRate ?? 0)} · cited in ${pct(e.citationRate ?? 0)}`
+                      : `Not measured — ${e.reason || e.status}`,
                   }))}
                   max={100}
                 />

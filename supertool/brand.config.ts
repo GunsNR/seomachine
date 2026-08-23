@@ -12,11 +12,24 @@ export const brand = {
   legalName: 'Rank Logic LLC',
   tagline: 'Get cited by AI. Get ranked by Google. Get the lead either way.',
   description:
-    'Rank Logic SuperTool is the AI search visibility platform that writes authoritative content tuned to AI citation patterns, publishes it to your site in one click, and tracks every citation, ranking and lead across ChatGPT, Perplexity, Claude, Gemini, Grok and Google AI Mode.',
+    'Rank Logic SuperTool measures how often ChatGPT, Perplexity, Claude, Gemini and Grok name or cite your brand, audits your site for the structure those answers reward, and publishes to WordPress. Every figure carries its source.',
+  /**
+   * Whether the legal identity below has been confirmed by the business owner.
+   *
+   * While this is false, the contact details are placeholders and must not be
+   * emitted as structured data or presented as a verified business address:
+   * publishing a fabricated postal address and phone number in schema.org
+   * markup misrepresents a real-world entity. Set to true only once an owner
+   * has confirmed each field, and have the legal pages reviewed by qualified
+   * counsel at the same time.
+   */
+  identityVerified: false,
   domain: 'ranklogicsupertool.com',
   url: process.env.NEXT_PUBLIC_SITE_URL || 'https://ranklogicsupertool.com',
   email: 'hello@ranklogicsupertool.com',
+  /** Placeholder until `identityVerified` is true. */
   phone: '+1 (201) 720-2141',
+  /** Placeholder until `identityVerified` is true. */
   address: {
     street: '45 Eisenhower Drive, Suite 520',
     city: 'Paramus',

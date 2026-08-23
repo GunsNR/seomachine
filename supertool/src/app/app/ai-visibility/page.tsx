@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { BarList, LineChart } from '@/components/app/Chart';
-import { Badge, EmptyState, PageHeader, Panel, SimulationNotice, StatTile } from '@/components/app/ui';
+import { Badge, EmptyState, PageHeader, Panel, ProvenanceBanner, StatTile } from '@/components/app/ui';
 import { RunCheckButton } from './RunCheckButton';
 import { getSession, resolveProject } from '@/lib/auth';
 import { getAiVisibility } from '@/lib/dashboard';
@@ -21,24 +21,37 @@ export default async function AiVisibilityPage() {
     getEntitlements(session.orgId),
   ]);
   const delta = v.rollup.score - v.previousScore;
+  // Nothing observed means nothing to report. Rendering 0% here would state
+  // that no assistant named the brand, which is not what happened.
+  const observed = v.provenance.observed > 0;
 
   return (
     <>
       <PageHeader
         title="AI Visibility"
-        sub={`How often the six answer engines name ${project.name} when buyers ask.`}
+        sub={`How often the connected answer engines name ${project.name} when buyers ask.`}
         action={<RunCheckButton projectId={project.id} />}
       />
 
       <div className="mt-6 space-y-6">
-        <SimulationNotice show={v.simulated} />
+        <ProvenanceBanner provenance={v.provenance} />
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <StatTile label="Visibility score" value={v.rollup.score} delta={delta} sub="Blended across all engines"
-            tone={v.rollup.score >= 60 ? 'good' : v.rollup.score >= 35 ? 'warn' : 'bad'} />
-          <StatTile label="Mention rate" value={pct(v.rollup.mentionRate)} sub="Answers naming your brand" />
-          <StatTile label="Citation rate" value={pct(v.rollup.citationRate)} sub="Answers citing your own URLs" />
-          <StatTile label="Avg mention rank" value={v.rollup.avgMentionRank || '—'} sub="Position among named vendors" />
+          <StatTile
+            label="Visibility score"
+            value={observed ? v.rollup.score : '—'}
+            delta={observed ? delta : undefined}
+            sub={observed ? `Convenience index over ${v.rollup.checks} observed checks` : 'Nothing observed yet'}
+            tone={observed ? (v.rollup.score >= 60 ? 'good' : v.rollup.score >= 35 ? 'warn' : 'bad') : 'default'}
+          />
+          <StatTile label="Mention rate" value={observed ? pct(v.rollup.mentionRate) : '—'} sub="Of answers actually observed" />
+          <StatTile label="Citation rate" value={observed ? pct(v.rollup.citationRate) : '—'} sub="Of answers actually observed" />
+          <StatTile
+            label="Coverage"
+            value={v.provenance.total ? pct(v.provenance.coverage) : '—'}
+            sub={`${v.provenance.observed} of ${v.provenance.total} checks returned an answer`}
+            tone={v.provenance.coverage === 1 ? 'good' : v.provenance.observed ? 'warn' : 'bad'}
+          />
         </div>
 
         <div className="grid items-start gap-6 xl:grid-cols-[1.5fr_1fr]">
@@ -54,8 +67,13 @@ export default async function AiVisibilityPage() {
                 <BarList
                   max={100}
                   rows={v.byEngine.map((e) => ({
-                    label: e.name, value: e.score, color: e.color,
-                    sub: `${e.checks} checks · named ${pct(e.mentionRate)} · cited ${pct(e.citationRate)}`,
+                    label: e.name,
+                    value: e.score ?? 0,
+                    color: e.color,
+                    sub:
+                      e.observed
+                        ? `${e.observed}/${e.checks} observed · named ${pct(e.mentionRate ?? 0)} · cited ${pct(e.citationRate ?? 0)}`
+                        : `Not measured — ${e.reason || e.status}`,
                   }))}
                 />
               ) : (
@@ -83,7 +101,7 @@ export default async function AiVisibilityPage() {
           remaining={entitlements.remaining.prompts}
         />
 
-        <Panel title="Prompt performance" sub="Sorted by mention rate, weakest first — these are your content gaps">
+        <Panel title="Prompt performance" sub="Sorted by mention rate, weakest first. Prompts with no observation are gaps in measurement, not in visibility.">
           {v.promptRows.length ? (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[46rem]">
@@ -92,7 +110,7 @@ export default async function AiVisibilityPage() {
                   <tr className="border-b border-line">
                     <th scope="col" className="table-head px-5 py-3 text-left">Prompt</th>
                     <th scope="col" className="table-head px-5 py-3 text-left">Cluster</th>
-                    <th scope="col" className="table-head px-5 py-3 text-right">Engines</th>
+                    <th scope="col" className="table-head px-5 py-3 text-right">Observed</th>
                     <th scope="col" className="table-head px-5 py-3 text-right">Mentioned</th>
                     <th scope="col" className="table-head px-5 py-3 text-right">Cited</th>
                     <th scope="col" className="px-5 py-3"><span className="sr-only">Actions</span></th>
@@ -103,13 +121,21 @@ export default async function AiVisibilityPage() {
                     <tr key={p.id} className="hover:bg-surface-alt/60">
                       <td className="max-w-md px-5 py-3.5 text-[0.875rem] text-ink">{p.text}</td>
                       <td className="px-5 py-3.5"><Badge>{p.cluster}</Badge></td>
-                      <td className="px-5 py-3.5 text-right text-[0.85rem] tabular-nums text-body">{p.engines}</td>
-                      <td className="px-5 py-3.5 text-right">
-                        <span className={`text-[0.85rem] font-bold tabular-nums ${p.mentionRate === 0 ? 'text-bad' : p.mentionRate >= 0.5 ? 'text-ok' : 'text-warn'}`}>
-                          {pct(p.mentionRate)}
-                        </span>
+                      <td className="px-5 py-3.5 text-right text-[0.85rem] tabular-nums text-body">
+                        {p.observed}/{p.engines}
                       </td>
-                      <td className="px-5 py-3.5 text-right text-[0.85rem] tabular-nums text-body">{pct(p.citationRate)}</td>
+                      <td className="px-5 py-3.5 text-right">
+                        {p.mentionRate === null ? (
+                          <span className="text-[0.8rem] text-body">Not measured</span>
+                        ) : (
+                          <span className={`text-[0.85rem] font-bold tabular-nums ${p.mentionRate === 0 ? 'text-bad' : p.mentionRate >= 0.5 ? 'text-ok' : 'text-warn'}`}>
+                            {pct(p.mentionRate)}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-5 py-3.5 text-right text-[0.85rem] tabular-nums text-body">
+                        {p.citationRate === null ? '—' : pct(p.citationRate)}
+                      </td>
                       <td className="px-5 py-3.5 text-right">
                         <DeletePrompt id={p.id} text={p.text} />
                       </td>

@@ -105,7 +105,7 @@
               "widgetType": "icon-box",
               "settings": {
                 "title_text": "01 · Connect and baseline",
-                "description_text": "We crawl the site, pull your keyword set, generate a prompt set and run every engine once to establish a baseline.",
+                "description_text": "We crawl the site, build your keyword set, generate a prompt set and run every connected engine once to establish a dated baseline.",
                 "selected_icon": {
                   "value": "fas fa-bolt",
                   "library": "fa-solid"
@@ -261,7 +261,7 @@
               "widgetType": "icon-box",
               "settings": {
                 "title_text": "04 · Measure the revenue",
-                "description_text": "Leads arriving from an assistant are tagged at the source, so AI pipeline reports like any other channel.",
+                "description_text": "Re-run the same prompt set after publishing, so the before and after are measured identically.",
                 "selected_icon": {
                   "value": "fas fa-bolt",
                   "library": "fa-solid"

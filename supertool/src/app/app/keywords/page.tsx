@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { Sparkline } from '@/components/app/Chart';
-import { Badge, EmptyState, PageHeader, Panel, StatTile } from '@/components/app/ui';
+import { Badge, CapabilityUnavailable, DemoDataNotice, EmptyState, PageHeader, Panel, SourceTag, StatTile } from '@/components/app/ui';
 import { ExportButton } from '@/components/app/ExportButton';
 import { getSession, resolveProject } from '@/lib/auth';
 import { getKeywords } from '@/lib/dashboard';
@@ -22,29 +22,53 @@ export default async function KeywordsPage() {
   const project = await resolveProject(session.orgId);
   if (!project) redirect('/app');
 
-  const [{ rows, summary }, entitlements] = await Promise.all([
-    getKeywords(project.id),
+  const [{ rows, summary, rankSource, keywordSource }, entitlements] = await Promise.all([
+    getKeywords(project.id, { dataMode: project.dataMode }),
     getEntitlements(session.orgId),
   ]);
 
   const estimatedCount = rows.filter((r) => r.dataSource !== 'measured').length;
+  const ranksShown = rankSource.shown;
 
   return (
     <>
       <PageHeader
         title="Keywords"
-        sub="Every tracked term with its difficulty, forecast traffic and eight-factor opportunity score."
+        sub="Every tracked term with its difficulty and eight-factor opportunity score. Each figure is labelled with where it came from."
         action={<ExportButton resource="keywords" />}
       />
 
       <div className="mt-6 space-y-6">
+        {rankSource.demo && <DemoDataNotice what="Every keyword, position and forecast below" />}
+
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-          <StatTile label="Tracked" value={summary.total} sub={`${summary.top100} ranking in top 100`} />
-          <StatTile label="Top 3" value={summary.top3} sub={`${summary.top10} in the top 10`} tone="good" />
-          <StatTile label="Est. monthly traffic" value={summary.traffic} sub="AI-Overview-aware forecast" />
-          <StatTile label="Traffic value" value={money(summary.value)} sub="Equivalent paid-search cost" />
-          <StatTile label="Quick wins" value={summary.quickWins} sub="Positions 4-20, low difficulty" tone="good" />
+          <StatTile label="Tracked" value={summary.total} sub={ranksShown ? `${summary.top100} ranking in top 100` : 'No position data'} />
+          <StatTile
+            label="Top 3"
+            value={summary.top3 ?? '—'}
+            sub={ranksShown ? `${summary.top10} in the top 10` : 'Needs a SERP provider'}
+            tone={ranksShown ? 'good' : 'default'}
+          />
+          <StatTile
+            label="Est. monthly traffic"
+            value={summary.traffic ?? '—'}
+            sub={ranksShown ? 'Modelled from position and volume — an estimate, not measured traffic' : 'Needs a position to forecast from'}
+          />
+          <StatTile
+            label="Traffic value"
+            value={summary.value === null ? '—' : money(summary.value)}
+            sub={ranksShown ? 'Estimated equivalent paid-search cost' : 'Needs a position to forecast from'}
+          />
+          <StatTile label="Quick wins" value={summary.quickWins} sub="Low difficulty, high opportunity" tone="good" />
         </div>
+
+        {!ranksShown && (
+          <CapabilityUnavailable
+            title="Search positions are not tracked"
+            status="unavailable"
+            reason={rankSource.reason}
+          />
+        )}
 
         {estimatedCount > 0 && (
           <p className="rounded-xl bg-warn/10 p-4 text-[0.84rem] leading-relaxed text-ink ring-1 ring-warn/25">
@@ -54,8 +78,10 @@ export default async function KeywordsPage() {
                 : `${estimatedCount} of ${rows.length} keywords use modelled metrics.`}
             </strong>{' '}
             {providerConfigured()
-              ? 'Your data provider had no figures for these terms, so the in-product model filled the gap. Rows marked "est." are modelled.'
-              : 'No keyword data provider is connected, so these come from the in-product model — derived from phrase length and commercial intent. They are internally consistent and fine for ranking work against each other, but they are not search-volume measurements. Connect DataForSEO to replace them.'}
+              ? 'Your data provider had no figures for these terms, so the in-product model filled the gap. Every column below is tagged with its own source.'
+              : keywordSource.reason +
+                ' The model derives figures from phrase length and commercial intent. They are internally consistent and fine for ranking terms against each other, but they are not search-volume measurements. Connect DataForSEO to replace them.'}
+            {' '}Difficulty is never fully measured: no provider publishes organic difficulty, so where a provider is connected it is blended with the in-product model and tagged as part-modelled.
           </p>
         )}
 
@@ -63,7 +89,11 @@ export default async function KeywordsPage() {
 
         <Panel
           title="All keywords"
-          sub={`Sorted by opportunity score · share of voice ${pct(summary.shareOfVoice)}`}
+          sub={
+            summary.shareOfVoice === null
+              ? 'Sorted by opportunity score'
+              : `Sorted by opportunity score · share of voice ${pct(summary.shareOfVoice)}`
+          }
         >
           {rows.length ? (
             <div className="overflow-x-auto">
@@ -78,8 +108,8 @@ export default async function KeywordsPage() {
                     <th scope="col" className="table-head px-5 py-3 text-left">Trend</th>
                     <th scope="col" className="table-head px-5 py-3 text-right">Volume</th>
                     <th scope="col" className="table-head px-5 py-3 text-right">KD</th>
-                    <th scope="col" className="table-head px-5 py-3 text-right">Traffic</th>
-                    <th scope="col" className="table-head px-5 py-3 text-right">Value</th>
+                    <th scope="col" className="table-head px-5 py-3 text-right">Est. traffic</th>
+                    <th scope="col" className="table-head px-5 py-3 text-right">Est. value</th>
                     <th scope="col" className="table-head px-5 py-3 text-right">Opportunity</th>
                     <th scope="col" className="px-5 py-3"><span className="sr-only">Actions</span></th>
                   </tr>
@@ -97,7 +127,13 @@ export default async function KeywordsPage() {
                         </Badge>
                       </td>
                       <td className="px-5 py-3 text-right text-[0.875rem] font-bold tabular-nums text-ink">
-                        {k.position || '—'}
+                        {k.position === null ? (
+                          <span className="text-[0.75rem] font-normal text-body/60" title={rankSource.reason}>
+                            not tracked
+                          </span>
+                        ) : (
+                          k.position || '—'
+                        )}
                       </td>
                       <td className="px-5 py-3 text-right text-[0.8rem] tabular-nums">
                         {k.delta === 0 ? (
@@ -113,18 +149,18 @@ export default async function KeywordsPage() {
                       </td>
                       <td className="px-5 py-3 text-right text-[0.85rem] tabular-nums text-body">
                         {compact(k.volume)}
-                        {k.dataSource !== 'measured' && (
-                          <span
-                            className="ml-1 text-[0.65rem] font-bold uppercase text-warn"
-                            title="Modelled, not measured"
-                          >
-                            est.
-                          </span>
-                        )}
+                        <SourceTag source={k.sources.volume} />
                       </td>
-                      <td className="px-5 py-3 text-right text-[0.85rem] tabular-nums text-body">{k.difficulty}</td>
-                      <td className="px-5 py-3 text-right text-[0.85rem] tabular-nums text-body">{compact(k.traffic)}</td>
-                      <td className="px-5 py-3 text-right text-[0.85rem] tabular-nums text-body">{money(k.value)}</td>
+                      <td className="px-5 py-3 text-right text-[0.85rem] tabular-nums text-body">
+                        {k.difficulty}
+                        <SourceTag source={k.sources.difficulty} />
+                      </td>
+                      <td className="px-5 py-3 text-right text-[0.85rem] tabular-nums text-body">
+                        {k.traffic === null ? '—' : `~${compact(k.traffic)}`}
+                      </td>
+                      <td className="px-5 py-3 text-right text-[0.85rem] tabular-nums text-body">
+                        {k.value === null ? '—' : `~${money(k.value)}`}
+                      </td>
                       <td className="px-5 py-3 text-right">
                         <span className="font-heading text-[1rem] font-extrabold tabular-nums text-brand">
                           {k.opportunity}
@@ -142,7 +178,7 @@ export default async function KeywordsPage() {
               </table>
             </div>
           ) : (
-            <EmptyState title="No keywords yet" body="Import a keyword list or connect Search Console to populate this view." cta={{ label: 'Settings', href: '/app/settings' }} />
+            <EmptyState title="No keywords yet" body="Add a keyword list to populate this view." cta={{ label: 'Settings', href: '/app/settings' }} />
           )}
         </Panel>
       </div>

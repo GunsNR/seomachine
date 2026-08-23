@@ -3,8 +3,10 @@
  * AI referral attribution.
  *
  * Detects visits arriving from an answer engine and reports them to SuperTool.
- * Sets no cookies and collects no personal data: only the referrer signature,
- * the landing path, and nothing else.
+ * Sets no cookies and uses no browser storage. It does report the full
+ * document referrer, which can carry query parameters set by the referring
+ * site, so "no personal data" is not a claim this code can make — review it
+ * against your own privacy policy before enabling it.
  *
  * @package RankLogicSuperTool
  */

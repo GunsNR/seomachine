@@ -1,12 +1,18 @@
 /**
- * Seeds a complete demo workspace so the dashboard is meaningful on first run.
+ * Seeds the demo workspace.
  *
- * Everything here is generated deterministically from a fixed seed, so repeated
- * runs produce identical data and screenshots/tests stay stable.
+ * Everything created here is marked `dataMode: 'demo'` at the organization and
+ * project level, and every answer-engine row it writes carries
+ * `status: 'simulated'`. That is the only place in the product where simulated
+ * data is allowed to exist: a live workspace never receives a row from this
+ * script, and the demo workspace never calls a provider.
+ *
+ * Generated deterministically from a fixed seed, so repeated runs produce
+ * identical data and screenshots stay stable.
  */
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
-import { ENGINES } from '../src/lib/ai/engines';
+import { MEASURABLE_ENGINES } from '../src/lib/ai/engines';
 import { generatePromptSet } from '../src/lib/ai/prompts';
 import { analyzeAnswer } from '../src/lib/ai/analysis';
 import { ask } from '../src/lib/ai/providers';
@@ -58,7 +64,7 @@ async function main() {
   }
 
   const org = await db.organization.create({
-    data: { name: 'Rank Logic Demo Workspace', plan: 'growth' },
+    data: { name: 'Rank Logic Demo Workspace', plan: 'growth', dataMode: 'demo' },
   });
 
   const user = await db.user.create({
@@ -78,6 +84,7 @@ async function main() {
       domain: 'ranklogicsupertool.com',
       description: 'AI search visibility and SEO platform',
       country: 'us',
+      dataMode: 'demo',
       competitors: {
         create: [
           { domain: 'semrush.com', label: 'Semrush' },
@@ -124,6 +131,12 @@ async function main() {
         cpc: Math.round(r() * 2400) / 100,
         intent: classifyIntent(phrase),
         trend: JSON.stringify(trend),
+        // Sample figures, not provider data. Labelled field by field so the
+        // demo workspace shows the same provenance chrome a real one would.
+        dataSource: 'estimated',
+        volumeSource: 'estimated',
+        difficultySource: 'estimated',
+        cpcSource: 'estimated',
       },
     });
 
@@ -165,7 +178,7 @@ async function main() {
     for (let week = 3; week >= 0; week--) {
       const runAt = new Date(Date.now() - week * 7 * 864e5);
       const rows = [];
-      for (const engine of ENGINES) {
+      for (const engine of MEASURABLE_ENGINES) {
         const result = await ask({
           prompt: g.text,
           engine: engine.id,
@@ -173,6 +186,7 @@ async function main() {
           domain: project.domain,
           competitors,
           seed: `${project.id}|w${week}`,
+          mode: 'demo',
         });
         const a = analyzeAnswer({
           answer: result.answer,
@@ -192,7 +206,10 @@ async function main() {
           citedUrls: JSON.stringify(a.citedUrls),
           competitors: JSON.stringify(a.competitorsMentioned),
           excerpt: a.excerpt,
-          simulated: result.simulated,
+          status: result.status,
+          errorCategory: result.errorCategory,
+          model: result.model,
+          latencyMs: result.latencyMs,
           runAt,
         });
       }
@@ -264,7 +281,7 @@ async function main() {
 
   /* ---------------- Leads ---------------- */
   const lr = rng('leads');
-  const engines = ENGINES.map((e) => e.id);
+  const engines = MEASURABLE_ENGINES.map((e) => e.id);
   const leads = Array.from({ length: 34 }, (_, i) => {
     const fromAi = lr() < 0.58;
     return {

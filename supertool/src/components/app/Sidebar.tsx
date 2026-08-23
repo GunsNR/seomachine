@@ -19,7 +19,7 @@ const NAV = [
   { href: '/app/backlinks', label: 'Backlinks', icon: Link2 },
   { href: '/app/audit', label: 'Site Audit', icon: ShieldCheck },
   { href: '/app/content', label: 'Content', icon: FileText },
-  { href: '/app/leads', label: 'Leads', icon: Users },
+  { href: '/app/leads', label: 'Referrals', icon: Users },
   { href: '/app/settings', label: 'Settings', icon: Plug },
   { href: '/app/account', label: 'Account', icon: UserCircle },
   { href: '/app/billing', label: 'Billing', icon: CreditCard },

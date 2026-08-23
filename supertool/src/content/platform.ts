@@ -29,10 +29,10 @@ export const PLATFORM_PAGES: FeaturePageData[] = [
     title: 'AI Visibility Tracking',
     metaTitle: 'AI Visibility Tracking Across ChatGPT, Perplexity & Gemini',
     metaDescription:
-      'Measure how often ChatGPT, Perplexity, Claude, Gemini, Grok and Google AI Mode name your brand. Mention rate, citation rate, share of voice and competitor benchmarks, tracked daily.',
+      'Measure how often ChatGPT, Perplexity, Claude, Gemini and Grok name your brand. Mention rate, citation rate, share of voice and competitor benchmarks, on a schedule you set.',
     keywords: ['AI visibility tracking', 'ChatGPT brand monitoring', 'AI search rank tracker', 'LLM visibility'],
     lead:
-      'A fixed prompt set, run across six answer engines on a schedule, turning "are we showing up in AI?" from an argument into a number you can move.',
+      'A fixed prompt set, run on a schedule against the answer engines you have connected, turning "are we showing up in AI?" from an argument into a number you can move.',
     problem: {
       heading: 'You cannot optimise what you cannot see',
       body: [
@@ -47,7 +47,7 @@ export const PLATFORM_PAGES: FeaturePageData[] = [
       },
       {
         title: 'Every engine, every run',
-        body: 'ChatGPT, Perplexity, Claude, Gemini, Grok and Google AI Mode are checked on the same schedule with the same prompts, so per-engine differences are real signal rather than timing noise.',
+        body: 'ChatGPT, Perplexity, Claude, Gemini and Grok are asked the same prompts on the same schedule, so per-engine differences are signal rather than timing noise. A surface you have not connected is recorded as unavailable rather than guessed at, and Google AI Mode is not offered at all — it has no compliant API, and answering it with a different vendor\'s model would make every number derived from it false.',
       },
       {
         title: 'Four measures, not one vanity number',
@@ -62,8 +62,8 @@ export const PLATFORM_PAGES: FeaturePageData[] = [
         body: 'Every vendor an assistant names alongside you is recorded. You see which competitor is winning which question, and how that changes week to week.',
       },
       {
-        title: 'Bring your own keys, optionally',
-        body: 'Runs are included on every plan. On Scale you can supply your own OpenAI, Anthropic, Perplexity, Google or xAI credentials for cost control or data residency, and SuperTool calls the engines under your account.',
+        title: 'Every result carries its provenance',
+        body: 'Each stored check records whether it came from a live provider call, failed, or was never attempted because the surface is not connected. A run with gaps is reported as a run with gaps — coverage is shown next to every rate, and a failure is never quietly counted as "your brand was absent".',
       },
     ],
     outcomes: [
@@ -83,7 +83,7 @@ export const PLATFORM_PAGES: FeaturePageData[] = [
       },
       {
         q: 'Does this use my own ChatGPT account?',
-        a: 'No. Checks run through provider APIs on infrastructure we operate, so nothing touches your personal accounts or chat history. On the Scale plan you can optionally supply your own API keys instead.',
+        a: 'No. Checks run through the vendors\' developer APIs, so nothing touches your personal accounts or chat history. That also means a developer API is what is being measured — it is a close proxy for the consumer assistant, not the identical surface, and it carries no personalisation or chat history.',
       },
     ],
     related: ['citations', 'prompt-sets', 'content'],
@@ -147,7 +147,7 @@ export const PLATFORM_PAGES: FeaturePageData[] = [
         a: 'Yes. Every source URL in every answer is stored, so competitor citations are visible at page level. This is usually the fastest route to a brief that actually wins the question back.',
       },
     ],
-    related: ['ai-visibility', 'content', 'attribution'],
+    related: ['ai-visibility', 'content', 'wordpress'],
   },
   {
     slug: 'prompt-sets',
@@ -201,63 +201,6 @@ export const PLATFORM_PAGES: FeaturePageData[] = [
       },
     ],
     related: ['ai-visibility', 'citations', 'keywords'],
-  },
-  {
-    slug: 'rank-tracking',
-    eyebrow: 'Classic SEO',
-    title: 'Rank Tracking',
-    metaTitle: 'AI-Overview-Aware Rank Tracking & Traffic Forecasting',
-    metaDescription:
-      'Daily keyword positions with click forecasts that account for AI Overviews, featured snippets and ad blocks — so your traffic estimate matches reality.',
-    keywords: ['rank tracking', 'AI Overview CTR', 'keyword position tracking', 'SERP tracking'],
-    lead:
-      'Position tracking that admits the SERP changed. A rank of three means something very different when an AI Overview sits above it, and your forecast should say so.',
-    problem: {
-      heading: 'Your rank held. Your clicks did not.',
-      body: [
-        'Classic trackers report a position and multiply it by a click-through curve built before AI Overviews existed. When an AI Overview appears above the organic results, real click-through at position one can fall by a third — and every downstream traffic forecast quietly becomes fiction.',
-        'The number that matters is not where you sit in a list. It is how many people still click.',
-      ],
-    },
-    capabilities: [
-      {
-        title: 'SERP-feature-aware CTR modelling',
-        body: 'The click curve is adjusted for AI Overview presence, featured snippets and the number of ads above the fold, so the forecast reflects the SERP as it actually renders.',
-      },
-      {
-        title: 'Traffic and value forecasting',
-        body: 'Every keyword carries an estimated monthly click figure and the equivalent paid-search cost of that traffic, so SEO work can be argued in the same currency as an ad budget.',
-      },
-      {
-        title: 'Share of voice by cluster',
-        body: 'Volume-weighted share of voice across a keyword group, so a win on one high-volume term is not hidden by noise on twenty small ones.',
-      },
-      {
-        title: 'Eight-factor opportunity scoring',
-        body: 'Volume, current position, intent, competition, cluster size, CTR headroom, freshness and trend combine into a single ranked list of what to work on next — with the reasoning shown, not hidden.',
-      },
-      {
-        title: 'Quick-win detection',
-        body: 'Keywords sitting between positions four and twenty on low-difficulty SERPs are surfaced automatically. These are the ones that move without new links.',
-      },
-    ],
-    outcomes: [
-      'Traffic forecasts that survive an AI Overview rollout',
-      'A ranked, reasoned list of what to fix first',
-      'Quick wins separated from long campaigns',
-      'SEO value stated in dollars, not positions',
-    ],
-    faqs: [
-      {
-        q: 'How is keyword difficulty calculated?',
-        a: 'Primarily from the link authority of the pages currently ranking — referring domains on a logarithmic scale, blended with domain authority — then adjusted for the content depth of the incumbents and for SERP crowding. AI Overview and featured-snippet presence add a small penalty, because both reduce the clicks available to win.',
-      },
-      {
-        q: 'Can I track locations and devices?',
-        a: 'Yes. Each project sets a country and you can add city-level locations. Desktop and mobile are tracked separately, since AI Overview presence often differs between them.',
-      },
-    ],
-    related: ['keywords', 'site-audit', 'ai-visibility'],
   },
   {
     slug: 'site-audit',
@@ -314,7 +257,7 @@ export const PLATFORM_PAGES: FeaturePageData[] = [
         a: 'No. Crawls use limited concurrency and identify themselves with a named user agent, so you can rate-limit or exclude the crawler in robots.txt if you prefer.',
       },
     ],
-    related: ['rank-tracking', 'content', 'wordpress'],
+    related: ['keywords', 'content', 'wordpress'],
   },
   {
     slug: 'keywords',
@@ -364,14 +307,14 @@ export const PLATFORM_PAGES: FeaturePageData[] = [
     faqs: [
       {
         q: 'Where does the volume data come from?',
-        a: 'SuperTool reads from your connected Google Search Console property for terms you already rank for, and from third-party keyword providers for terms you do not. Both sources are labelled in the interface so you always know which you are looking at.',
+        a: 'Volume and CPC come from DataForSEO when you connect it. Difficulty is always partly modelled, because no provider publishes organic difficulty directly — paid competition is a different thing and is not presented as if it were the same. Anything not measured is labelled as an estimate, field by field. Search Console is not connected today.',
       },
       {
         q: 'Can I export the data?',
         a: 'Yes, as CSV or JSON, at any time, on any plan — including after cancellation.',
       },
     ],
-    related: ['rank-tracking', 'content', 'prompt-sets'],
+    related: ['site-audit', 'content', 'prompt-sets'],
   },
   {
     slug: 'content',
@@ -421,11 +364,11 @@ export const PLATFORM_PAGES: FeaturePageData[] = [
     faqs: [
       {
         q: 'Does it write the article for me?',
-        a: 'It produces the brief, the outline, the questions to answer and the sourcing targets, and it scores and critiques whatever draft you put in — whether a human or a model wrote it. The judgement about what is true and worth saying stays with you.',
+        a: 'No. SuperTool does not write article copy at all. It produces the brief, the outline, the questions to answer and the sourcing targets, and it scores and critiques whatever draft you put in — whether a human or a model wrote it.',
       },
       {
         q: 'What is a good GEO score?',
-        a: 'Above 70 is competitive; above 85 puts you in the band where citation rate reliably improves. More useful than the number is the signal breakdown, which tells you which two or three changes will move it most.',
+        a: 'There is no validated threshold. The score is a heuristic over nine structural signals with hand-chosen weights, and it has never been tested against whether a page later earned a citation. Treat the signal breakdown as a checklist of concrete fixes, not the number as a forecast.',
       },
     ],
     related: ['citations', 'wordpress', 'keywords'],
@@ -493,104 +436,11 @@ export const PLATFORM_PAGES: FeaturePageData[] = [
         a: 'Everything except one-click publishing works regardless of platform — tracking, auditing, scoring and attribution only need a URL. A REST API is available on Scale for publishing into any other CMS.',
       },
     ],
-    related: ['content', 'attribution', 'site-audit'],
-  },
-  {
-    slug: 'attribution',
-    eyebrow: 'Content & Revenue',
-    title: 'Lead Attribution',
-    metaTitle: 'AI Lead Attribution — Tie ChatGPT Referrals to Pipeline',
-    metaDescription:
-      'Identify visitors and leads arriving from answer engines, tie them to the page that earned the citation, and report AI-sourced pipeline like any other channel.',
-    keywords: ['AI traffic attribution', 'ChatGPT referral tracking', 'AI lead source', 'GEO ROI'],
-    lead:
-      'The channel is only real to your CFO once it has a revenue number. Attribution closes the loop from citation to page to lead.',
-    problem: {
-      heading: 'AI referrals arrive looking like direct traffic',
-      body: [
-        'Assistant traffic frequently lands with a stripped or unhelpful referrer, so a large share of it is bucketed as direct in standard analytics. The result is a channel that quietly produces qualified visitors and gets credit for none of them.',
-        'Meanwhile the content that earned those visits looks like it underperformed, and gets deprioritised.',
-      ],
-    },
-    capabilities: [
-      {
-        title: 'Answer-engine referrer detection',
-        body: 'Known assistant referrers and their URL signatures are matched at page load and tagged at source, before analytics collapses them into direct.',
-      },
-      {
-        title: 'Citation-to-visit linkage',
-        body: 'Because SuperTool already knows which of your URLs were cited and when, visits to those URLs from assistant referrers can be linked back to the specific citation that produced them.',
-      },
-      {
-        title: 'Cookieless by default',
-        body: 'The snippet sets no cookies and stores no personal data by default, so it deploys without a consent-banner change in most jurisdictions.',
-      },
-      {
-        title: 'CRM-ready lead tagging',
-        body: 'Captured leads carry source, engine and landing URL as plain fields, ready to map into HubSpot, Salesforce or a webhook.',
-      },
-      {
-        title: 'Revenue reporting',
-        body: 'Assign a value to each lead status and report AI-sourced pipeline next to organic, so the two channels are argued on the same terms.',
-      },
-    ],
-    outcomes: [
-      'AI traffic separated from direct',
-      'Pipeline attributed to the page that earned it',
-      'A defensible ROI number for the channel',
-      'No consent-banner rework required',
-    ],
-    faqs: [
-      {
-        q: 'Does this replace Google Analytics?',
-        a: 'No. It runs alongside GA4 and fills the specific gap where assistant referrals collapse into direct traffic. You can push the tagged source into GA4 as a custom dimension if you want it in your existing reports.',
-      },
-      {
-        q: 'Is it GDPR-compliant?',
-        a: 'The default configuration sets no cookies and collects no personal data, which places it outside consent requirements in most jurisdictions. If you enable lead capture, that form is yours and your usual privacy notice applies. This is not legal advice — check with your own counsel.',
-      },
-    ],
-    related: ['citations', 'wordpress', 'ai-visibility'],
+    related: ['content', 'citations', 'site-audit'],
   },
 ];
 
 export const SOLUTION_PAGES: FeaturePageData[] = [
-  {
-    slug: 'agencies',
-    eyebrow: 'For agencies',
-    title: 'SuperTool for Agencies',
-    metaTitle: 'AI Search Visibility Platform for SEO Agencies',
-    metaDescription:
-      'Unlimited client projects, white-label reporting, multi-seat workspaces and per-client API keys. Show clients the exact AI answers naming their competitors.',
-    keywords: ['SEO agency software', 'white label SEO reporting', 'agency AI visibility tool'],
-    lead:
-      'A new deliverable your competitors cannot produce yet, on infrastructure built for twenty client sites rather than one.',
-    problem: {
-      heading: 'Clients are asking about AI search. Most agencies are improvising.',
-      body: [
-        'The question arrives in every QBR now, and the honest answer — "we are not measuring that" — is an uncomfortable place to be when the client has already read three articles about it.',
-        'The agencies winning those conversations are the ones who can put a dated, evidenced answer on the screen.',
-      ],
-    },
-    capabilities: [
-      { title: 'Unlimited projects', body: 'Every client gets an isolated project with its own prompt set, competitor list, keyword set and audit history. No shared state, no cross-contamination.' },
-      { title: 'White-label reporting', body: 'Branded PDF and shareable link reports with your logo and colours. The client sees your agency, not ours.' },
-      { title: 'Multi-seat workspaces', body: 'Role-based access so strategists, writers and account managers each see what they need without sharing a login.' },
-      { title: 'Per-client API keys', body: 'Bring your own provider credentials per client where required for billing separation or data residency.' },
-      { title: 'Evidence for the QBR', body: 'The literal AI answer, dated, with its source list. Far more persuasive than a line chart.' },
-    ],
-    outcomes: [
-      'A billable deliverable competitors cannot match',
-      'One platform instead of four per client',
-      'Reports that carry your brand',
-      'Answers for the AI question in every QBR',
-    ],
-    faqs: [
-      { q: 'Is there a reseller or margin programme?', a: 'Yes. Scale-plan agencies get volume pricing and can resell SuperTool reporting as part of a retainer. Talk to sales for the current terms.' },
-      { q: 'Can clients get their own read-only login?', a: 'Yes, on Scale. Client seats see their own project only, with reporting and history but no billing or configuration access.' },
-    ],
-    related: ['in-house', 'founders', 'get-cited'],
-  },
   {
     slug: 'in-house',
     eyebrow: 'For in-house teams',
@@ -622,9 +472,9 @@ export const SOLUTION_PAGES: FeaturePageData[] = [
     ],
     faqs: [
       { q: 'Can we migrate our existing keyword lists?', a: 'Yes. Import keywords and historical positions by CSV; SuperTool will classify intent and build clusters on import.' },
-      { q: 'Does it integrate with Search Console and GA4?', a: 'Yes. Connect both to blend your own impressions, clicks and engagement data with SuperTool tracking.' },
+      { q: 'Does it integrate with Search Console and GA4?', a: 'Not today. Neither integration is built. SuperTool reports only what it measures itself, and does not blend in your analytics.' },
     ],
-    related: ['agencies', 'scale-content', 'recover-traffic'],
+    related: ['get-cited', 'recover-traffic', 'founders'],
   },
   {
     slug: 'founders',
@@ -656,10 +506,10 @@ export const SOLUTION_PAGES: FeaturePageData[] = [
       'Under an hour of overhead per post',
     ],
     faqs: [
-      { q: 'Is the Starter plan enough for one site?', a: 'Yes. Twenty-five prompts across all six engines, 250 keywords and a 100-page audit covers a single-product site comfortably.' },
+      { q: 'Is the Starter plan enough for one site?', a: 'Yes. Twenty-five prompts across the engines you connect, 250 keywords and a 100-page audit covers a single-product site comfortably.' },
       { q: 'How much time does this take per week?', a: 'Most single-site users spend under an hour a week: review the opportunity list, take the top brief, write, score, publish.' },
     ],
-    related: ['in-house', 'get-cited', 'scale-content'],
+    related: ['in-house', 'get-cited', 'recover-traffic'],
   },
   {
     slug: 'get-cited',
@@ -682,7 +532,7 @@ export const SOLUTION_PAGES: FeaturePageData[] = [
       { title: 'Baseline first', body: 'Measure current mention and citation rate across every engine before changing anything, so any lift is attributable.' },
       { title: 'Find the winning pages', body: 'For every prompt you lose, see the exact competitor URL that took the citation.' },
       { title: 'Rewrite against nine signals', body: 'Direct answers, hard numbers, named sources, self-contained passages, question headings, entity clarity, structure, depth and clarity.' },
-      { title: 'Verify the lift', body: 'Re-run the prompt set on demand after publishing and watch citation rate move, usually within two to six weeks.' },
+      { title: 'Re-measure after you publish', body: 'Re-run the same prompt set on demand once a change is live, so the before and after are measured the same way. How long a change takes to show up, if it does, is not something we can promise — that is what the measurement is for.' },
     ],
     outcomes: [
       'A measured baseline, not a hunch',
@@ -691,10 +541,10 @@ export const SOLUTION_PAGES: FeaturePageData[] = [
       'Verified lift within weeks',
     ],
     faqs: [
-      { q: 'How long does it take to get cited?', a: 'Answer engines re-crawl and re-rank considerably faster than classic search. Rewrites scored against the GEO model typically move citation rate within two to six weeks, against three to six months for a comparable ranking change.' },
+      { q: 'How long does it take to get cited?', a: 'We do not know, and neither does anyone selling you a number. SuperTool has no outcome data linking a scored rewrite to a later citation, so it does not forecast one. What it gives you is a dated baseline and a repeatable way to check whether a change moved anything.' },
       { q: 'Do I need new backlinks?', a: 'Usually not, for citation specifically. Link authority matters far more for classic ranking than for whether a passage is quotable. That is precisely why this channel is winnable for smaller sites.' },
     ],
-    related: ['recover-traffic', 'scale-content', 'agencies'],
+    related: ['recover-traffic', 'in-house', 'founders'],
   },
   {
     slug: 'recover-traffic',
@@ -727,44 +577,9 @@ export const SOLUTION_PAGES: FeaturePageData[] = [
     ],
     faqs: [
       { q: 'Can I recover traffic lost to an AI Overview?', a: 'Partly. You cannot remove the Overview, but being cited inside it recovers a meaningful share of the clicks it absorbs — which is exactly what citation optimisation targets.' },
-      { q: 'How far back does history go?', a: 'From the day you connect. Import historical Search Console data on setup to backfill up to sixteen months of impressions and clicks.' },
+      { q: 'How far back does history go?', a: 'From your first run. There is no historical backfill: answer-engine responses are not archived anywhere retrievable, and no Search Console import exists.' },
     ],
-    related: ['get-cited', 'in-house', 'scale-content'],
-  },
-  {
-    slug: 'scale-content',
-    eyebrow: 'By goal',
-    title: 'Scale Content Operations',
-    metaTitle: 'Scale Content Production Without Losing Quality',
-    metaDescription:
-      'Go from four posts a month to forty with SERP-benchmarked briefs, automated scoring and one-click publishing — with a quality gate that holds.',
-    keywords: ['scale content production', 'content operations', 'content workflow automation'],
-    lead:
-      'Volume without a quality gate produces forty pages nobody cites. The gate is what makes the volume worth anything.',
-    problem: {
-      heading: 'Scaling usually means scaling the mediocrity',
-      body: [
-        'The bottleneck in content operations is rarely writing. It is briefing, reviewing and publishing — the three steps that need judgement and therefore get skipped first when volume goes up.',
-        'Automating those three, rather than automating the writing, is what lets output rise without the average quality falling.',
-      ],
-    },
-    capabilities: [
-      { title: 'Briefs generated from live data', body: 'Length, questions, sourcing targets and missing terms derived from what is currently ranking, not from a house template.' },
-      { title: 'Automated quality gate', body: 'Nothing publishes below the score threshold you set, so volume cannot quietly erode standards.' },
-      { title: 'Bulk publishing', body: 'Queue and schedule to WordPress with schema and meta handled per post.' },
-      { title: 'Pipeline view', body: 'Every piece from brief through review to published, with its scores attached at each stage.' },
-    ],
-    outcomes: [
-      'Briefing time cut by most of an hour per post',
-      'A quality floor that holds under volume',
-      'Publishing that is not a manual step',
-      'Clear visibility of what is stuck where',
-    ],
-    faqs: [
-      { q: 'Can I set a minimum score before publishing?', a: 'Yes. Set separate thresholds for the on-page score and the GEO score; drafts below either are held in review rather than published.' },
-      { q: 'Does it work with freelance writers?', a: 'Yes. Invite writers as seats, assign briefs, and let them see the score and its fix list directly — which removes most review cycles.' },
-    ],
-    related: ['founders', 'in-house', 'agencies'],
+    related: ['get-cited', 'in-house', 'founders'],
   },
 ];
 

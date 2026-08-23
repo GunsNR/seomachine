@@ -8,18 +8,26 @@ Stable tag: 1.0.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Connect WordPress to Rank Logic SuperTool: one-click publishing with schema, cookieless AI-referral attribution, and Elementor widgets showing live answer-engine visibility.
+Connect WordPress to Rank Logic SuperTool: publishing with schema, cookieless AI-referral telemetry, and Elementor widgets showing measured answer-engine visibility.
 
 == Description ==
 
-Rank Logic SuperTool measures how often ChatGPT, Perplexity, Claude, Gemini, Grok and Google AI Mode name your brand. This plugin connects your WordPress site to that platform.
+Rank Logic SuperTool measures how often ChatGPT, Perplexity, Claude, Gemini and Grok name your brand, using each vendor's developer API. This plugin connects your WordPress site to that platform.
 
 It is deliberately unobtrusive:
 
 * Adds no front-end CSS and enqueues no libraries.
 * Writes SEO metadata **through** Yoast or Rank Math rather than replacing them.
 * Emits Article and FAQPage JSON-LD only when no other SEO plugin already does.
-* The attribution snippet sets no cookies and collects no personal data.
+* The attribution snippet sets no cookies.
+
+**Please read before enabling attribution.** The referral snippet reports the
+document referrer, which can include query parameters set by the referring
+site. Referral events are unverified page views, not confirmed leads, and the
+endpoint that receives them accepts a caller-supplied referrer — so the data is
+useful as a signal and must not be treated as an authoritative record of where
+a visitor came from. Review it against your own privacy policy before turning
+it on.
 * Your project key stays server-side — the browser never sees it.
 
 = Elementor widgets =
@@ -52,7 +60,7 @@ No. They register against free Elementor.
 
 = Is the attribution tracking GDPR-compliant? =
 
-The snippet sets no cookies and stores no personal data — it reports only that a visit arrived from a known answer-engine referrer, and which page it landed on. That places it outside consent requirements in most jurisdictions, but check with your own counsel.
+The snippet sets no cookies and uses no browser storage. It reports that a visit arrived from a known answer-engine referrer, the page it landed on, and the full referrer URL — which can carry query parameters set by the referring site. Whether that requires consent in your jurisdiction is a question for your own counsel; this plugin makes no compliance claim.
 
 = What happens if the API is unreachable? =
 
@@ -61,4 +69,4 @@ Widgets serve the last successful response rather than showing an error, and ren
 == Changelog ==
 
 = 1.0.0 =
-* Initial release: settings and verification, SEO plugin bridge, Article and FAQ schema, cookieless AI referral attribution, and three Elementor widgets.
+* Initial release: settings and verification, SEO plugin bridge, Article and FAQ schema, cookieless AI referral telemetry, and three Elementor widgets.

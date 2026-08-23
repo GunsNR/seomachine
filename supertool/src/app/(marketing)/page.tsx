@@ -5,11 +5,9 @@ import { Faq } from '@/components/marketing/Faq';
 import { Hero } from '@/components/marketing/Hero';
 import { PricingTable } from '@/components/marketing/PricingTable';
 import { ProcessSteps } from '@/components/marketing/ProcessSteps';
-import { Results } from '@/components/marketing/Results';
 import { Section, SectionHeading } from '@/components/marketing/Section';
 import { ServiceGrid } from '@/components/marketing/ServiceGrid';
 import { StatBar } from '@/components/marketing/StatBar';
-import { Testimonials } from '@/components/marketing/Testimonials';
 import { JsonLd } from '@/components/JsonLd';
 import { FAQS } from '@/content/site';
 import { faqSchema, pageMetadata, softwareApplicationSchema } from '@/lib/metadata';
@@ -29,32 +27,39 @@ export const metadata = pageMetadata({
 const DIFFERENTIATORS = [
   {
     icon: Bot,
-    title: 'Both channels, one score',
-    body: 'Classic rank tracking and answer-engine visibility measured against the same pages, in the same dashboard, on the same day. No reconciling two tools that disagree.',
+    title: 'Provenance on every number',
+    body: 'Each figure says where it came from: measured, part-modelled or estimated. A provider that fails is recorded as a failure, not quietly replaced with a plausible answer — so a run with gaps reads as a run with gaps.',
   },
   {
     icon: Target,
-    title: 'Scoring you can act on',
-    body: 'A nine-signal GEO model that names the fix: which claims need a source, which sentences no model can quote, which heading should have been a question.',
+    title: 'Scoring that names the fix',
+    body: 'A nine-signal heuristic that says which claims need a source, which sentences no model can quote, which heading should have been a question. A checklist, not a prediction — it has not been validated against outcomes.',
   },
   {
     icon: Link2,
     title: 'Publishing that does not fight your stack',
-    body: 'A WordPress plugin that installs in five minutes, writes through Yoast or Rank Math rather than replacing them, and ships optional Elementor widgets.',
+    body: 'A WordPress plugin that writes through Yoast or Rank Math rather than replacing them, publishes native blocks, and ships optional Elementor templates. Tested against a stubbed REST API — not yet against a live install.',
   },
   {
     icon: BarChart3,
-    title: 'Attribution to revenue',
-    body: 'Leads arriving from an assistant are tagged at the source. Report pipeline from Perplexity the same way you report it from Google.',
+    title: 'Evidence you can show a client',
+    body: 'Every check keeps the answer excerpt, the source list and the timestamp. When a number moves you can read exactly why, and put the actual answer in front of someone.',
   },
 ];
 
 export default function HomePage() {
   return (
     <>
+      {/*
+        The aggregateRating that used to sit here claimed 4.9 stars from 384
+        reviews. There were no reviews. Emitting a fabricated rating as
+        structured data is a Google policy violation as well as a lie, so the
+        rating is gone rather than adjusted — offers and FAQs remain because
+        both are true.
+      */}
       <JsonLd
         data={[
-          softwareApplicationSchema({ lowPrice: 65, highPrice: 749, rating: 4.9, reviewCount: 384 }),
+          softwareApplicationSchema({ lowPrice: 65, highPrice: 749 }),
           faqSchema(FAQS.map((f) => ({ q: f.q, a: f.a }))),
         ]}
       />
@@ -78,13 +83,13 @@ export default function HomePage() {
                 ever tell you which.
               </p>
               <p>
-                That is the traffic quietly leaving your reports. Impressions look flat, positions
-                look stable, and demo requests fall anyway, because the decision was made in a
-                conversation you could not see.
+                That conversation is invisible to every tool built for ten blue links. Impressions
+                look flat, positions look stable, and you have no way to tell whether an assistant
+                is recommending a competitor on your highest-intent questions.
               </p>
               <p className="font-semibold text-ink">
-                SuperTool makes that conversation measurable, then gives you the content changes that
-                get you into it.
+                SuperTool makes that conversation measurable — on a fixed prompt set, on a schedule,
+                with the coverage of every run stated next to the result.
               </p>
             </div>
             <Link href="/platform/ai-visibility" className="btn btn-md btn-primary mt-8">
@@ -109,14 +114,12 @@ export default function HomePage() {
 
       <ServiceGrid />
       <ProcessSteps />
-      <Results />
-      <Testimonials />
 
       <Section className="bg-surface-alt" id="pricing">
         <SectionHeading
           eyebrow="Pricing"
           title="Priced for the channel it replaces"
-          sub="One platform instead of a rank tracker, an AI monitor, a content grader and a publishing workflow. Fourteen days free on every plan."
+          sub="Answer-engine measurement, a site audit, keyword research, briefs and WordPress publishing in one place. Fourteen days free on every plan."
         />
         <div className="mt-12">
           <PricingTable />

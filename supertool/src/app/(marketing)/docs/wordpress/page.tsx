@@ -8,7 +8,7 @@ import { brand } from '../../../../../brand.config';
 export const metadata = pageMetadata({
   title: 'WordPress Plugin Setup',
   description:
-    'Install the Rank Logic SuperTool WordPress plugin in five minutes: upload, paste your project key, verify the connection and add the optional Elementor widgets.',
+    'Install the Rank Logic SuperTool WordPress plugin: upload, paste your project key, verify the connection and add the optional Elementor templates.',
   path: '/docs/wordpress',
   keywords: ['WordPress plugin setup', 'Elementor SEO widget', 'SuperTool WordPress'],
 });
@@ -80,7 +80,7 @@ export default function WordPressDocsPage() {
               WordPress plugin setup
             </h1>
             <p className="mt-5 text-[1.0625rem] leading-[1.7] text-white/70 text-pretty">
-              Six steps, about five minutes, no code. The plugin adds no front-end CSS and takes
+              Six steps, no code. The plugin adds no front-end CSS and takes
               over none of your existing metadata.
             </p>
           </div>

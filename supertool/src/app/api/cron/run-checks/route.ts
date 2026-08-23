@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
 import { timingSafeEqual } from 'node:crypto';
 import { analyzeAnswer } from '@/lib/ai/analysis';
-import { ENGINES } from '@/lib/ai/engines';
-import { ask } from '@/lib/ai/providers';
+import { MEASURABLE_ENGINES } from '@/lib/ai/engines';
+import { ask, isObserved, type DataMode } from '@/lib/ai/providers';
 import { db } from '@/lib/db';
 import { getPlan } from '@/lib/plan';
+import { summarizeProvenance } from '@/lib/provenance';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -103,12 +104,13 @@ async function run(req: Request) {
 
     const competitors = project.competitors.map((c) => ({ name: c.label, domain: c.domain }));
     const runAt = new Date();
+    const mode: DataMode = project.dataMode === 'demo' ? 'demo' : 'live';
     const rows: Array<Record<string, unknown>> = [];
 
     try {
       for (const prompt of project.prompts) {
         const engineResults = await Promise.all(
-          ENGINES.map(async (engine) => {
+          MEASURABLE_ENGINES.map(async (engine) => {
             const answer = await ask({
               prompt: prompt.text,
               engine: engine.id,
@@ -116,7 +118,21 @@ async function run(req: Request) {
               domain: project.domain,
               competitors,
               seed: `${project.id}|${runAt.toISOString().slice(0, 10)}`,
+              mode,
             });
+
+            const base = {
+              promptId: prompt.id,
+              engine: engine.id as string,
+              status: answer.status,
+              errorCategory: answer.errorCategory,
+              errorDetail: answer.error ?? '',
+              model: answer.model,
+              latencyMs: answer.latencyMs,
+              runAt,
+            };
+            if (!isObserved(answer.status)) return base;
+
             const a = analyzeAnswer({
               answer: answer.answer,
               brand: project.name,
@@ -125,8 +141,7 @@ async function run(req: Request) {
               providedCitations: answer.citations,
             });
             return {
-              promptId: prompt.id,
-              engine: engine.id,
+              ...base,
               brandMentioned: a.brandMentioned,
               brandCited: a.brandCited,
               mentionRank: a.mentionRank,
@@ -135,8 +150,6 @@ async function run(req: Request) {
               citedUrls: JSON.stringify(a.citedUrls),
               competitors: JSON.stringify(a.competitorsMentioned),
               excerpt: a.excerpt,
-              simulated: answer.simulated,
-              runAt,
             };
           }),
         );
@@ -144,7 +157,15 @@ async function run(req: Request) {
       }
 
       await db.aiCheck.createMany({ data: rows as never });
-      results.push({ project: project.name, status: 'ran', checks: rows.length });
+      const p = summarizeProvenance(rows as Array<{ status: string }>);
+      // "ran" alone would hide a run in which every provider call failed, so
+      // the batch report carries the coverage it actually achieved.
+      results.push({
+        project: project.name,
+        status: p.observed ? 'ran' : 'ran-empty',
+        checks: rows.length,
+        reason: p.observed === rows.length ? undefined : `${p.observed}/${rows.length} observed`,
+      });
     } catch (err) {
       // One project failing must not abort the rest of the batch.
       console.error(`cron: project ${project.id} failed`, err);

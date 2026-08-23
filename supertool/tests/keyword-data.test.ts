@@ -125,13 +125,22 @@ describe('fetchKeywordMetrics when the provider fails', () => {
       )) as typeof fetch;
     try {
       const [row] = await fetchKeywordMetrics(['seo tool']);
-      expect(row.source).toBe('measured');
       expect(row.provider).toBe('dataforseo');
       expect(row.volume).toBe(40500);
       expect(row.cpc).toBe(12.34);
       expect(row.trend).toHaveLength(12);
       expect(row.difficulty).toBeGreaterThan(0);
       expect(row.difficulty).toBeLessThanOrEqual(100);
+
+      // Provenance is now per field, and this expectation changed on purpose.
+      // Volume and CPC come straight from DataForSEO, but difficulty blends
+      // the provider's *paid* competition index with the in-product organic
+      // model — no provider publishes organic difficulty. Labelling the whole
+      // row "measured" told the user a blended number came from a provider.
+      expect(row.sources.volume).toBe('measured');
+      expect(row.sources.cpc).toBe('measured');
+      expect(row.sources.difficulty).toBe('blended');
+      expect(row.source).toBe('blended');
     } finally {
       globalThis.fetch = original;
     }

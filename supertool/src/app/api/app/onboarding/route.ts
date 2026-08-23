@@ -138,6 +138,10 @@ export const POST = withSession(Body, async ({ session, body }) => {
           intent: m.intent,
           trend: JSON.stringify(m.trend),
           dataSource: m.source,
+          volumeSource: m.sources.volume,
+          difficultySource: m.sources.difficulty,
+          cpcSource: m.sources.cpc,
+          dataProvider: m.provider ?? '',
         })),
       });
       keywordsAdded = metrics.length;

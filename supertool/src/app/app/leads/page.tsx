@@ -1,10 +1,11 @@
 import { redirect } from 'next/navigation';
 import { BarList, LineChart } from '@/components/app/Chart';
-import { Badge, EmptyState, PageHeader, Panel, StatTile } from '@/components/app/ui';
+import { Badge, CapabilityUnavailable, EmptyState, PageHeader, Panel, StatTile } from '@/components/app/ui';
 import { engineName } from '@/lib/ai/engines';
 import { ExportButton } from '@/components/app/ExportButton';
 import { getSession, resolveProject } from '@/lib/auth';
 import { getLeads } from '@/lib/dashboard';
+import { CAPABILITIES } from '@/lib/capabilities';
 import { money, pct } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
@@ -27,33 +28,39 @@ export default async function LeadsPage() {
   return (
     <>
       <PageHeader
-        title="Leads"
-        sub="Enquiries attributed back to the channel and the page that earned them — including the AI referrals analytics buckets as direct."
+        title="Referral events"
+        sub="Visits the WordPress plugin saw arriving from an assistant. These are unverified page views, not confirmed leads."
         action={<ExportButton resource="leads" />}
       />
 
       <div className="mt-6 space-y-6">
+        <CapabilityUnavailable
+          title="Referral telemetry is not a verified lead source"
+          status={CAPABILITIES.lead_attribution.status}
+          reason={CAPABILITIES.lead_attribution.source}
+        />
+
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-          <StatTile label="Total leads" value={summary.total} sub="All sources, last 60 days" />
-          <StatTile label="From AI assistants" value={summary.ai} sub={`${pct(aiShare)} of all leads`} tone="good" />
-          <StatTile label="AI pipeline value" value={money(summary.aiValue)} sub="Attributed to answer engines" tone="good" />
-          <StatTile label="Total pipeline" value={money(summary.value)} sub="All sources" />
-          <StatTile label="Closed won" value={summary.won} sub={`${pct(summary.total ? summary.won / summary.total : 0)} win rate`} />
+          <StatTile label="Referral events" value={summary.total} sub="All sources, last 60 days" />
+          <StatTile label="From AI assistants" value={summary.ai} sub={`${pct(aiShare)} of all events`} />
+          <StatTile label="Attributed value" value={money(summary.aiValue)} sub="Entered by hand — not measured revenue" />
+          <StatTile label="Total attributed value" value={money(summary.value)} sub="Entered by hand — not measured revenue" />
+          <StatTile label="Marked won" value={summary.won} sub={`${pct(summary.total ? summary.won / summary.total : 0)} of events`} />
         </div>
 
         <div className="grid items-start gap-6 xl:grid-cols-[1.5fr_1fr]">
-          <Panel title="Leads per week" sub="Last 8 weeks, all sources">
+          <Panel title="Referral events per week" sub="Last 8 weeks, all sources">
             <div className="p-5">
-              <LineChart points={weekly} label="Leads captured per week" height={210} color="#12A150" />
+              <LineChart points={weekly} label="Referral events captured per week" height={210} color="#12A150" />
             </div>
           </Panel>
 
-          <Panel title="AI leads by engine" sub="Which assistant sent them">
+          <Panel title="Referral events by engine" sub="Referrer the plugin reported — caller-supplied and forgeable">
             <div className="p-5">
               {byEngine.length ? (
                 <BarList rows={byEngine.map((e) => ({ label: e.name, value: e.count, color: e.color }))} />
               ) : (
-                <p className="text-[0.85rem] text-body">No AI-attributed leads recorded yet.</p>
+                <p className="text-[0.85rem] text-body">No assistant referral events recorded yet.</p>
               )}
             </div>
           </Panel>

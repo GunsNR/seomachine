@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { liveEngines, ENGINES } from '@/lib/ai/engines';
+import { liveEngines, ENGINES, MEASURABLE_ENGINES } from '@/lib/ai/engines';
 import { billingEnabled } from '@/lib/billing';
 import { db } from '@/lib/db';
 import { emailProvider } from '@/lib/email';
@@ -39,9 +39,15 @@ export async function GET() {
       checks: {
         database,
         ...(databaseError ? { databaseError } : {}),
-        // Simulated engines are a supported mode, not a failure, so this is
-        // reported as information rather than folded into the status.
-        answerEngines: { total: ENGINES.length, live: live.length, simulated: ENGINES.length - live.length },
+        // An unconnected surface is a supported state, not a failure: it is
+        // skipped and recorded as unavailable rather than simulated.
+        answerEngines: {
+          known: ENGINES.length,
+          measurable: MEASURABLE_ENGINES.length,
+          live: live.length,
+          notConnected: MEASURABLE_ENGINES.length - live.length,
+          unavailable: ENGINES.length - MEASURABLE_ENGINES.length,
+        },
         authSecret: process.env.AUTH_SECRET ? 'configured' : 'using-development-default',
         // Reported as information, not failure: each of these has a supported
         // unconfigured mode, and a self-hosted install may want none of them.

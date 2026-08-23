@@ -1,7 +1,9 @@
 import { redirect } from 'next/navigation';
-import { Badge, EmptyState, PageHeader, Panel, SimulationNotice, StatTile } from '@/components/app/ui';
+import { Badge, EmptyState, PageHeader, Panel, ProvenanceBanner, StatTile } from '@/components/app/ui';
 import { BarList } from '@/components/app/Chart';
-import { engineName, ENGINES } from '@/lib/ai/engines';
+import { engineName, MEASURABLE_ENGINES } from '@/lib/ai/engines';
+import { isObserved, type CheckStatus } from '@/lib/ai/providers';
+import { summarizeProvenance } from '@/lib/provenance';
 import { ExportButton } from '@/components/app/ExportButton';
 import { getSession, resolveProject } from '@/lib/auth';
 import { db } from '@/lib/db';
@@ -40,7 +42,11 @@ export default async function CitationsPage() {
   }
 
   const latestDate = checks[0].runAt.toISOString().slice(0, 10);
-  const latest = checks.filter((c) => c.runAt.toISOString().slice(0, 10) === latestDate);
+  const latestAll = checks.filter((c) => c.runAt.toISOString().slice(0, 10) === latestDate);
+  const provenance = summarizeProvenance(latestAll);
+  // Only checks that produced an answer can carry citation evidence. Counting
+  // a failed call as "no citation" would understate the rate.
+  const latest = latestAll.filter((c) => isObserved(c.status as CheckStatus));
 
   const cited = latest.filter((c) => c.brandCited);
   const mentionedNotCited = latest.filter((c) => c.brandMentioned && !c.brandCited);
@@ -62,13 +68,17 @@ export default async function CitationsPage() {
   const topUrls = [...urlTally.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
   const topCompetitorUrls = [...competitorUrlTally.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
 
-  const byEngine = ENGINES.map((e) => {
+  const byEngine = MEASURABLE_ENGINES.map((e) => {
+    const all = latestAll.filter((c) => c.engine === e.id);
     const rows = latest.filter((c) => c.engine === e.id);
+    const won = rows.filter((c) => c.brandCited).length;
     return {
       label: e.name,
-      value: rows.filter((c) => c.brandCited).length,
+      value: won,
       color: e.color,
-      sub: `${rows.length} checks · ${pct(rows.length ? rows.filter((c) => c.brandCited).length / rows.length : 0)} citation rate`,
+      sub: rows.length
+        ? `${rows.length}/${all.length} observed · ${pct(won / rows.length)} citation rate`
+        : 'Not measured in this run',
     };
   }).sort((a, b) => b.value - a.value);
 
@@ -81,11 +91,15 @@ export default async function CitationsPage() {
       />
 
       <div className="mt-6 space-y-6">
-        <SimulationNotice show={latest.every((c) => c.simulated)} />
+        <ProvenanceBanner provenance={provenance} />
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <StatTile label="Citations won" value={cited.length} sub={`of ${latest.length} checks in the latest run`} tone="good" />
-          <StatTile label="Citation rate" value={pct(latest.length ? cited.length / latest.length : 0)} sub="Answers citing your own domain" />
+          <StatTile label="Citations won" value={cited.length} sub={`of ${latest.length} observed checks in the latest run`} tone="good" />
+          <StatTile
+            label="Citation rate"
+            value={latest.length ? pct(cited.length / latest.length) : '—'}
+            sub={`Over observed answers only · ${pct(provenance.coverage)} coverage`}
+          />
           <StatTile label="Mentioned, not cited" value={mentionedNotCited.length} sub="Highest-leverage fixes available" tone="warn" />
           <StatTile label="Your URLs quoted" value={topUrls.length} sub="Distinct pages cited" />
         </div>

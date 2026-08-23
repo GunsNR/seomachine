@@ -35,7 +35,6 @@ export const PRIVACY: LegalSection[] = [
     body: [
       'Running a visibility check means sending your prompt text to the provider whose engine is being checked — OpenAI, Anthropic, Perplexity, Google or xAI. Prompts typically contain your brand name, your category and your competitors.',
       'We do not send your account details, your customer data or your unpublished content to these providers as part of a visibility check.',
-      'On the Scale plan you may supply your own provider credentials, in which case those calls are made under your account and governed by your agreement with that provider.',
     ],
   },
   {

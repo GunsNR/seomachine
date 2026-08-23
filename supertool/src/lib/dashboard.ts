@@ -1,12 +1,17 @@
 import 'server-only';
 import { rollUpVisibility } from './ai/analysis';
-import { ENGINES, type EngineId } from './ai/engines';
+import { MEASURABLE_ENGINES, type EngineId } from './ai/engines';
 import { db } from './db';
 import { ctrForPosition, estimatedTraffic, opportunityScore, shareOfVoice } from './seo/metrics';
+import { isObserved, type CheckStatus } from './ai/providers';
+import { summarizeProvenance, type Provenance } from './provenance';
+import { keywordMetricsSource, rankSource } from './data-sources';
 import { parseJson } from './utils';
 
 /** A daily/weekly point for the trend charts. */
 export interface TrendPoint { date: string; value: number }
+
+export type { Provenance };
 
 export async function getProjects(orgId: string) {
   return db.project.findMany({ where: { orgId }, orderBy: { createdAt: 'asc' } });
@@ -27,12 +32,20 @@ export async function getAiVisibility(projectId: string) {
     return {
       rollup: rollUpVisibility([]),
       previousScore: 0,
-      byEngine: [] as Array<{ id: EngineId; name: string; color: string; score: number; mentionRate: number; citationRate: number; checks: number }>,
+      byEngine: [] as Array<{
+        id: EngineId; name: string; color: string;
+        score: number | null; mentionRate: number | null; citationRate: number | null;
+        checks: number; observed: number; status: string; reason: string;
+      }>,
       trend: [] as TrendPoint[],
-      promptRows: [] as Array<{ id: string; text: string; cluster: string; mentionRate: number; citationRate: number; engines: number; lastRun: Date | null }>,
+      promptRows: [] as Array<{
+        id: string; text: string; cluster: string;
+        mentionRate: number | null; citationRate: number | null;
+        engines: number; observed: number; lastRun: Date | null;
+      }>,
       competitorShare: [] as Array<{ domain: string; mentions: number; share: number }>,
       gaps: [] as Array<{ id: string; text: string; cluster: string }>,
-      simulated: true,
+      provenance: summarizeProvenance([]),
       totalChecks: 0,
     };
   }
@@ -47,37 +60,61 @@ export async function getAiVisibility(projectId: string) {
     ? allChecks.filter((c) => c.runAt.toISOString().slice(0, 10) === previousDate)
     : [];
 
-  const rollup = rollUpVisibility(latest);
-  const previousScore = previous.length ? rollUpVisibility(previous).score : rollup.score;
+  // Every rate below is computed over *observed* checks. A check that failed
+  // or was never attempted is a hole in the run, and treating it as a zero
+  // would silently report an outage as a drop in visibility.
+  const observed = (rows: typeof allChecks) => rows.filter((c) => isObserved(c.status as CheckStatus));
 
-  const byEngine = ENGINES.map((e) => {
+  const provenance = summarizeProvenance(latest);
+  const latestObserved = observed(latest);
+  const rollup = rollUpVisibility(latestObserved);
+  const previousObserved = observed(previous);
+  const previousScore = previousObserved.length ? rollUpVisibility(previousObserved).score : rollup.score;
+
+  const byEngine = MEASURABLE_ENGINES.map((e) => {
     const rows = latest.filter((c) => c.engine === e.id);
-    const r = rollUpVisibility(rows);
+    const seen = observed(rows);
+    const r = rollUpVisibility(seen);
+    const p = summarizeProvenance(rows);
     return {
       id: e.id, name: e.name, color: e.color,
-      score: r.score, mentionRate: r.mentionRate, citationRate: r.citationRate, checks: rows.length,
+      // null, not zero: "we did not measure" is not "we measured nothing".
+      score: seen.length ? r.score : null,
+      mentionRate: seen.length ? r.mentionRate : null,
+      citationRate: seen.length ? r.citationRate : null,
+      checks: rows.length,
+      observed: seen.length,
+      status: p.mode,
+      reason: rows.find((c) => c.errorCategory)?.errorCategory ?? '',
     };
   });
 
-  const trend: TrendPoint[] = runDates.map((date) => ({
-    date,
-    value: rollUpVisibility(allChecks.filter((c) => c.runAt.toISOString().slice(0, 10) === date)).score,
-  }));
+  const trend: TrendPoint[] = runDates
+    .map((date) => {
+      const rows = observed(allChecks.filter((c) => c.runAt.toISOString().slice(0, 10) === date));
+      return { date, value: rows.length ? rollUpVisibility(rows).score : null };
+    })
+    // A day on which nothing was observed is omitted rather than plotted as a
+    // crash to zero.
+    .filter((p): p is TrendPoint => p.value !== null);
 
   const promptRows = prompts.map((p) => {
     const rows = p.checks.filter((c) => c.runAt.toISOString().slice(0, 10) === latestDate);
-    const r = rollUpVisibility(rows);
+    const seen = observed(rows);
+    const r = rollUpVisibility(seen);
     return {
       id: p.id, text: p.text, cluster: p.cluster,
-      mentionRate: r.mentionRate, citationRate: r.citationRate,
+      mentionRate: seen.length ? r.mentionRate : null,
+      citationRate: seen.length ? r.citationRate : null,
       engines: rows.length,
+      observed: seen.length,
       lastRun: rows[0]?.runAt ?? null,
     };
-  }).sort((a, b) => a.mentionRate - b.mentionRate);
+  }).sort((a, b) => (a.mentionRate ?? 1) - (b.mentionRate ?? 1));
 
   // Competitor share of voice across the latest run.
   const tally = new Map<string, number>();
-  for (const c of latest) {
+  for (const c of latestObserved) {
     for (const domain of parseJson<string[]>(c.competitors, [])) {
       tally.set(domain, (tally.get(domain) ?? 0) + 1);
     }
@@ -94,10 +131,12 @@ export async function getAiVisibility(projectId: string) {
     trend,
     promptRows,
     competitorShare,
-    // Prompts where the brand is never named — the highest-leverage list.
-    gaps: promptRows.filter((p) => p.mentionRate === 0).slice(0, 10)
+    // Prompts where the brand was observed and never named — the
+    // highest-leverage list. A prompt with no observation is not a gap in
+    // visibility, it is a gap in measurement, so it is excluded.
+    gaps: promptRows.filter((p) => p.observed > 0 && p.mentionRate === 0).slice(0, 10)
       .map((p) => ({ id: p.id, text: p.text, cluster: p.cluster })),
-    simulated: latest.every((c) => c.simulated),
+    provenance,
     totalChecks: allChecks.length,
   };
 }
@@ -106,16 +145,28 @@ export async function getAiVisibility(projectId: string) {
 /* Keywords and rankings                                               */
 /* ------------------------------------------------------------------ */
 
-export async function getKeywords(projectId: string) {
+/**
+ * Keyword rows plus the honest story about where each number came from.
+ *
+ * Positions only exist for the demo workspace: there is no SERP provider, so a
+ * real project has no rank data and is told so rather than shown zeros.
+ */
+export async function getKeywords(projectId: string, opts: { dataMode?: string } = {}) {
+  const isDemo = opts.dataMode === 'demo';
+  const ranks = rankSource();
+  // Ranking figures are only meaningful when a provider supplies them, or when
+  // the workspace is explicitly demo data.
+  const showRanks = ranks.connected || isDemo;
+
   const keywords = await db.keyword.findMany({
     where: { projectId },
     include: { snapshots: { orderBy: { capturedAt: 'desc' }, take: 40 } },
   });
 
   const rows = keywords.map((k) => {
-    const current = k.snapshots[0]?.position ?? 0;
+    const current = showRanks ? k.snapshots[0]?.position ?? 0 : 0;
     // Compare against roughly 30 days back (snapshots are every 3 days).
-    const prior = k.snapshots[10]?.position ?? current;
+    const prior = showRanks ? k.snapshots[10]?.position ?? current : current;
     const trend = parseJson<number[]>(k.trend, []);
 
     const opportunity = opportunityScore({
@@ -135,37 +186,57 @@ export async function getKeywords(projectId: string) {
       id: k.id,
       phrase: k.phrase,
       dataSource: k.dataSource,
+      // Per-field provenance travels with the row so the table can label each
+      // column instead of implying one source for all of them.
+      sources: {
+        volume: k.volumeSource,
+        difficulty: k.difficultySource,
+        cpc: k.cpcSource,
+      },
+      provider: k.dataProvider,
       volume: k.volume,
       difficulty: k.difficulty,
       cpc: k.cpc,
       intent: k.intent,
-      position: current,
+      // null, not 0: 0 already means "outside the top 100".
+      position: showRanks ? current : null,
       // Positive delta means the rank improved (moved toward 1).
-      delta: prior && current ? prior - current : 0,
-      traffic,
-      value: Math.round(traffic * k.cpc * 100) / 100,
+      delta: showRanks && prior && current ? prior - current : 0,
+      // Traffic and value are forecasts derived from a position. Without a
+      // position they are not "zero", they are undefined.
+      traffic: showRanks ? traffic : null,
+      value: showRanks ? Math.round(traffic * k.cpc * 100) / 100 : null,
       opportunity: opportunity.score,
       band: opportunity.band,
       rationale: opportunity.rationale,
-      history: [...k.snapshots].reverse().map((s) => ({
-        date: s.capturedAt.toISOString().slice(0, 10),
-        value: s.position,
-      })),
+      history: showRanks
+        ? [...k.snapshots].reverse().map((s) => ({
+            date: s.capturedAt.toISOString().slice(0, 10),
+            value: s.position,
+          }))
+        : [],
     };
   });
 
-  const ranked = rows.filter((r) => r.position >= 1 && r.position <= 100);
+  const ranked = rows.filter((r) => r.position !== null && r.position >= 1 && r.position <= 100);
 
   return {
     rows: rows.sort((a, b) => b.opportunity - a.opportunity),
+    /** How to describe the ranking half of this data, or why there is none. */
+    rankSource: { ...ranks, shown: showRanks, demo: isDemo },
+    keywordSource: keywordMetricsSource(),
     summary: {
       total: rows.length,
-      top3: ranked.filter((r) => r.position <= 3).length,
-      top10: ranked.filter((r) => r.position <= 10).length,
-      top100: ranked.length,
-      traffic: rows.reduce((s, r) => s + r.traffic, 0),
-      value: Math.round(rows.reduce((s, r) => s + r.value, 0)),
-      shareOfVoice: shareOfVoice(rows.map((r) => ({ volume: r.volume, position: r.position }))),
+      // null when no rank source exists at all — a count of zero would read as
+      // "you rank for nothing", which is a claim this product cannot make.
+      top3: showRanks ? ranked.filter((r) => (r.position ?? 0) <= 3).length : null,
+      top10: showRanks ? ranked.filter((r) => (r.position ?? 0) <= 10).length : null,
+      top100: showRanks ? ranked.length : null,
+      traffic: showRanks ? rows.reduce((s, r) => s + (r.traffic ?? 0), 0) : null,
+      value: showRanks ? Math.round(rows.reduce((s, r) => s + (r.value ?? 0), 0)) : null,
+      shareOfVoice: showRanks
+        ? shareOfVoice(rows.map((r) => ({ volume: r.volume, position: r.position ?? 0 })))
+        : null,
       quickWins: rows.filter((r) => r.band === 'quick-win').length,
     },
   };
@@ -230,7 +301,7 @@ export async function getLeads(projectId: string) {
   });
 
   const ai = leads.filter((l) => l.source === 'ai');
-  const byEngine = ENGINES.map((e) => ({
+  const byEngine = MEASURABLE_ENGINES.map((e) => ({
     id: e.id,
     name: e.name,
     color: e.color,
@@ -265,10 +336,10 @@ export async function getLeads(projectId: string) {
 }
 
 /** Everything the overview screen needs, in one pass. */
-export async function getOverview(projectId: string) {
+export async function getOverview(projectId: string, opts: { dataMode?: string } = {}) {
   const [visibility, keywords, audit, content, leads] = await Promise.all([
     getAiVisibility(projectId),
-    getKeywords(projectId),
+    getKeywords(projectId, opts),
     getLatestAudit(projectId),
     getArticles(projectId),
     getLeads(projectId),

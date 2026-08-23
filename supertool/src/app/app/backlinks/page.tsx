@@ -1,8 +1,9 @@
 import { redirect } from 'next/navigation';
 import { BarList } from '@/components/app/Chart';
 import { ExportButton } from '@/components/app/ExportButton';
-import { Badge, EmptyState, PageHeader, Panel, StatTile } from '@/components/app/ui';
+import { Badge, CapabilityUnavailable, DemoDataNotice, EmptyState, PageHeader, Panel, StatTile } from '@/components/app/ui';
 import { getSession, resolveProject } from '@/lib/auth';
+import { backlinkSource } from '@/lib/data-sources';
 import { db } from '@/lib/db';
 import { domainAuthority } from '@/lib/seo/metrics';
 import { pct } from '@/lib/utils';
@@ -14,6 +15,27 @@ export default async function BacklinksPage() {
   if (!session) redirect('/login');
   const project = await resolveProject(session.orgId);
   if (!project) redirect('/app');
+
+  // SuperTool has no backlink provider and no link index of its own. Seeded
+  // rows exist only in the demo workspace; a real project is told the truth
+  // rather than shown an empty table that reads as "you have no backlinks".
+  const source = backlinkSource();
+  const showBacklinks = source.connected || project.dataMode === 'demo';
+
+  if (!showBacklinks) {
+    return (
+      <>
+        <PageHeader title="Backlinks" sub="Referring domains and link authority." />
+        <div className="mt-6">
+          <CapabilityUnavailable
+            title="Backlink data is not available"
+            status="unavailable"
+            reason={source.reason}
+          />
+        </div>
+      </>
+    );
+  }
 
   const backlinks = await db.backlink.findMany({
     where: { projectId: project.id },
@@ -60,6 +82,12 @@ export default async function BacklinksPage() {
         sub="Referring domains, anchor distribution and the pages earning links — the authority half of why a keyword is hard."
         action={<ExportButton resource="backlinks" />}
       />
+
+      {project.dataMode === 'demo' && (
+        <div className="mt-6">
+          <DemoDataNotice what="Every referring domain, anchor and authority figure below" />
+        </div>
+      )}
 
       <div className="mt-6 space-y-6">
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">

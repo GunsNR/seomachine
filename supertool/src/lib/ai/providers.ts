@@ -1,20 +1,54 @@
 /**
- * Answer-engine adapters.
+ * Answer-surface adapters.
  *
- * Each engine has a live path (a real API call, used when its credential is
- * configured) and a simulation path. Simulation is fully deterministic —
- * seeded on prompt + engine + day — so the dashboard is stable across reloads
- * and demos reproduce exactly, while still varying believably by engine and
- * over time. Every stored check records which path produced it.
+ * Every call returns an explicit status. There is no silent fallback: a live
+ * call that fails is recorded as `failed` with an error category, a surface
+ * with no credential is `unavailable`, and simulated text is produced *only*
+ * for a workspace explicitly running in demo mode. A customer workspace can
+ * therefore never be handed a plausible-looking simulated answer in place of a
+ * real one, and a run with mixed outcomes can never be summarised as live.
  */
-import { ENGINES, getEngine, type EngineId } from './engines';
+import { getEngine, type EngineId } from './engines';
+
+/** Provenance of a single observation. */
+export type CheckStatus =
+  /** A real provider call succeeded. */
+  | 'live'
+  /** Deterministic sample text, produced only in an explicit demo workspace. */
+  | 'simulated'
+  /** A real provider call was attempted and did not succeed. */
+  | 'failed'
+  /** No call was attempted: no compliant source, or no credential. */
+  | 'unavailable';
+
+/** Why a call could not produce an observation. '' when it did. */
+export type ErrorCategory =
+  | ''
+  | 'auth'
+  | 'rate_limit'
+  | 'quota'
+  | 'timeout'
+  | 'network'
+  | 'empty_response'
+  | 'http_error'
+  | 'no_credential'
+  | 'surface_unavailable'
+  | 'unsupported_engine'
+  | 'unknown';
+
+/** Whether a workspace is measuring reality or showing sample data. */
+export type DataMode = 'live' | 'demo';
 
 export interface AskResult {
+  status: CheckStatus;
+  /** Empty string whenever status is `failed` or `unavailable`. */
   answer: string;
   citations: string[];
-  simulated: boolean;
+  /** Exact model asked, or '' when no call was made. */
   model: string;
   latencyMs: number;
+  errorCategory: ErrorCategory;
+  /** Operator-facing detail. Never contains a credential. */
   error?: string;
 }
 
@@ -24,8 +58,19 @@ export interface AskInput {
   brand: string;
   domain: string;
   competitors: Array<{ name?: string; domain: string }>;
-  /** Stable seed component so a given day's run reproduces. */
+  /** Stable seed component so a demo workspace reproduces exactly. */
   seed?: string;
+  /**
+   * `live` (the default) never simulates. `demo` always simulates and never
+   * spends a provider credit — the two paths are mutually exclusive on
+   * purpose, so demo data cannot leak into a real measurement or vice versa.
+   */
+  mode?: DataMode;
+}
+
+/** True when this observation carries an answer that can be analysed. */
+export function isObserved(status: CheckStatus): boolean {
+  return status === 'live' || status === 'simulated';
 }
 
 /* ------------------------------------------------------------------ */
@@ -56,7 +101,7 @@ export function seededRandom(seed: string): () => number {
 const pick = <T,>(rng: () => number, arr: readonly T[]): T => arr[Math.floor(rng() * arr.length) % arr.length];
 
 /* ------------------------------------------------------------------ */
-/* Simulation                                                          */
+/* Simulation — demo workspaces and tests only                         */
 /* ------------------------------------------------------------------ */
 
 const PRAISE = [
@@ -76,16 +121,16 @@ const CAPABILITY = [
 ];
 
 /**
- * Engines differ in how readily they name specific vendors. Perplexity and
- * Google AI Mode are citation-heavy; Claude and Gemini hedge more often.
+ * Sample bias per surface. These are arbitrary shape parameters for demo text,
+ * not measured behaviour of any assistant, and nothing derived from them is
+ * ever presented as a finding.
  */
-const ENGINE_BIAS: Record<EngineId, { mention: number; cite: number }> = {
+const ENGINE_BIAS: Record<string, { mention: number; cite: number }> = {
   chatgpt: { mention: 0.62, cite: 0.42 },
   perplexity: { mention: 0.74, cite: 0.68 },
   claude: { mention: 0.52, cite: 0.34 },
   gemini: { mention: 0.58, cite: 0.45 },
   grok: { mention: 0.55, cite: 0.3 },
-  'google-ai-mode': { mention: 0.66, cite: 0.61 },
 };
 
 const NEUTRAL_SOURCES = [
@@ -96,7 +141,7 @@ const NEUTRAL_SOURCES = [
   'https://en.wikipedia.org/wiki/Search_engine_optimization',
 ];
 
-function simulate(input: AskInput): AskResult {
+export function simulate(input: AskInput): AskResult {
   const { prompt, engine, brand, domain, competitors, seed = '' } = input;
   const day = new Date().toISOString().slice(0, 10);
   const rng = seededRandom(`${seed}|${prompt}|${engine}|${day}`);
@@ -146,11 +191,12 @@ function simulate(input: AskInput): AskResult {
   }
 
   return {
+    status: 'simulated',
     answer: lines.join('\n'),
     citations,
-    simulated: true,
-    model: `${getEngine(engine)?.model ?? engine} (simulated)`,
+    model: `${getEngine(engine)?.model ?? engine} (simulated sample)`,
     latencyMs: Math.round(300 + rng() * 900),
+    errorCategory: '',
   };
 }
 
@@ -163,6 +209,42 @@ const SYSTEM = [
   'Recommend specific named products or vendors, and list the source URLs you relied on under a "Sources:" heading.',
   'Be concise and concrete.',
 ].join(' ');
+
+/** Carries the HTTP status so the failure can be categorised honestly. */
+class ProviderError extends Error {
+  constructor(message: string, readonly httpStatus?: number) {
+    super(message);
+    this.name = 'ProviderError';
+  }
+}
+
+/** Never let a credential reach a stored error string or a log line. */
+function redact(text: string): string {
+  return text
+    .replace(/([?&]key=)[^&\s]+/gi, '$1[redacted]')
+    .replace(/\b(sk|pplx|xai|AIza)[-_A-Za-z0-9]{12,}/g, '[redacted]');
+}
+
+export function categorizeError(err: unknown): ErrorCategory {
+  if (err instanceof ProviderError && err.httpStatus) {
+    const s = err.httpStatus;
+    if (s === 401 || s === 403) return 'auth';
+    if (s === 429) return 'rate_limit';
+    if (s === 402) return 'quota';
+    if (s === 408 || s === 504) return 'timeout';
+    return 'http_error';
+  }
+  const message = err instanceof Error ? err.message.toLowerCase() : '';
+  if (message.includes('empty response')) return 'empty_response';
+  if (message.includes('abort') || message.includes('timeout')) return 'timeout';
+  if (message.includes('fetch') || message.includes('network') || message.includes('econn')) return 'network';
+  return 'unknown';
+}
+
+async function readError(res: Response): Promise<never> {
+  const body = await res.text().catch(() => '');
+  throw new ProviderError(`${res.status} ${redact(body).slice(0, 200)}`, res.status);
+}
 
 async function askOpenAiCompatible(
   url: string,
@@ -181,7 +263,7 @@ async function askOpenAiCompatible(
       max_tokens: 900,
     }),
   });
-  if (!res.ok) throw new Error(`${res.status} ${(await res.text()).slice(0, 200)}`);
+  if (!res.ok) await readError(res);
   const json = (await res.json()) as {
     choices?: Array<{ message?: { content?: string } }>;
     citations?: string[];
@@ -207,7 +289,7 @@ async function askAnthropic(apiKey: string, model: string, prompt: string) {
       messages: [{ role: 'user', content: prompt }],
     }),
   });
-  if (!res.ok) throw new Error(`${res.status} ${(await res.text()).slice(0, 200)}`);
+  if (!res.ok) await readError(res);
   const json = (await res.json()) as { content?: Array<{ type: string; text?: string }> };
   return {
     text: (json.content ?? []).filter((b) => b.type === 'text').map((b) => b.text ?? '').join('\n'),
@@ -227,7 +309,7 @@ async function askGemini(apiKey: string, model: string, prompt: string) {
       }),
     },
   );
-  if (!res.ok) throw new Error(`${res.status} ${(await res.text()).slice(0, 200)}`);
+  if (!res.ok) await readError(res);
   const json = (await res.json()) as {
     candidates?: Array<{
       content?: { parts?: Array<{ text?: string }> };
@@ -242,18 +324,51 @@ async function askGemini(apiKey: string, model: string, prompt: string) {
   };
 }
 
+function notObserved(status: 'failed' | 'unavailable', errorCategory: ErrorCategory, error: string, latencyMs = 0): AskResult {
+  return { status, answer: '', citations: [], model: '', latencyMs, errorCategory, error };
+}
+
 /**
- * Ask one engine one question.
+ * Ask one surface one question.
  *
- * Never throws: a live call that fails falls back to simulation and reports
- * the error, so a scheduled run of 300 prompts always completes.
+ * Never throws, and never substitutes one kind of answer for another. The four
+ * outcomes are distinct and all of them are recordable.
  */
 export async function ask(input: AskInput): Promise<AskResult> {
   const engine = getEngine(input.engine);
-  if (!engine) return { ...simulate(input), error: `Unknown engine "${input.engine}"` };
+  if (!engine) {
+    return notObserved('unavailable', 'unsupported_engine', `Unknown answer surface "${input.engine}".`);
+  }
 
-  const apiKey = process.env[engine.envKey];
-  if (!apiKey) return simulate(input);
+  // Captured before the narrowing below, which removes the unavailable
+  // members from `engine`'s type and takes `.name` with them.
+  const surface = engine.name;
+
+  if (engine.availability !== 'available') {
+    return notObserved(
+      'unavailable',
+      'surface_unavailable',
+      engine.unavailableReason ?? `${surface} has no compliant source and is not measured.`,
+    );
+  }
+
+  // A demo workspace never spends a provider credit and never touches a live
+  // endpoint, so demo rows and real rows can never be confused for each other.
+  if (input.mode === 'demo') return simulate(input);
+
+  const apiKey = engine.envKey ? process.env[engine.envKey] : undefined;
+  if (!apiKey) {
+    return notObserved(
+      'unavailable',
+      'no_credential',
+      `${surface} is not measured because ${engine.envKey} is not configured.`,
+    );
+  }
+
+  const model = engine.model;
+  if (!model) {
+    return notObserved('unavailable', 'surface_unavailable', `${surface} has no model configured.`);
+  }
 
   const started = Date.now();
   try {
@@ -261,42 +376,53 @@ export async function ask(input: AskInput): Promise<AskResult> {
 
     switch (engine.id) {
       case 'chatgpt':
-        out = await askOpenAiCompatible('https://api.openai.com/v1/chat/completions', apiKey, engine.model, input.prompt);
+        out = await askOpenAiCompatible('https://api.openai.com/v1/chat/completions', apiKey, model, input.prompt);
         break;
       case 'perplexity':
-        out = await askOpenAiCompatible('https://api.perplexity.ai/chat/completions', apiKey, engine.model, input.prompt);
+        out = await askOpenAiCompatible('https://api.perplexity.ai/chat/completions', apiKey, model, input.prompt);
         break;
       case 'grok':
-        out = await askOpenAiCompatible('https://api.x.ai/v1/chat/completions', apiKey, engine.model, input.prompt);
+        out = await askOpenAiCompatible('https://api.x.ai/v1/chat/completions', apiKey, model, input.prompt);
         break;
       case 'claude':
-        out = await askAnthropic(apiKey, engine.model, input.prompt);
+        out = await askAnthropic(apiKey, model, input.prompt);
         break;
       case 'gemini':
-      case 'google-ai-mode':
-        out = await askGemini(apiKey, engine.id === 'gemini' ? engine.model : 'gemini-2.0-flash', input.prompt);
+        out = await askGemini(apiKey, model, input.prompt);
         break;
       default:
-        return simulate(input);
+        return notObserved(
+          'unavailable',
+          'unsupported_engine',
+          `${surface} has no adapter wired up.`,
+        );
     }
 
-    if (!out.text.trim()) throw new Error('Empty response');
+    if (!out.text.trim()) throw new ProviderError('Empty response');
 
     return {
+      status: 'live',
       answer: out.text,
       citations: out.citations,
-      simulated: false,
-      model: engine.model,
+      model,
       latencyMs: Date.now() - started,
+      errorCategory: '',
     };
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Unknown provider error';
-    return { ...simulate(input), error: `Live call failed, simulated instead: ${message}` };
+    const message = err instanceof Error ? redact(err.message) : 'Unknown provider error';
+    return notObserved('failed', categorizeError(err), `${surface} call failed: ${message}`, Date.now() - started);
   }
 }
 
-/** Ask every engine the same question, in parallel. */
+/**
+ * Ask every registered surface the same question, in parallel.
+ *
+ * Unavailable surfaces are included in the result so the caller can report
+ * them honestly as gaps rather than omitting them, but they never produce an
+ * answer.
+ */
 export async function askAll(input: Omit<AskInput, 'engine'>): Promise<Record<EngineId, AskResult>> {
+  const { ENGINES } = await import('./engines');
   const results = await Promise.all(
     ENGINES.map(async (e) => [e.id, await ask({ ...input, engine: e.id })] as const),
   );

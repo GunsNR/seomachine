@@ -9,24 +9,31 @@ import { breadcrumbSchema, faqSchema, pageMetadata, softwareApplicationSchema } 
 export const metadata = pageMetadata({
   title: 'Pricing',
   description:
-    'Simple plans from $65/month. Every plan includes all six answer engines, the WordPress plugin and a 14-day free trial with no card required.',
+    'Simple plans from $65/month. Every plan includes the answer engines this deployment can measure, the WordPress plugin and a 14-day free trial with no card required.',
   path: '/pricing',
   keywords: ['AI SEO platform pricing', 'GEO tool cost', 'SEO software pricing'],
 });
 
+/**
+ * Plan comparison.
+ *
+ * Rows for white-label reporting, bring-your-own API keys, team seats and lead
+ * attribution were removed rather than marked "—" on every plan: none of them
+ * exists, so listing them at all implies a roadmap commitment the product has
+ * not made. What is genuinely unavailable is stated once, plainly, under the
+ * table.
+ */
 const COMPARE = [
   { label: 'Projects', starter: '1', growth: '5', scale: 'Unlimited' },
   { label: 'Tracked prompts', starter: '25', growth: '150', scale: '1,000' },
-  { label: 'Answer engines', starter: 'All 6', growth: 'All 6', scale: 'All 6' },
+  { label: 'Measurable answer engines', starter: 'Up to 5', growth: 'Up to 5', scale: 'Up to 5' },
   { label: 'Check frequency', starter: 'Weekly', growth: 'Daily', scale: 'Daily' },
   { label: 'Tracked keywords', starter: '250', growth: '2,000', scale: '20,000' },
   { label: 'Site audit pages', starter: '100', growth: '1,000', scale: 'Unlimited' },
-  { label: 'Content engine', starter: '—', growth: 'Included', scale: 'Included' },
-  { label: 'Lead attribution', starter: '—', growth: 'Included', scale: 'Included' },
-  { label: 'White-label reports', starter: '—', growth: '—', scale: 'Included' },
-  { label: 'Bring your own API keys', starter: '—', growth: '—', scale: 'Included' },
-  { label: 'REST API', starter: '—', growth: '—', scale: 'Included' },
-  { label: 'Team seats', starter: '1', growth: 'Unlimited', scale: 'Unlimited' },
+  { label: 'Content briefs + answer-readiness scoring', starter: '—', growth: 'Included', scale: 'Included' },
+  { label: 'WordPress publishing', starter: 'Included', growth: 'Included', scale: 'Included' },
+  { label: 'CSV / JSON export', starter: 'Included', growth: 'Included', scale: 'Included' },
+  { label: 'Project API keys', starter: '—', growth: '—', scale: 'Included' },
 ];
 
 export default function PricingPage() {
@@ -35,7 +42,7 @@ export default function PricingPage() {
       <JsonLd
         data={[
           breadcrumbSchema([{ name: 'Home', path: '/' }, { name: 'Pricing', path: '/pricing' }]),
-          softwareApplicationSchema({ lowPrice: 65, highPrice: 749, rating: 4.9, reviewCount: 384 }),
+          softwareApplicationSchema({ lowPrice: 65, highPrice: 749 }),
           faqSchema(FAQS.map((f) => ({ q: f.q, a: f.a }))),
         ]}
       />
@@ -49,7 +56,7 @@ export default function PricingPage() {
           </h1>
           <p className="mx-auto mt-6 max-w-2xl text-[1.125rem] leading-[1.7] text-white/75 text-pretty">
             Fourteen days free on every plan, no card required. Your first full run across all
-            six answer engines happens before you decide anything.
+            every connected answer engine happens before you decide anything.
           </p>
         </div>
       </section>

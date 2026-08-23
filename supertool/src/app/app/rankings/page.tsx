@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 import { LineChart } from '@/components/app/Chart';
-import { EmptyState, PageHeader, Panel, StatTile } from '@/components/app/ui';
+import { CapabilityUnavailable, DemoDataNotice, EmptyState, PageHeader, Panel, StatTile } from '@/components/app/ui';
 import { getSession, resolveProject } from '@/lib/auth';
 import { getKeywords } from '@/lib/dashboard';
 import { compact, money, pct } from '@/lib/utils';
@@ -13,7 +13,28 @@ export default async function RankingsPage() {
   const project = await resolveProject(session.orgId);
   if (!project) redirect('/app');
 
-  const { rows, summary } = await getKeywords(project.id);
+  const { rows, summary, rankSource } = await getKeywords(project.id, { dataMode: project.dataMode });
+
+  // Without a SERP provider there is nothing to render here. An empty chart
+  // with zeroed tiles would read as "you rank for nothing", which is a claim
+  // this product has no basis to make.
+  if (!rankSource.shown) {
+    return (
+      <>
+        <PageHeader
+          title="Rankings"
+          sub="Search position tracking."
+        />
+        <div className="mt-6">
+          <CapabilityUnavailable
+            title="Rank tracking is not available"
+            status="unavailable"
+            reason={`${rankSource.reason} When a provider is connected this page will show positions, movement and click forecasts for the ${rows.length} keywords you already track.`}
+          />
+        </div>
+      </>
+    );
+  }
 
   // Average position across everything that ranks, per capture date.
   const byDate = new Map<string, number[]>();
@@ -38,15 +59,17 @@ export default async function RankingsPage() {
     <>
       <PageHeader
         title="Rankings"
-        sub="Daily positions with click forecasts that account for AI Overviews, snippets and ads."
+        sub="Positions with modelled click forecasts that account for AI Overviews, snippets and ads. Forecasts are estimates, not measured traffic."
       />
 
       <div className="mt-6 space-y-6">
+        {rankSource.demo && <DemoDataNotice what="Every position, movement and forecast below" />}
+
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatTile label="Avg position" value={avgTrend.at(-1)?.value ?? '—'} sub="Across ranking keywords" />
-          <StatTile label="Share of voice" value={pct(summary.shareOfVoice)} sub="Volume-weighted" />
-          <StatTile label="Est. traffic" value={summary.traffic} sub="Monthly organic clicks" />
-          <StatTile label="Traffic value" value={money(summary.value)} sub="If bought on paid search" />
+          <StatTile label="Share of voice" value={summary.shareOfVoice === null ? '—' : pct(summary.shareOfVoice)} sub="Volume-weighted" />
+          <StatTile label="Est. traffic" value={summary.traffic ?? '—'} sub="Modelled monthly clicks, not measured" />
+          <StatTile label="Est. traffic value" value={summary.value === null ? '—' : money(summary.value)} sub="Modelled equivalent paid cost" />
         </div>
 
         <Panel title="Average position over time" sub="Lower is better — the axis is inverted">

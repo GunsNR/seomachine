@@ -5,9 +5,9 @@ name: SuperTool CI
 on:
   push:
     branches: [main]
-    paths: ['supertool/**', '.github/workflows/supertool.yml']
+    paths: ['supertool/**', 'docs/**', '.github/workflows/supertool.yml']
   pull_request:
-    paths: ['supertool/**', '.github/workflows/supertool.yml']
+    paths: ['supertool/**', 'docs/**', '.github/workflows/supertool.yml']
 
 concurrency:
   group: supertool-${{ github.ref }}

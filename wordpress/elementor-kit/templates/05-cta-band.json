@@ -47,7 +47,7 @@
               "elType": "widget",
               "widgetType": "text-editor",
               "settings": {
-                "editor": "<p>Run one full check across all six answer engines, free. It takes about a minute and needs nothing but your domain.</p>",
+                "editor": "<p>Run one full check across every connected answer engine, free. It takes about a minute and needs nothing but your domain.</p>",
                 "align": "center",
                 "text_color": "rgba(255,255,255,0.85)",
                 "typography_typography": "custom",

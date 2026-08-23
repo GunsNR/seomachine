@@ -3,7 +3,7 @@ import { ArrowRight } from 'lucide-react';
 
 export function CtaBand({
   title = 'Find out what the assistants say about you',
-  sub = 'Run one full check across all six answer engines, free. It takes about a minute and needs nothing but your domain.',
+  sub = 'Run one full check across every connected answer engine, free. It takes about a minute and needs nothing but your domain.',
   primary = { label: 'Start free trial', href: '/signup' },
   secondary = { label: 'Book a demo', href: '/contact' },
 }: {

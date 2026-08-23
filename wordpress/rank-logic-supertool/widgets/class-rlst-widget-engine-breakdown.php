@@ -123,6 +123,12 @@ class RLST_Widget_Engine_Breakdown extends RLST_Widget_Base {
 			<ul style="list-style:none;margin:0;padding:0;display:grid;gap:1em;">
 				<?php foreach ( $data['engines'] as $engine ) : ?>
 					<?php
+					// An engine with no observation has a null score. Rendering it
+					// as 0 would state that no assistant named the brand, when in
+					// fact the surface was never reached.
+					if ( ! isset( $engine['score'] ) || null === $engine['score'] ) {
+						continue;
+					}
 					$score = max( 0, min( 100, (int) $engine['score'] ) );
 					$color = $use_colors && ! empty( $engine['color'] ) ? $engine['color'] : $fallback;
 					?>
@@ -153,7 +159,7 @@ class RLST_Widget_Engine_Breakdown extends RLST_Widget_Base {
 								printf(
 									/* translators: 1: mention rate, 2: citation rate. */
 									esc_html__( 'Named in %1$s · cited in %2$s', 'rank-logic-supertool' ),
-									esc_html( round( $engine['mentionRate'] * 100 ) . '%' ),
+									esc_html( round( (float) $engine['mentionRate'] * 100 ) . '%' ),
 									esc_html( round( $engine['citationRate'] * 100 ) . '%' )
 								);
 								?>

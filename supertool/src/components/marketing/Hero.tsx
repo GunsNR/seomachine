@@ -3,7 +3,12 @@ import { ArrowRight, Check } from 'lucide-react';
 import { EngineRow } from './EngineRow';
 import { VisibilityPreview } from './VisibilityPreview';
 
-const PROOF = ['14-day free trial', 'No card required', '5-minute WordPress setup'];
+/**
+ * Only things that are true and checkable. "5-minute WordPress setup" was
+ * removed: the plugin has never been installed on a live WordPress site from
+ * this codebase, so there is no basis for any setup-time claim.
+ */
+const PROOF = ['14-day free trial', 'No card required', 'Every figure carries its source'];
 
 export function Hero() {
   return (
@@ -49,9 +54,10 @@ export function Hero() {
           </h1>
 
           <p className="mt-6 max-w-xl text-[1.125rem] leading-[1.7] text-white/75 text-pretty">
-            Half your buyers now ask an assistant before they ever open a search results page.
-            Rank Logic SuperTool writes content tuned to how those assistants pick sources,
-            publishes it to your site in one click, and tracks every citation, ranking and lead it earns.
+            When a buyer asks an assistant which vendor to use, you are either in the answer
+            or you are not — and nothing in a classic rank tracker tells you which. Rank Logic
+            SuperTool asks the engines your buyers&rsquo; questions on a schedule, records what comes
+            back, and shows you the coverage behind every number.
           </p>
 
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
@@ -75,7 +81,7 @@ export function Hero() {
 
           <div className="mt-10 border-t border-white/10 pt-6">
             <p className="text-[0.72rem] font-bold uppercase tracking-[0.14em] text-white/45">
-              Tracking every answer engine that matters
+              Measurable answer engines
             </p>
             <EngineRow dark className="mt-3.5 !justify-start" />
           </div>

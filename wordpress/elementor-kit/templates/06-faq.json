@@ -55,18 +55,18 @@
                   },
                   {
                     "_id": "1229c08",
-                    "tab_title": "How is this different from a rank tracker?",
-                    "tab_content": "<p>A rank tracker tells you where a URL sits in a list of ten links. An answer engine returns one synthesised answer and a handful of sources. SuperTool tracks both, side by side, against the same content.</p>"
+                    "tab_title": "Does this replace a rank tracker?",
+                    "tab_content": "<p>A rank tracker tells you where a URL sits in a list of ten links. An answer engine returns one synthesised answer and a handful of sources. SuperTool measures the second — it does not track search positions today.</p>"
                   },
                   {
                     "_id": "1233a3f",
                     "tab_title": "Do I need my own API keys?",
-                    "tab_content": "<p>No. SuperTool runs the engine checks for you on every plan. On the Scale plan you can supply your own credentials for cost control or data residency.</p>"
+                    "tab_content": "<p>SuperTool runs the engine checks using the credentials configured on the deployment. There is no per-tenant credential store, so bringing your own provider keys is not supported on any plan.</p>"
                   },
                   {
                     "_id": "123d876",
                     "tab_title": "Will the WordPress plugin break my theme or SEO plugin?",
-                    "tab_content": "<p>No. The plugin adds no front-end CSS and takes over none of your existing metadata. It writes SEO fields through whichever plugin you already run — Yoast and Rank Math are both supported.</p>"
+                    "tab_content": "<p>It is designed not to: no front-end CSS, and it takes over none of your existing metadata. It writes SEO fields through whichever plugin you already run — Yoast and Rank Math are both handled. That behaviour is covered by tests against a stubbed API, not yet against a live install, so treat it as beta.</p>"
                   }
                 ],
                 "title_color": "#0B1220",

@@ -116,6 +116,26 @@ class RLST_Widget_Visibility_Score extends RLST_Widget_Base {
 
 		$settings = $this->get_settings_for_display();
 		$delta    = isset( $data['delta'] ) ? (int) $data['delta'] : 0;
+
+		// The API returns null rather than 0 when nothing was observed, and a
+		// provenance block describing the run. A widget on a public page must
+		// never render demo or partial data as a live score.
+		$provenance = isset( $data['provenance'] ) && is_array( $data['provenance'] ) ? $data['provenance'] : array();
+		$mode       = isset( $provenance['mode'] ) ? (string) $provenance['mode'] : '';
+		$observed   = isset( $provenance['observed'] ) ? (int) $provenance['observed'] : 0;
+		$has_score  = isset( $data['score'] ) && null !== $data['score'] && $observed > 0;
+
+		if ( ! $has_score || in_array( $mode, array( 'demo', 'mixed', 'unavailable', 'none' ), true ) ) {
+			?>
+			<div class="rlst-score">
+				<p class="rlst-score-value" style="margin:0;font-weight:800;line-height:1;">—</p>
+				<p class="rlst-score-metrics" style="margin:.6em 0 0;font-size:.9em;opacity:.8;">
+					<?php esc_html_e( 'No measured visibility to show yet.', 'rank-logic-supertool' ); ?>
+				</p>
+			</div>
+			<?php
+			return;
+		}
 		?>
 		<div class="rlst-score">
 			<?php if ( ! empty( $settings['heading'] ) ) : ?>
@@ -125,7 +145,7 @@ class RLST_Widget_Visibility_Score extends RLST_Widget_Base {
 			<?php endif; ?>
 
 			<p class="rlst-score-value" style="margin:0;font-weight:800;line-height:1;">
-				<?php echo esc_html( (string) $data['score'] ); ?><span style="font-size:.35em;opacity:.55;">/100</span>
+				<?php echo esc_html( (string) (int) $data['score'] ); ?><span style="font-size:.35em;opacity:.55;">/100</span>
 				<?php if ( 'yes' === $settings['show_delta'] && 0 !== $delta ) : ?>
 					<span style="font-size:.28em;margin-left:.5em;color:<?php echo $delta > 0 ? '#12A150' : '#E5484D'; ?>;">
 						<?php echo esc_html( ( $delta > 0 ? '▲ ' : '▼ ' ) . abs( $delta ) ); ?>
@@ -138,10 +158,10 @@ class RLST_Widget_Visibility_Score extends RLST_Widget_Base {
 					<?php
 					printf(
 						/* translators: 1: mention rate, 2: citation rate, 3: number of checks. */
-						esc_html__( 'Named in %1$s of answers · cited in %2$s · %3$d checks', 'rank-logic-supertool' ),
-						esc_html( round( $data['mentionRate'] * 100 ) . '%' ),
-						esc_html( round( $data['citationRate'] * 100 ) . '%' ),
-						(int) $data['checks']
+						esc_html__( 'Named in %1$s of answers · cited in %2$s · %3$d observed checks', 'rank-logic-supertool' ),
+						esc_html( round( (float) $data['mentionRate'] * 100 ) . '%' ),
+						esc_html( round( (float) $data['citationRate'] * 100 ) . '%' ),
+						$observed
 					);
 					?>
 				</p>

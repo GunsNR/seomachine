@@ -10,7 +10,7 @@ import { breadcrumbSchema, pageMetadata } from '@/lib/metadata';
 export const metadata = pageMetadata({
   title: 'Platform',
   description:
-    'AI visibility tracking, citation monitoring, rank tracking, site audit, keyword research, content scoring, WordPress publishing and lead attribution — in one platform.',
+    'AI visibility tracking, citation monitoring, site audit, keyword research, content briefs and scoring, and WordPress publishing — in one platform.',
   path: '/platform',
   keywords: ['AI SEO platform', 'GEO software', 'SEO tool suite'],
 });
@@ -68,8 +68,8 @@ function groupTitle(g: string): string {
 
 function groupSub(g: string): string {
   if (g === 'AI Search')
-    return 'Six engines, a fixed prompt set and evidence stored for every check — so "are we in AI results?" becomes a number with a trend line.';
+    return 'Every connected engine, a fixed prompt set and evidence stored for every check — so "are we in AI results?" becomes a number with a trend line and a stated coverage.';
   if (g === 'Classic SEO')
-    return 'Rank tracking that accounts for AI Overviews, an audit that grades answer-readiness, and keyword scoring that ranks work rather than listing it.';
+    return 'An audit that grades answer-readiness, and keyword scoring that ranks work rather than listing it — with every figure labelled measured, part-modelled or estimated.';
   return 'One-click publishing that respects your existing stack, and attribution that ties an assistant answer to a lead in your CRM.';
 }

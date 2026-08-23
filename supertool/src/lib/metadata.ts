@@ -59,6 +59,14 @@ export function pageMetadata(seo: PageSeo): Metadata {
 /* JSON-LD builders                                                  */
 /* ---------------------------------------------------------------- */
 
+/**
+ * Organization markup.
+ *
+ * Postal address, telephone and social profiles are emitted only once
+ * `brand.identityVerified` is true. Until an owner has confirmed them they are
+ * placeholders, and publishing placeholder contact details as structured data
+ * asserts a real-world business location that does not exist.
+ */
 export function organizationSchema() {
   return {
     '@context': 'https://schema.org',
@@ -70,16 +78,20 @@ export function organizationSchema() {
     logo: { '@type': 'ImageObject', url: `${BASE}/icon.svg` },
     description: brand.description,
     email: brand.email,
-    telephone: brand.phone,
-    address: {
-      '@type': 'PostalAddress',
-      streetAddress: brand.address.street,
-      addressLocality: brand.address.city,
-      addressRegion: brand.address.region,
-      postalCode: brand.address.postalCode,
-      addressCountry: brand.address.country,
-    },
-    sameAs: Object.values(brand.social),
+    ...(brand.identityVerified
+      ? {
+          telephone: brand.phone,
+          address: {
+            '@type': 'PostalAddress',
+            streetAddress: brand.address.street,
+            addressLocality: brand.address.city,
+            addressRegion: brand.address.region,
+            postalCode: brand.address.postalCode,
+            addressCountry: brand.address.country,
+          },
+          sameAs: Object.values(brand.social),
+        }
+      : {}),
   };
 }
 
@@ -100,7 +112,15 @@ export function websiteSchema() {
   };
 }
 
-export function softwareApplicationSchema(opts: { lowPrice: number; highPrice: number; rating: number; reviewCount: number }) {
+/**
+ * Product structured data.
+ *
+ * Deliberately emits no `aggregateRating`. There are no reviews to aggregate,
+ * and a fabricated rating in structured data is both a lie to the reader and a
+ * violation of Google's structured-data policy. When real reviews exist, the
+ * rating goes back in with a claim record behind it — not before.
+ */
+export function softwareApplicationSchema(opts: { lowPrice: number; highPrice: number }) {
   return {
     '@context': 'https://schema.org',
     '@type': 'SoftwareApplication',
@@ -116,13 +136,6 @@ export function softwareApplicationSchema(opts: { lowPrice: number; highPrice: n
       lowPrice: opts.lowPrice,
       highPrice: opts.highPrice,
       offerCount: 3,
-    },
-    aggregateRating: {
-      '@type': 'AggregateRating',
-      ratingValue: opts.rating,
-      reviewCount: opts.reviewCount,
-      bestRating: 5,
-      worstRating: 1,
     },
   };
 }

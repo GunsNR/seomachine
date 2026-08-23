@@ -47,7 +47,7 @@
               "elType": "widget",
               "widgetType": "text-editor",
               "settings": {
-                "editor": "<p>Most teams bolt an AI-tracking tool onto a rank tracker onto a writing tool, then reconcile three dashboards by hand. SuperTool measures, writes, publishes and attributes in one place.</p>",
+                "editor": "<p>Most teams bolt an AI-tracking tool onto an audit tool onto a writing tool, then reconcile three dashboards by hand. SuperTool measures, audits, briefs and publishes in one place — with the source of every figure shown beside it.</p>",
                 "align": "center",
                 "text_color": "#4A5568",
                 "typography_typography": "custom",
@@ -103,7 +103,7 @@
               "widgetType": "icon-box",
               "settings": {
                 "title_text": "AI Visibility Tracking",
-                "description_text": "Run a fixed prompt set across all six answer engines on a schedule. See mention rate, citation rate and share of voice.",
+                "description_text": "Run a fixed prompt set across every connected answer engine on a schedule. See mention rate, citation rate and share of voice.",
                 "selected_icon": {
                   "value": "fas fa-wand-magic-sparkles",
                   "library": "fa-solid"
