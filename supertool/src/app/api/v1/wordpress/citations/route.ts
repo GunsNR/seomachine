@@ -7,13 +7,13 @@ import { parseJson } from '@/lib/utils';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export function OPTIONS() {
-  return corsPreflight();
+export function OPTIONS(req: Request) {
+  return corsPreflight(req);
 }
 
 /** Feeds the Elementor "Citation Feed" widget. */
 export async function GET(req: Request) {
-  const { project, response } = await requireApiKey(req);
+  const { project, response } = await requireApiKey(req, 'citations:read');
   if (!project) return response;
 
   const limit = Math.min(50, Math.max(1, Number(new URL(req.url).searchParams.get('limit') ?? 10)));

@@ -76,7 +76,7 @@ export const POST = withSession(Body, async ({ session, body }) => {
     siteName: check.siteName ?? '',
     authenticatedAs: check.user ?? '',
   });
-});
+}, 'project:write');
 
 export const DELETE = withSession(null, async ({ session, req }) => {
   const projectId = new URL(req.url).searchParams.get('projectId');
@@ -88,4 +88,4 @@ export const DELETE = withSession(null, async ({ session, req }) => {
   if (result.count === 0) return fail('No WordPress connection to remove.', 404);
 
   return NextResponse.json({ ok: true });
-});
+}, 'project:write');

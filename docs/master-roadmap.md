@@ -30,9 +30,9 @@ anything it depends on is outstanding.
 | Phase | Title | State | Depends on | Delivers | Owner action needed |
 | --- | --- | --- | --- | --- | --- |
 | `foundation` | Truth Gate 0 and Measurement Gate 1 | `complete` | — | 14 capabilities incl. `site_audit`, `csv_export`, `measurement_foundation`, `wordpress_publishing` | None |
-| `phase-0` | Product constitution and executable blueprint | `in-progress` | `foundation` | — (documentation only) | None |
+| `phase-0` | Product constitution and executable blueprint | `complete` | `foundation` | — (documentation only) | None |
 | `phase-1` | Grounded provider activation | `not-started` | `phase-0` | `ai_visibility_tracking`, `citation_monitoring`, `competitor_share_of_voice` | Credentials, doc access, spend, legal review |
-| `phase-2` | Production data, jobs, tenancy and security | `not-started` | `phase-1` | `teams_rbac`, `byo_provider_keys` | PostgreSQL instance, representative data copy |
+| `phase-2` | Production data, jobs, tenancy and security | `in-progress` | `phase-0` | `teams_rbac`, `byo_provider_keys` | Hosted PostgreSQL instance, representative data copy for migration rehearsal |
 | `phase-3` | First-party integrations and verified publishing | `not-started` | `phase-2` | `google_search_console`, `google_analytics` | Google Cloud project, real WordPress install, Stripe test account, email provider |
 | `phase-4` | Core classic SEO intelligence | `not-started` | `phase-3` | `rank_tracking`, `backlink_tracking`, `local_device_tracking` | Licensed data provider contracts, recurring spend, legal review |
 | `phase-5` | Action-first product and original design system | `not-started` | `phase-4` | — (experience, not new capabilities) | Access to representative users |

@@ -36,7 +36,7 @@ export const POST = withSession(CreateBody, async ({ session, body }) => {
   });
 
   return NextResponse.json({ ok: true, project });
-});
+}, 'project:write');
 
 const UpdateBody = z.object({
   id: z.string().min(1).max(64),
@@ -61,7 +61,7 @@ export const PATCH = withSession(UpdateBody, async ({ session, body }) => {
   });
 
   return NextResponse.json({ ok: true, project });
-});
+}, 'project:write');
 
 export const DELETE = withSession(null, async ({ session, req }) => {
   const id = new URL(req.url).searchParams.get('id');
@@ -78,4 +78,4 @@ export const DELETE = withSession(null, async ({ session, req }) => {
   if (result.count === 0) return fail('Project not found.', 404);
 
   return NextResponse.json({ ok: true });
-});
+}, 'project:delete');

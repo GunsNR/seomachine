@@ -6,8 +6,8 @@ import { brand } from '../../../../../../brand.config';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export function OPTIONS() {
-  return corsPreflight();
+export function OPTIONS(req: Request) {
+  return corsPreflight(req);
 }
 
 /**

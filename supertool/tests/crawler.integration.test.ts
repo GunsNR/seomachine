@@ -67,7 +67,7 @@ afterAll(async () => {
 
 describe('fetchPage over real HTTP', () => {
   it('parses a live page', async () => {
-    const p = await fetchPage(`${base}/`);
+    const p = await fetchPage(`${base}/`, { allowPrivateHosts: true });
     expect(p.ok).toBe(true);
     expect(p.status).toBe(200);
     expect(p.title).toContain('Fixture Home');
@@ -80,19 +80,19 @@ describe('fetchPage over real HTTP', () => {
   });
 
   it('reports a 404 as data rather than throwing', async () => {
-    const p = await fetchPage(`${base}/gone`);
+    const p = await fetchPage(`${base}/gone`, { allowPrivateHosts: true });
     expect(p.ok).toBe(false);
     expect(p.status).toBe(404);
   });
 
   it('flags a non-HTML response instead of parsing it', async () => {
-    const p = await fetchPage(`${base}/data.json`);
+    const p = await fetchPage(`${base}/data.json`, { allowPrivateHosts: true });
     expect(p.error).toMatch(/Non-HTML/);
     expect(p.wordCount).toBe(0);
   });
 
   it('returns an error object for an unreachable host', async () => {
-    const p = await fetchPage('http://127.0.0.1:1/', { timeoutMs: 2000 });
+    const p = await fetchPage('http://127.0.0.1:1/', { timeoutMs: 2000, allowPrivateHosts: true });
     expect(p.ok).toBe(false);
     expect(p.error).toBeTruthy();
   });
@@ -100,7 +100,7 @@ describe('fetchPage over real HTTP', () => {
 
 describe('crawlSite over real HTTP', () => {
   it('follows internal links and stays on-origin', async () => {
-    const pages = await crawlSite(base, { maxPages: 10, concurrency: 2, timeoutMs: 8000 });
+    const pages = await crawlSite(base, { maxPages: 10, concurrency: 2, timeoutMs: 8000 , allowPrivateHosts: true });
     const paths = pages.map((p) => new URL(p.finalUrl).pathname).sort();
     expect(paths).toContain('/');
     expect(paths).toContain('/about');
@@ -110,12 +110,12 @@ describe('crawlSite over real HTTP', () => {
   });
 
   it('respects maxPages', async () => {
-    const pages = await crawlSite(base, { maxPages: 2, concurrency: 1 });
+    const pages = await crawlSite(base, { maxPages: 2, concurrency: 1 , allowPrivateHosts: true });
     expect(pages.length).toBeLessThanOrEqual(2);
   });
 
   it('produces an audit that catches the deliberately broken page', async () => {
-    const pages = await crawlSite(base, { maxPages: 10, concurrency: 2 });
+    const pages = await crawlSite(base, { maxPages: 10, concurrency: 2 , allowPrivateHosts: true });
     const report = auditPages(pages);
 
     const thinFindings = report.findings.filter((f) => f.url.endsWith('/thin'));

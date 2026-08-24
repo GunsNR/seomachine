@@ -18,7 +18,35 @@ const organization = { findFirst: vi.fn(), findMany: vi.fn() };
 interface CreateArgs { data: Record<string, unknown> }
 const contactInquiry = { create: vi.fn(async (_args: CreateArgs) => ({ id: 'inq_1' })) };
 
-vi.mock('@/lib/db', () => ({ db: { project, lead, organization, contactInquiry } }));
+/**
+ * An in-memory stand-in for the shared rate-limit table.
+ *
+ * Phase 2 moved this endpoint from the per-process limiter to the shared one,
+ * which reads and writes `RateLimitCounter`. The shared limiter fails **open**
+ * on a database error — a deliberate trade, since a limiter that fails closed
+ * turns a database blip into a total sign-in outage. That means a mock missing
+ * this model would silently disable rate limiting and the assertion below would
+ * pass for the wrong reason, so the fake behaves like the real table.
+ */
+const counters = new Map<string, { count: number; resetAt: Date }>();
+const rateLimitCounter = {
+  findUnique: vi.fn(async ({ where }: { where: { key: string } }) => counters.get(where.key) ?? null),
+  upsert: vi.fn(async ({ where, create }: { where: { key: string }; create: { key: string; count: number; resetAt: Date } }) => {
+    counters.set(where.key, { count: create.count, resetAt: create.resetAt });
+    return counters.get(where.key);
+  }),
+  update: vi.fn(async ({ where }: { where: { key: string } }) => {
+    const row = counters.get(where.key);
+    if (!row) throw new Error('missing counter');
+    row.count += 1;
+    return row;
+  }),
+  deleteMany: vi.fn(async () => ({ count: 0 })),
+};
+
+vi.mock('@/lib/db', () => ({
+  db: { project, lead, organization, contactInquiry, rateLimitCounter },
+}));
 
 const { POST } = await import('@/app/api/contact/route');
 
@@ -32,8 +60,9 @@ const body = {
 
 let ip = 0;
 function request(payload: unknown) {
-  // A fresh client key per call so the in-memory rate limiter does not leak
-  // between tests.
+  // A fresh client key per call so the limiter does not leak between tests.
+  // X-Forwarded-For is only honoured because the trusted-proxy count is set
+  // below; without it every caller shares one bucket by design.
   ip += 1;
   return new Request('https://example.test/api/contact', {
     method: 'POST',
@@ -42,7 +71,13 @@ function request(payload: unknown) {
   });
 }
 
+// The endpoint's client identity now depends on how many proxies are trusted.
+// Declaring one here is what makes the per-caller X-Forwarded-For values in
+// these fixtures meaningful, and mirrors a normal single-load-balancer deploy.
+process.env.TRUSTED_PROXY_COUNT = '1';
+
 beforeEach(() => {
+  counters.clear();
   for (const fn of [project.findFirst, project.findMany, lead.create, lead.createMany,
     organization.findFirst, organization.findMany, contactInquiry.create]) {
     fn.mockClear();

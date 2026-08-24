@@ -111,7 +111,7 @@ const PHASES: readonly Phase[] = [
   {
     id: 'phase-0',
     title: 'Product constitution and executable blueprint',
-    state: 'in-progress',
+    state: 'complete',
     dependsOn: ['foundation'],
     delivers: [],
     acceptanceCriteria: [
@@ -151,8 +151,14 @@ const PHASES: readonly Phase[] = [
   {
     id: 'phase-2',
     title: 'Production data, jobs, tenancy and security',
-    state: 'not-started',
-    dependsOn: ['phase-1'],
+    state: 'in-progress',
+    // Deliberately NOT dependent on phase-1. The original sequencing assumed
+    // it, but nothing about migrations, durable jobs, tenancy or security needs
+    // a grounded provider — and phase-1 is blocked on credentials and vendor
+    // documentation access that cannot be obtained in-repo. Encoding a
+    // dependency that does not exist would have stalled the work that can be
+    // done behind work that cannot. See ADR-015.
+    dependsOn: ['phase-0'],
     delivers: ['teams_rbac', 'byo_provider_keys'],
     acceptanceCriteria: [
       'PostgreSQL with reviewed migrations replaces SQLite and `prisma db push`.',

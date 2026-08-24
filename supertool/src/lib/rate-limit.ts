@@ -3,12 +3,16 @@ import 'server-only';
 /**
  * Fixed-window rate limiter.
  *
- * Deliberately in-memory: it needs no infrastructure, which keeps the product
- * deployable as a single container. The trade-off is that limits are
- * per-instance — behind a multi-instance load balancer the effective limit is
- * (limit x instances). For the public tool endpoints this is a speed bump
- * against casual abuse, not a billing control; swap the store for Redis if you
- * need a global guarantee.
+ * Two stores. `rateLimit` is the in-memory one and stays for hot paths where a
+ * per-process speed bump is genuinely enough. `sharedRateLimit` is backed by
+ * the database and is what anything resembling a security or billing control
+ * must use, because the in-memory limiter multiplies by the instance count:
+ * behind four replicas a "10 per minute" limit was really 40.
+ *
+ * Client identity now comes from `lib/client-ip.ts`, which knows how many
+ * proxies to trust. Previously it took the leftmost `X-Forwarded-For` entry,
+ * which the caller writes — so the limiter keyed on a value the attacker chose,
+ * and rotating it reset the window.
  */
 
 interface Window {
@@ -58,16 +62,12 @@ export function rateLimit(key: string, limit: number, windowMs: number): RateLim
 }
 
 /**
- * Best-effort client identity.
+ * Client identity for a rate-limit bucket.
  *
- * Proxy headers are spoofable, so this is not a security boundary — it is
- * enough to stop one impatient browser hammering an expensive endpoint.
+ * Re-exported from `lib/client-ip.ts` so existing call sites keep working while
+ * the trust arithmetic lives in one place.
  */
-export function clientKey(req: Request, scope: string): string {
-  const forwarded = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
-  const ip = forwarded || req.headers.get('x-real-ip') || 'unknown';
-  return `${scope}:${ip}`;
-}
+export { clientKey } from './client-ip';
 
 /** Standard headers so clients can back off intelligently. */
 export function rateLimitHeaders(result: RateLimitResult): Record<string, string> {
@@ -78,4 +78,76 @@ export function rateLimitHeaders(result: RateLimitResult): Record<string, string
   };
   if (!result.ok) headers['Retry-After'] = String(result.retryAfterSeconds);
   return headers;
+}
+
+
+/**
+ * Database-backed fixed-window limiter, shared across every instance.
+ *
+ * Use this wherever the limit is a control rather than a courtesy: login,
+ * password reset, signup, public tool endpoints. The extra round-trip is worth
+ * it precisely where the in-memory limiter's per-process weakness matters.
+ *
+ * Fails **open** on a database error. That is a deliberate trade and worth
+ * stating plainly: a limiter that fails closed converts a database blip into a
+ * total outage of sign-in. The exposure window is the length of the outage, and
+ * losing rate limiting for that window is less harmful than losing the product.
+ */
+export async function sharedRateLimit(
+  key: string,
+  limit: number,
+  windowMs: number,
+  now = new Date(),
+): Promise<RateLimitResult> {
+  const { db } = await import('./db');
+
+  try {
+    const existing = await db.rateLimitCounter.findUnique({ where: { key } });
+
+    if (!existing || existing.resetAt.getTime() <= now.getTime()) {
+      const resetAt = new Date(now.getTime() + windowMs);
+      await db.rateLimitCounter.upsert({
+        where: { key },
+        create: { key, count: 1, resetAt },
+        update: { count: 1, resetAt },
+      });
+      return {
+        ok: true,
+        limit,
+        remaining: limit - 1,
+        resetAt: resetAt.getTime(),
+        retryAfterSeconds: 0,
+      };
+    }
+
+    const updated = await db.rateLimitCounter.update({
+      where: { key },
+      data: { count: { increment: 1 } },
+      select: { count: true, resetAt: true },
+    });
+
+    const remaining = Math.max(0, limit - updated.count);
+    return {
+      ok: updated.count <= limit,
+      limit,
+      remaining,
+      resetAt: updated.resetAt.getTime(),
+      retryAfterSeconds: Math.max(1, Math.ceil((updated.resetAt.getTime() - now.getTime()) / 1000)),
+    };
+  } catch {
+    return {
+      ok: true,
+      limit,
+      remaining: limit,
+      resetAt: now.getTime() + windowMs,
+      retryAfterSeconds: 0,
+    };
+  }
+}
+
+/** Drop expired shared counters. Called from the maintenance sweep. */
+export async function pruneRateLimitCounters(now = new Date()): Promise<number> {
+  const { db } = await import('./db');
+  const result = await db.rateLimitCounter.deleteMany({ where: { resetAt: { lt: now } } });
+  return result.count;
 }

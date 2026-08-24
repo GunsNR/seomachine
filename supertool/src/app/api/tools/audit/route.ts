@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { clientKey, rateLimit, rateLimitHeaders } from '@/lib/rate-limit';
+import { clientKey, rateLimitHeaders, sharedRateLimit } from '@/lib/rate-limit';
 import { z } from 'zod';
 import { auditPages } from '@/lib/seo/audit';
 import { crawlSite, normalizeUrl } from '@/lib/seo/crawler';
@@ -18,7 +18,7 @@ const Body = z.object({
 /** Public, rate-limited technical audit used by the free tool page. */
 export async function POST(req: Request) {
   // Crawling is expensive, so the free audit is capped per IP.
-  const limited = rateLimit(clientKey(req, 'tools-audit'), 5, 10 * 60_000);
+  const limited = await sharedRateLimit(clientKey(req, 'tools-audit'), 5, 10 * 60_000);
   if (!limited.ok) {
     return NextResponse.json(
       { error: `Too many requests. Try again in ${limited.retryAfterSeconds} seconds, or start a trial for unlimited runs.` },

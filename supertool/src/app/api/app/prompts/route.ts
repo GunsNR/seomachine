@@ -88,7 +88,7 @@ export const POST = withSession(AddBody, async ({ session, body }) => {
   });
 
   return NextResponse.json({ ok: true, added: fresh.length, skipped: candidates.length - fresh.length });
-});
+}, 'project:write');
 
 export const DELETE = withSession(null, async ({ session, req }) => {
   const id = new URL(req.url).searchParams.get('id');
@@ -100,4 +100,4 @@ export const DELETE = withSession(null, async ({ session, req }) => {
   if (result.count === 0) return fail('Prompt not found.', 404);
 
   return NextResponse.json({ ok: true });
-});
+}, 'project:write');

@@ -196,4 +196,4 @@ export const POST = withSession(Body, async ({ session, body }) => {
     competitorsAdded: competitorDomains.length,
     suggestedFromSite: suggestedKeywords.length,
   });
-});
+}, 'project:write');

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getSession } from '@/lib/auth';
+import { can } from '@/lib/rbac';
 import { db } from '@/lib/db';
 import { assertEntitled } from '@/lib/plan';
 import { startRun } from '@/lib/measurement/run';
@@ -30,6 +31,9 @@ const Body = z.object({
 export async function POST(req: Request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Not signed in.' }, { status: 401 });
+  if (!can(session.role, 'measurement:run')) {
+    return NextResponse.json({ error: 'Your role cannot perform this action.' }, { status: 403 });
+  }
 
   let input: z.infer<typeof Body>;
   try {

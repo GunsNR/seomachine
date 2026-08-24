@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { getSession, type SessionUser } from './auth';
 import { db } from './db';
 import { PlanLimitError, SubscriptionRequiredError } from './plan';
+import { assertCan, ForbiddenError, type Permission } from './rbac';
 
 /** Standard JSON error shape used by every dashboard route. */
 export function fail(message: string, status = 400) {
@@ -21,10 +22,27 @@ export function withSession<S extends z.ZodTypeAny>(
     body: S extends z.ZodTypeAny ? z.infer<S> : undefined;
     req: Request;
   }) => Promise<Response>,
+  /**
+   * Permission the caller must hold.
+   *
+   * Optional only so read-only handlers need not repeat `project:read`. Any
+   * handler that writes must name one — `tests/rbac.test.ts` asserts that every
+   * mutating dashboard route does.
+   */
+  permission?: Permission,
 ) {
   return async (req: Request): Promise<Response> => {
     const session = await getSession();
     if (!session) return fail('Not signed in.', 401);
+
+    if (permission) {
+      try {
+        assertCan(session.role, permission);
+      } catch (err) {
+        if (err instanceof ForbiddenError) return fail(err.message, 403);
+        throw err;
+      }
+    }
 
     let body: unknown;
     if (schema) {
@@ -44,6 +62,7 @@ export function withSession<S extends z.ZodTypeAny>(
     try {
       return await handler({ session, body: body as never, req });
     } catch (err) {
+      if (err instanceof ForbiddenError) return fail(err.message, 403);
       if (err instanceof PlanLimitError) return fail(err.message, 402);
       if (err instanceof SubscriptionRequiredError) return fail(err.message, 402);
       console.error('route error:', err);

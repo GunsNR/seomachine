@@ -1,6 +1,10 @@
 // Rank Logic SuperTool data model.
-// SQLite by default so the product runs with zero infrastructure; swap the
-// provider to postgresql and the same schema deploys to a hosted database.
+//
+// PostgreSQL, with a reviewed migration history under prisma/migrations.
+// Phase 2 replaced the previous SQLite + `db push` posture: `db push` mutates a
+// schema with no recorded, reviewable, reversible step, which is acceptable
+// while prototyping and unacceptable once real customer data exists. See
+// docs/architecture-decision-log.md ADR-009 and ADR-014.
 
 generator client {
   provider = "prisma-client-js"
@@ -8,7 +12,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
@@ -21,6 +25,7 @@ model User {
   createdAt    DateTime             @default(now())
   memberships  Membership[]
   resetTokens  PasswordResetToken[]
+  sessions     Session[]
 }
 
 /// Single-use, expiring password reset token. Only the hash is stored, so a
@@ -68,6 +73,9 @@ model Organization {
   trialEndsAt          DateTime?
   /// Set when the customer cancels but the period has not yet elapsed.
   cancelAtPeriodEnd    Boolean   @default(false)
+  /// First moment Stripe reported `past_due`. A failed payment opens a bounded
+  /// grace window rather than indefinite full access — see lib/billing.ts.
+  pastDueSince         DateTime?
 
   members  Membership[]
   projects Project[]
@@ -321,6 +329,19 @@ model Lead {
   status     String   @default("new")
   capturedAt DateTime @default(now())
 
+  /// Where the referrer that produced `engine` came from:
+  ///   header  — the browser's own Referer header on this request
+  ///   body    — a value the caller put in the payload
+  ///   none    — no referrer at all
+  /// Phase 2 stopped accepting a caller-supplied `engine` outright, but even a
+  /// referrer is client-controlled, so the origin of the evidence is recorded
+  /// alongside the conclusion rather than being flattened away.
+  referrerSource      String  @default("none")
+  /// True only when the engine was derived from the browser's Referer header.
+  /// Everything else is a claim, and the difference is not cosmetic: an
+  /// unverified attribution must never be counted as a measured one.
+  attributionVerified Boolean @default(false)
+
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId, capturedAt])
@@ -350,9 +371,28 @@ model ApiKey {
   lastUsedAt DateTime?
   createdAt  DateTime  @default(now())
 
+  /// Comma-separated scope list. A key may do only what it names.
+  /// Empty means the legacy full-read set, preserved so existing plugin
+  /// installations keep working; new keys are always issued with explicit scopes.
+  scopes String @default("")
+
+  /// Set when the key is revoked. A revoked key never authenticates again,
+  /// and the row is kept so the audit trail survives the revocation.
+  revokedAt DateTime?
+  /// Optional expiry. A key past this instant never authenticates.
+  expiresAt DateTime?
+
+  /// Rolling per-day request budget. 0 means unlimited.
+  dailyQuota Int    @default(0)
+  /// Requests counted inside the current UTC day.
+  usageCount Int    @default(0)
+  /// The UTC day `usageCount` belongs to, as YYYY-MM-DD.
+  usageDay   String @default("")
+
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
+  @@index([prefix])
 }
 
 /// A marketing-site enquiry.
@@ -506,4 +546,124 @@ model Observation {
   @@unique([runId, promptId, engine, sampleIndex])
   @@index([runId])
   @@index([engine, observedAt])
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2: session revocation, durable jobs, shared rate limiting
+// ---------------------------------------------------------------------------
+
+/// A server-side session record.
+///
+/// The session cookie is still a signed JWT, but it now carries a session id
+/// that is checked against this table on every request. That is the difference
+/// between "the cookie is deleted from this browser" and "this session can no
+/// longer be used" — before Phase 2, logging out removed the cookie while the
+/// token stayed valid for the rest of its fourteen days, so a copy taken before
+/// logout still authenticated.
+model Session {
+  id            String    @id @default(cuid())
+  userId        String
+  orgId         String
+  createdAt     DateTime  @default(now())
+  expiresAt     DateTime
+  /// Set the moment the session stops being usable. Never deleted, so the
+  /// record of the revocation survives.
+  revokedAt     DateTime?
+  /// Why it was revoked: logout | password-change | password-reset | admin | expired
+  revokedReason String    @default("")
+  lastSeenAt    DateTime  @default(now())
+  /// Coarse client fingerprint for the account's session list. Never a secret.
+  userAgent     String    @default("")
+  ipHash        String    @default("")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/// A durable unit of background work.
+///
+/// Phase 1 ran measurement in-process: a crash mid-run lost whatever had not
+/// been written, and nothing retried. This table makes the work itself durable
+/// and, critically, *claimable* — a worker takes a lease rather than simply
+/// reading a row, so two workers cannot run the same job.
+model Job {
+  id        String @id @default(cuid())
+  /// Job family, e.g. measurement-run | site-audit | wordpress-publish.
+  kind      String
+  /// Tenant this job belongs to. Every claim is scoped by it.
+  orgId     String
+  projectId String @default("")
+
+  /// queued | running | succeeded | failed | cancelled | dead
+  status   String @default("queued")
+  /// Lower runs first; ties break on runAfter then createdAt.
+  priority Int    @default(100)
+
+  /// JSON payload. Never contains a credential — see lib/jobs/queue.ts.
+  payload String @default("{}")
+
+  /// Caller-supplied dedupe key. A second enqueue with the same key returns
+  /// the existing job instead of creating a duplicate.
+  idempotencyKey String?
+
+  attempts    Int      @default(0)
+  maxAttempts Int      @default(5)
+  /// Not eligible to run before this instant. Backoff moves it forward.
+  runAfter    DateTime @default(now())
+
+  /// Lease held by the worker currently running this job. A lease that expires
+  /// without completion makes the job claimable again — that is the recovery
+  /// path for a worker that died mid-job.
+  lockedBy       String?
+  lockedAt       DateTime?
+  leaseExpiresAt DateTime?
+
+  /// Set by a cancellation request. A running job checks it at each checkpoint.
+  cancelRequestedAt DateTime?
+
+  lastError     String @default("")
+  /// Failure classification, so a permanent failure is not retried forever.
+  errorCategory String @default("")
+
+  createdAt  DateTime  @default(now())
+  startedAt  DateTime?
+  finishedAt DateTime?
+
+  @@unique([idempotencyKey])
+  @@index([status, runAfter])
+  @@index([orgId])
+  @@index([kind, status])
+  @@index([leaseExpiresAt])
+}
+
+/// A named mutual-exclusion lease.
+///
+/// Distinct from a job lease: this guards a *recurring activity* rather than a
+/// unit of work — the scheduled-run sweep must not run twice concurrently even
+/// though it enqueues many jobs. Holder writes its identity and an expiry;
+/// an expired lock is takeable, so a crashed holder does not block forever.
+model JobLock {
+  key        String   @id
+  holder     String
+  acquiredAt DateTime @default(now())
+  expiresAt  DateTime
+
+  @@index([expiresAt])
+}
+
+/// Shared fixed-window rate-limit counter.
+///
+/// The in-memory limiter is per-process, so behind N instances the real limit
+/// was N x the configured one. This makes the window shared. It is deliberately
+/// a plain table rather than Redis: it needs no new infrastructure, and the
+/// contention profile of these endpoints does not warrant any.
+model RateLimitCounter {
+  key       String   @id
+  count     Int      @default(0)
+  resetAt   DateTime
+  updatedAt DateTime @updatedAt
+
+  @@index([resetAt])
 }

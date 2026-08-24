@@ -153,6 +153,11 @@ the customer may want).
 
 ## ADR-009 — SQLite and `db push` are a development posture, not a production one
 
+**Superseded in part by ADR-014 (Phase 2).** The production half of this
+decision no longer holds: the product runs on PostgreSQL with a reviewed
+migration history. The reasoning below is kept because it is why the change was
+sequenced this way, and it remains correct about local development.
+
 **Status:** accepted, with a deadline · `supertool/prisma/schema.prisma`
 
 **Decision.** The schema is applied with `prisma db push` against SQLite. There
@@ -256,6 +261,64 @@ this is precisely the fabrication Gate 0 removed.
 **Consequences.** Legal pages continue to render their incomplete-information
 notice. Setting this flag true later requires confirming each field against real
 records, and is a Phase 3 or later concern.
+
+---
+
+## ADR-014 — PostgreSQL with a reviewed migration history
+
+**Status:** accepted · Phase 2 · supersedes the production half of ADR-009
+
+**Decision.** The product runs on PostgreSQL. Schema changes are applied with
+`prisma migrate deploy` against a recorded migration history in
+`supertool/prisma/migrations`. `prisma db push` is no longer a deployment
+mechanism anywhere, and CI runs `migrate deploy` plus a drift check on every
+push.
+
+**Why.** `db push` computes a diff and applies it with no recorded, reviewable,
+reversible step. That is the correct trade while prototyping — it was, and
+ADR-009 said so — and the wrong one the moment data exists that cannot be
+regenerated. A migration file is reviewable before it runs, replayable in the
+same order everywhere, and the only artefact that makes "what changed" and "how
+do we undo it" answerable.
+
+The drift check matters as much as the migration. Migrations that no longer
+reproduce the declared schema fail at deploy time, which is the worst moment to
+find out; CI now finds out instead.
+
+**What ADR-009 got right and keeps.** SQLite for zero-infrastructure local
+development was a real benefit. The tests that mattered — run lifecycle,
+idempotency constraints — have moved to throwaway PostgreSQL *schemas*, because
+SQLite and PostgreSQL do not enforce uniqueness, nulls or types identically, so
+those tests were proving less than they appeared to.
+
+**Rejected.** Keeping `db push` behind a "production" flag (the flag is the bug);
+hand-written SQL migrations outside Prisma (drift becomes undetectable).
+
+**Not yet done.** No migration has run against a copy of production-shaped data,
+because none exists. That rehearsal remains an open Phase 2 acceptance criterion.
+
+---
+
+## ADR-015 — Phase 2 does not depend on Phase 1
+
+**Status:** accepted · Phase 2
+
+**Decision.** `phase-2` depends on `phase-0` only. The roadmap previously
+declared `dependsOn: ['phase-1']`.
+
+**Why.** The original sequencing assumed provider activation came first because
+it is the more visible work. Nothing about migrations, durable jobs, tenancy,
+session revocation or SSRF defence needs a grounded provider. Meanwhile Phase 1
+is blocked on credentials, per-call spend, egress to vendor documentation and
+legal review — none of which can be obtained from inside the repository.
+
+Encoding a dependency that does not exist would have parked every piece of work
+that *can* be done behind work that cannot. The dependency graph should describe
+real constraints, not the order someone first imagined.
+
+**Consequences.** Phase 1 remains the next product-capability phase and remains
+externally blocked. Phase 3 still depends on Phase 2, which is now accurate
+rather than transitively true through a fiction.
 
 ---
 

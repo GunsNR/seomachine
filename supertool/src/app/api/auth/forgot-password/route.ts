@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { db } from '@/lib/db';
 import { passwordResetEmail, sendEmail } from '@/lib/email';
 import { issueResetToken } from '@/lib/password-reset';
-import { clientKey, rateLimit, rateLimitHeaders } from '@/lib/rate-limit';
+import { clientKey, rateLimitHeaders, sharedRateLimit } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -12,7 +12,7 @@ const Body = z.object({ email: z.string().email().max(255) });
 
 export async function POST(req: Request) {
   // Reset mail is a spam and enumeration vector, so it is capped per IP.
-  const limited = rateLimit(clientKey(req, 'forgot-password'), 5, 15 * 60_000);
+  const limited = await sharedRateLimit(clientKey(req, 'forgot-password'), 5, 15 * 60_000);
   if (!limited.ok) {
     return NextResponse.json(
       { error: `Too many reset requests. Try again in ${limited.retryAfterSeconds} seconds.` },

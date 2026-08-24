@@ -44,8 +44,36 @@ export function planForPriceId(priceId: string): PlanId | null {
   return null;
 }
 
-/** Statuses under which the workspace keeps full access. */
-const ENTITLED = new Set(['trialing', 'active', 'past_due']);
+/** Statuses under which the workspace keeps full access outright. */
+const ENTITLED = new Set(['trialing', 'active']);
+
+/**
+ * How long a failed payment keeps working.
+ *
+ * `past_due` was previously in `ENTITLED`, so a subscription whose payment
+ * failed retained full access indefinitely — a card that stopped working in
+ * January still bought unlimited provider calls in June. Removing it outright
+ * would be the opposite error: Stripe reports `past_due` for a card that will
+ * retry successfully in a few hours, and cutting a paying customer off over a
+ * transient decline is its own kind of wrong.
+ *
+ * So a failed payment opens a bounded grace window instead. Inside it, nothing
+ * changes. Outside it, resource-consuming actions stop while reads and exports
+ * stay open, exactly as for any other unentitled state.
+ */
+export const PAST_DUE_GRACE_DAYS = 7;
+
+/** True while a past-due subscription is still inside its grace window. */
+export function withinPastDueGrace(
+  pastDueSince: Date | null | undefined,
+  now = new Date(),
+): boolean {
+  // No recorded start means the webhook has not stamped it yet. Treat the
+  // grace period as running rather than already spent: the customer should not
+  // lose access because of our bookkeeping gap.
+  if (!pastDueSince) return true;
+  return now.getTime() - pastDueSince.getTime() < PAST_DUE_GRACE_DAYS * 86_400_000;
+}
 
 export interface SubscriptionState {
   plan: PlanId;
@@ -58,6 +86,10 @@ export interface SubscriptionState {
   cancelAtPeriodEnd: boolean;
   hasStripeCustomer: boolean;
   billingEnabled: boolean;
+  /** First moment Stripe reported a failed payment, if it has. */
+  pastDueSince: Date | null;
+  /** True while a failed payment is still inside its grace window. */
+  inPastDueGrace: boolean;
 }
 
 /**
@@ -77,6 +109,8 @@ export async function getSubscription(orgId: string): Promise<SubscriptionState>
   const trialing = status === 'trialing';
   const trialExpired = trialing && !!trialEndsAt && trialEndsAt.getTime() < Date.now();
 
+  const inPastDueGrace = status === 'past_due' && withinPastDueGrace(org?.pastDueSince ?? null);
+
   const trialDaysLeft =
     trialing && trialEndsAt
       ? Math.max(0, Math.ceil((trialEndsAt.getTime() - Date.now()) / 86_400_000))
@@ -85,7 +119,10 @@ export async function getSubscription(orgId: string): Promise<SubscriptionState>
   return {
     plan,
     status,
-    entitled: !billingEnabled() || (ENTITLED.has(status) && !trialExpired),
+    entitled:
+      !billingEnabled() || ((ENTITLED.has(status) && !trialExpired) || inPastDueGrace),
+    pastDueSince: org?.pastDueSince ?? null,
+    inPastDueGrace,
     trialing,
     trialDaysLeft,
     currentPeriodEnd: org?.currentPeriodEnd ?? null,
@@ -147,6 +184,12 @@ export async function syncSubscription(subscription: Stripe.Subscription): Promi
 
   const periodEnd = item?.current_period_end ?? null;
 
+  // Stamp the first past-due transition and clear it on recovery, so the grace
+  // window measures from the failure rather than from whenever we last looked.
+  // Re-entering past_due after a successful payment starts a fresh window.
+  const becamePastDue = subscription.status === 'past_due';
+  const pastDueSince = becamePastDue ? (org.pastDueSince ?? new Date()) : null;
+
   await db.organization.update({
     where: { id: org.id },
     data: {
@@ -156,6 +199,7 @@ export async function syncSubscription(subscription: Stripe.Subscription): Promi
       currentPeriodEnd: periodEnd ? new Date(periodEnd * 1000) : null,
       trialEndsAt: subscription.trial_end ? new Date(subscription.trial_end * 1000) : org.trialEndsAt,
       cancelAtPeriodEnd: subscription.cancel_at_period_end,
+      pastDueSince,
     },
   });
 }
