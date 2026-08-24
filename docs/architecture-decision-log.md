@@ -204,6 +204,61 @@ the worst moment to discover it).
 
 ---
 
+## ADR-012 — The canonical palette is decided; implementation waits for Phase 5
+
+**Status:** accepted · Phase 0 · product owner, 2026-08-24
+
+**Decision.** The Rank Logic brand identity is Woodsmoke `#0c0d0e`, Raw Sienna
+`#d16c42`, Tasman `#dbdcdb`, Corduroy `#646c6c`. The runtime UI is **not**
+changed now. `supertool/brand.config.ts` keeps its current cool scheme until
+Phase 5 builds and visually tests the responsive design system, which is where
+the canonical palette is implemented.
+
+The existing blue may remain afterwards as a functional or data-visualization
+colour if Phase 5 accessibility and UX testing justifies that narrower role. It
+is not the primary brand identity.
+
+**Why.** Two things were being conflated: *what the brand is* and *what the code
+renders*. The first is a brand decision and is now made. The second touches
+every rendered surface simultaneously, so doing it outside a full design pass
+would ship an untested visual regression with no contrast verification behind
+it. Separating them lets the identity be settled and recorded without putting an
+unverified change into the product.
+
+**Rejected.** Swapping `brand.config.ts` immediately — one file, but it
+repaints the entire product with no visual-regression coverage and no measured
+contrast, and Phase 0 is documentation-only by its own definition of done.
+
+**Consequences.** Phase 5 inherits a fixed palette rather than an open question.
+Any future identity change requires a superseding ADR.
+
+---
+
+## ADR-013 — `brand.identityVerified` stays false until real, reviewed identity exists
+
+**Status:** accepted · Phase 0 · product owner, 2026-08-24
+
+**Decision.** `brand.identityVerified` remains `false`. No placeholder postal
+address or phone number is published, and none enters `Organization` structured
+data. Address, phone, legal pages and identity verification are deferred until
+the real information exists and has had legal review.
+
+**Why.** Gate 0 found placeholder contact details being emitted as schema.org
+`Organization` markup. Structured data is a machine-readable assertion about a
+real-world entity; a fabricated address there is a false statement to search
+engines and to anyone consuming the markup, not merely unfinished copy. The
+existing gate in `src/lib/metadata.ts` and the incomplete-page notice in
+`LegalPage.tsx` are the correct behaviour and stay.
+
+**Rejected.** Filling in plausible details to make the pages look finished —
+this is precisely the fabrication Gate 0 removed.
+
+**Consequences.** Legal pages continue to render their incomplete-information
+notice. Setting this flag true later requires confirming each field against real
+records, and is a Phase 3 or later concern.
+
+---
+
 ## How to add an ADR
 
 Append. Never edit an accepted decision in place — supersede it with a new entry

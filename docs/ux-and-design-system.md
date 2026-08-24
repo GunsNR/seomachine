@@ -71,27 +71,36 @@ surface.
 
 ---
 
-## 3. Visual direction — and an open decision
+## 3. Visual direction
 
-**The constitution names a palette the codebase does not use.** This is recorded
-rather than resolved, because changing the palette is a visual product change
-and Phase 0 is documentation only.
+**The canonical Rank Logic palette is decided.** The product owner settled this
+on 2026-08-24; see ADR-012.
 
-| Source | Palette |
+| Role | Colour |
 | --- | --- |
-| Master prompt §8 | Woodsmoke `#0c0d0e`, Raw Sienna `#d16c42`, Tasman `#dbdcdb`, Corduroy `#646c6c` |
-| `supertool/brand.config.ts` (in use) | Navy `#07182E`, Brand blue `#1466D8`, Accent orange `#FF6B2C`, Ink `#0B1220`, Body `#4A5568`, Line `#E3E8EF` |
+| Woodsmoke | `#0c0d0e` |
+| Raw Sienna | `#d16c42` |
+| Tasman | `#dbdcdb` |
+| Corduroy | `#646c6c` |
 
-These are different identities: a warm near-black and terracotta scheme versus a
-cool navy and blue scheme. Both are defensible; they are not compatible.
+The codebase currently renders a different, cool scheme — Navy `#07182E`, Brand
+blue `#1466D8`, Accent orange `#FF6B2C`, Ink `#0B1220`, Body `#4A5568`, Line
+`#E3E8EF` — held in `supertool/brand.config.ts`. That is the *implementation*,
+not the identity, and it stays exactly as it is until Phase 5.
 
-**This needs the product owner's decision** — see §8. Until it is made, the
-in-use palette stays. `brand.config.ts` is already the single source of truth
-for identity and drives Tailwind, the OG image generator and the Elementor kit,
-so the change is one file when it is made — but it is a brand decision, not an
-engineering one.
+The reason for the gap is deliberate. Swapping the palette touches every
+rendered surface at once, and doing it outside a full design pass would produce
+an untested visual regression with no contrast verification behind it. Phase 5
+is where the responsive design system is built and visually tested, and that is
+where the canonical palette lands. Nothing before Phase 5 may change it, and
+nothing after Phase 5 may ship a different identity without a superseding ADR.
 
-Whichever palette wins must pass contrast testing before it ships. Raw Sienna
+The existing blue is not deleted by this decision. It may survive as a
+functional or data-visualization colour if Phase 5's accessibility and UX
+testing justifies keeping it in that narrower role — but it is not the primary
+brand identity and must not be presented as one.
+
+Whichever role each colour takes must pass contrast testing before it ships. Raw Sienna
 `#d16c42` on Woodsmoke `#0c0d0e` is roughly 5.6:1 and passes AA for normal text;
 Corduroy `#646c6c` on Woodsmoke is roughly 4.9:1 and passes AA for normal text
 but not AAA. Those figures are computed, not measured on the rendered product,
@@ -196,13 +205,20 @@ asserted:
 
 ---
 
-## 8. Decisions this document cannot make
+## 8. Decisions
 
-1. **Which palette is the Rank Logic identity** — the constitution's warm scheme
-   or the codebase's cool one. A brand decision.
-2. **Whether `brand.identityVerified` can be set true.** It is `false` today, so
-   the postal address and phone number in `brand.config.ts` are placeholders and
-   are deliberately kept out of structured data. Publishing a fabricated business
-   address as schema.org markup misrepresents a real-world entity, so this stays
-   false until an owner confirms each field.
+### Settled
+
+1. **The palette.** Woodsmoke `#0c0d0e`, Raw Sienna `#d16c42`, Tasman `#dbdcdb`,
+   Corduroy `#646c6c` is the canonical Rank Logic identity, decided 2026-08-24.
+   Implementation waits for Phase 5 — see §3 and ADR-012.
+2. **`brand.identityVerified` stays `false`.** Decided 2026-08-24. The postal
+   address and phone number in `brand.config.ts` are placeholders, and
+   publishing a fabricated business address as schema.org markup misrepresents a
+   real-world entity. They stay out of structured data, and the legal pages stay
+   marked as incomplete, until the real information exists and has had legal
+   review. See ADR-013.
+
+### Still open
+
 3. **Access to representative users** for the usability testing Phase 5 requires.

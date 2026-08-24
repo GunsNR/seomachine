@@ -200,6 +200,29 @@ The full system is `docs/ux-and-design-system.md`. The non-negotiable parts:
 - **Accessible and fast.** WCAG 2.2 AA; p75 LCP ≤ 2.5s, INP ≤ 200ms, CLS ≤ 0.1
   on priority pages.
 
+### The brand identity
+
+The canonical Rank Logic palette, decided 2026-08-24 (ADR-012):
+
+| Role | Colour |
+| --- | --- |
+| Woodsmoke | `#0c0d0e` |
+| Raw Sienna | `#d16c42` |
+| Tasman | `#dbdcdb` |
+| Corduroy | `#646c6c` |
+
+This is the identity. It is **not** what the code renders today, and that gap is
+intentional: the runtime UI is preserved until Phase 5 implements and visually
+tests the complete responsive design system. The existing blue may continue
+afterwards as a functional or data-visualization colour if Phase 5 accessibility
+and UX testing justifies it, but it is not the primary brand identity. Changing
+the canonical palette requires a superseding ADR.
+
+Business identity — postal address, phone, legal pages — stays unpublished while
+`brand.identityVerified` is `false` (ADR-013). Placeholder contact details must
+never appear in `Organization` structured data, because structured data is an
+assertion about a real-world entity rather than decorative copy.
+
 ---
 
 ## 8. Prioritization
