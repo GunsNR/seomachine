@@ -120,10 +120,45 @@ On Vercel, add to `vercel.json`:
 
 The app is a standard Next.js 15 application and runs anywhere Node 22 does.
 
-**Database.** SQLite by default so it runs with no infrastructure. For anything
-multi-instance, switch to Postgres: change the provider in
-`prisma/schema.prisma` to `postgresql`, point `DATABASE_URL` at your instance,
-and run `npx prisma db push`. No schema changes are needed.
+**Database.** PostgreSQL is the required datasource — there is no SQLite mode
+and no provider to switch. The schema lives in a reviewed migration history
+under `prisma/migrations`.
+
+Two connection strings, because two kinds of work need different things:
+
+| Variable | Used for | Pooled? |
+| --- | --- | --- |
+| `DATABASE_URL` | Runtime application traffic | Yes, where your provider offers a pooled endpoint |
+| `DIRECT_URL` | Migrations, `pg_dump`, `pg_restore`, administration | **No** — must be a direct connection |
+
+A transaction-mode pooler multiplexes statements across backends, which breaks
+advisory locks, temp tables, prepared statements and `SET` — all of which
+migrations use, and the resulting failures look intermittent rather than
+obvious. Set the two variables to the **same** value only when your provider has
+no separate pooled endpoint; Prisma requires `DIRECT_URL` once the schema
+declares it, so leaving it unset is a hard error rather than a fallback.
+
+Apply the existing reviewed migrations, then confirm the migrations and the
+schema still agree:
+
+```bash
+npm run db:deploy   # prisma migrate deploy — applies existing migrations
+npm run db:drift    # fails if the migrations no longer reproduce the schema
+```
+
+**Never use `prisma db push` for deployment or setup.** It applies a diff
+computed from the schema file with no recorded, reviewable or reversible step,
+so there is nothing to replay and nothing to roll back. `npm run db:migrate`
+(`prisma migrate dev`) is for *creating* a migration during development and must
+not be pointed at a deployed database. `tests/migration-safety.test.ts` fails the
+build if `db push` reappears in any script, workflow, test or instruction.
+
+The target database must use the `public` schema: the generated migrations
+qualify every object as `"public"."Table"`.
+
+Back up before applying anything to a database holding real data, and rehearse
+the restore — `docs/hosted-postgres-validation.md` has the full procedure and
+`npm run db:rehearse` automates it.
 
 **Before going live:**
 
@@ -133,16 +168,21 @@ and run `npx prisma db push`. No schema changes are needed.
    reset their password.
 3. Configure Stripe if you intend to charge, and register the webhook.
 4. Set `CRON_SECRET` and schedule the endpoint above.
-5. Replace the placeholder marketing figures in `src/content/site.ts` — review
-   counts, result percentages and testimonials are illustrative, not real.
+5. Review the public claims in `src/content/site.ts`. Gate 0 removed the
+   fabricated testimonials, review counts and result percentages that used to
+   live here, and `tests/marketing-truth.test.ts` keeps them out. Anything you
+   add must be allowed by the capability registry in `src/lib/capabilities.ts`.
 6. Rebrand in `brand.config.ts`. Name, domain, colours, contact details and
    schema markup all derive from that one file.
-7. Move rate limiting to a shared store if you run more than one instance. The
-   built-in limiter is per-process by design; the trade-off is documented at
-   `src/lib/rate-limit.ts`.
+7. Set `TRUSTED_PROXY_COUNT` to the number of proxies that will always sit in
+   front of the app. It defaults to `0`, which ignores `X-Forwarded-For`
+   entirely. Too low makes every caller share one rate-limit bucket; too high
+   lets a caller choose their own. When unsure, set it too low.
 
-**Note on multi-instance:** everything else is stateless. The only per-process
-state is the rate limiter above.
+**Note on multi-instance:** the app is stateless. Phase 2 moved rate limiting
+to a shared database-backed counter, so limits hold across instances rather than
+multiplying by the instance count. No worker process is deployed yet, so
+enqueued background jobs wait until one exists.
 
 ---
 

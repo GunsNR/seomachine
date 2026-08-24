@@ -13,7 +13,23 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+
+  /// Runtime traffic. Point this at a pooled endpoint where the provider
+  /// offers one (PgBouncer, Neon pooler, Supabase pooler, RDS Proxy).
+  url = env("DATABASE_URL")
+
+  /// Session-dependent work: migrations, pg_dump, pg_restore, administration.
+  ///
+  /// A transaction-mode pooler multiplexes statements across backends, which
+  /// breaks anything relying on session state — advisory locks, temp tables,
+  /// prepared statements, `SET`. Migrations use all of those, so running them
+  /// through a pooler fails in ways that look random.
+  ///
+  /// Prisma REQUIRES this variable once declared: a missing DIRECT_URL is a
+  /// hard schema-load error, not a fallback to `url`. Where a provider has no
+  /// separate direct endpoint, set it to the same value as DATABASE_URL. That
+  /// keeps this provider-neutral rather than encoding one vendor's topology.
+  directUrl = env("DIRECT_URL")
 }
 
 model User {

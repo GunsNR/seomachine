@@ -17,7 +17,8 @@ battle-tested.
 
 | Variable | Required | Effect if unset |
 | --- | --- | --- |
-| `DATABASE_URL` | yes | The app cannot start. Must be a `postgresql://` URL. |
+| `DATABASE_URL` | yes | The app cannot start. Runtime traffic; may be a pooled endpoint. |
+| `DIRECT_URL` | yes | **Hard error at schema load**, not a fallback. Migrations, `pg_dump`, `pg_restore` and administration. Must not be pooled. Set it equal to `DATABASE_URL` where the provider has no separate direct endpoint. |
 | `AUTH_SECRET` | yes in production | Refuses to boot in production. In development, falls back to a deliberately obvious key. Must be ≥ 32 characters. |
 | `TRUSTED_PROXY_COUNT` | effectively yes behind a proxy | Defaults to `0`, meaning `X-Forwarded-For` is **ignored**. See §4. |
 | `CORS_ALLOWED_ORIGINS` | no | Only origins of connected sites get a CORS grant. |
@@ -47,20 +48,51 @@ recorded, reviewable, reversible step. See ADR-009 and ADR-014.
 
 ```bash
 # 1. Always back up first. There is no undo for a bad migration.
-pg_dump "$DATABASE_URL" > backup-$(date +%Y%m%d-%H%M%S).sql
+#    Note: pg_dump rejects Prisma's ?schema= parameter — strip it.
+pg_dump "${DIRECT_URL%%\?*}" --format=custom --no-owner --no-acl \
+  --file backup-$(date +%Y%m%d-%H%M%S).dump
 
 # 2. Apply. This is the command CI exercises on every run.
-npx prisma migrate deploy
+npm run db:deploy
 
 # 3. Confirm the migrations and the schema still agree.
-npx prisma migrate diff \
-  --from-schema-datasource prisma/schema.prisma \
-  --to-schema-datamodel prisma/schema.prisma \
-  --exit-code
+npm run db:drift
+
+# 4. Confirm nothing is pending or applied outside this history.
+npm run db:status
 ```
 
 Step 3 catches the failure that only shows up at deploy time: migrations that no
-longer reproduce the declared schema. CI runs all three on every push.
+longer reproduce the declared schema. CI runs all of it on every push.
+
+### The commands, and which is for what
+
+| Command | Use |
+| --- | --- |
+| `npm run db:migrate` | **Development only.** Creates a new migration from schema changes and applies it locally. |
+| `npm run db:deploy` | Applies existing migrations. Development, CI and production. |
+| `npm run db:status` | Reports pending migrations and drift. |
+| `npm run db:drift` | Fails if the migrations no longer reproduce the schema. |
+| `npm run db:generate` | Regenerates the Prisma client. Touches no database. |
+| `npm run db:seed` | Loads the demo workspace. |
+| `npm run db:rehearse` | Full migrate → drift → load → dump → restore → verify rehearsal. |
+| `npm run setup` | First-run bootstrap: generate, deploy, seed. |
+
+There is deliberately **no `db:push`**. `prisma db push` applies a computed diff
+with no recorded, reviewable, reversible step, and
+`tests/migration-safety.test.ts` fails the build if it returns to any package
+script, workflow, shell script or test.
+
+### Rehearsing a restore
+
+```bash
+npm run db:rehearse -- --report rehearsal-$(date +%Y%m%d).json
+```
+
+Creates disposable databases, applies migrations, loads a synthetic
+production-shaped dataset, dumps, restores into an isolated database, and
+compares integrity field by field. Runs in CI on every push. The full hosted
+procedure is `docs/hosted-postgres-validation.md`.
 
 ### Rolling back
 
@@ -74,11 +106,17 @@ the escape hatch:
 3. Write a new forward migration that corrects the state. Never edit an applied
    migration file — it has already run somewhere.
 
-**Not yet rehearsed against production-shaped data.** The migration has been
-applied to an empty database and to a local instance. It has never run against a
-copy of real customer data, because no such data exists. That rehearsal is a
-Phase 2 acceptance criterion that remains open until there is something to
-rehearse against.
+**Rehearsed, but never against a hosted provider.** `npm run db:rehearse` runs
+the whole migrate → dump → restore → verify cycle against a synthetic
+production-*shaped* dataset, and CI executes it on every push. What has not
+happened is the same procedure against a hosted endpoint, which is the only
+thing that can tell you about that provider's pooler, connection limits, TLS,
+latency, backup tooling or behaviour at production *volume*. See
+`docs/hosted-postgres-validation.md` §2 for exactly what remains unproven.
+
+**One constraint worth knowing before you provision:** the migrations qualify
+every object as `"public"."Table"`, so the target database must use the `public`
+schema.
 
 ---
 

@@ -287,9 +287,20 @@ find out; CI now finds out instead.
 
 **What ADR-009 got right and keeps.** SQLite for zero-infrastructure local
 development was a real benefit. The tests that mattered — run lifecycle,
-idempotency constraints — have moved to throwaway PostgreSQL *schemas*, because
-SQLite and PostgreSQL do not enforce uniqueness, nulls or types identically, so
-those tests were proving less than they appeared to.
+idempotency constraints — have moved to throwaway PostgreSQL, because SQLite and
+PostgreSQL do not enforce uniqueness, nulls or types identically, so those tests
+were proving less than they appeared to.
+
+**Corrected after the fact.** This entry originally said those tests use
+throwaway *schemas*. They cannot. The migration-safety follow-up switched them
+from `db push` to `migrate deploy` — the command production runs — and that
+revealed the constraint: Prisma bakes the schema name in at generation time, so
+every generated migration qualifies its objects as `"public"."Table"`.
+`migrate deploy` against `?schema=test_abc` records `_prisma_migrations` in
+`test_abc` while creating the tables in `public`, and the second test file to
+run fails with `relation "User" already exists`. Isolation is therefore one
+disposable *database* per test file, not one schema. The same constraint applies
+to any hosted target: it must use the `public` schema.
 
 **Rejected.** Keeping `db push` behind a "production" flag (the flag is the bug);
 hand-written SQL migrations outside Prisma (drift becomes undetectable).

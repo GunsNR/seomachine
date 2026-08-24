@@ -1,5 +1,3 @@
-import { execFileSync } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 /**
@@ -17,22 +15,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
  * identically, so a test passing on SQLite proved less than it appeared to.
  */
 
-const BASE_URL =
-  process.env.TEST_DATABASE_URL ??
-  process.env.DATABASE_URL ??
-  'postgresql://postgres:postgres@127.0.0.1:5432/postgres';
+import { createTestDatabase, type TestDatabase } from './helpers/test-database';
 
-/** A per-run schema so parallel test files cannot collide. */
-const schemaName = `test_${randomBytes(6).toString('hex')}`;
-
-function urlWithSchema(base: string, schema: string): string {
-  const u = new URL(base);
-  u.searchParams.set('schema', schema);
-  return u.toString();
-}
-
-const testUrl = urlWithSchema(BASE_URL, schemaName);
-process.env.DATABASE_URL = testUrl;
+let database: TestDatabase;
 
 // Imported after DATABASE_URL is set so the client binds to the throwaway file.
 type Mod = typeof import('@/lib/measurement/run');
@@ -46,10 +31,7 @@ let db: DbMod['db'];
 let engines: EngineMod;
 
 beforeAll(async () => {
-  execFileSync('npx', ['prisma', 'db', 'push', '--skip-generate', '--accept-data-loss'], {
-    env: { ...process.env, DATABASE_URL: testUrl },
-    stdio: 'pipe',
-  });
+  database = await createTestDatabase('measurement');
 
   run = await import('@/lib/measurement/run');
   report = await import('@/lib/measurement/report');
@@ -60,8 +42,8 @@ beforeAll(async () => {
 afterAll(async () => {
   // Drop the throwaway schema before disconnecting, so a test run leaves the
   // database as it found it.
-  await db?.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`).catch(() => undefined);
   await db?.$disconnect();
+  await database?.drop();
 });
 
 /**
