@@ -103,3 +103,41 @@ Rewrites go to `rewrites/`. Landing pages go to `landing-pages/`. Audits go to `
 ## WordPress Integration
 
 Publishing uses the WordPress REST API with a custom MU-plugin (`wordpress/seo-machine-yoast-rest.php`) that exposes Yoast SEO fields. Articles are published in WordPress block format (HTML comments in Markdown files).
+
+## Rank Logic SuperTool (`supertool/`)
+
+The `supertool/` directory is a separate product from the content workspace
+above: a Next.js SaaS application with its own tests, CI and release rules.
+
+**Before changing anything under `supertool/`, `wordpress/` or `docs/`, read
+`docs/product-constitution.md`.** It is the governing document for that product
+and it overrides convenience. In particular, §3 lists twelve invariants —
+covering provenance, simulation, measurement and public claims — that are
+enforced by tests rather than trust, and that a change may not weaken without a
+superseding entry in `docs/architecture-decision-log.md`.
+
+Orientation, in the order worth reading:
+
+| Question | Document |
+| --- | --- |
+| What rules govern this product? | `docs/product-constitution.md` |
+| What can it do today, and what is only planned? | `docs/current-and-target-capability-map.md` |
+| What is being built next, and what blocks it? | `docs/master-roadmap.md` |
+| Why is the product's state what it is? | `docs/release-truth-audit.md` |
+| What does a measurement actually mean? | `docs/measurement-spec.md` |
+| Why was something built this way? | `docs/architecture-decision-log.md` |
+| How does data get in? | `docs/data-provider-strategy.md` |
+| How should it look and behave? | `docs/ux-and-design-system.md` |
+| How does the product learn? | `docs/continuous-improvement-system.md` |
+| How do we compare, honestly? | `docs/competitive-scorecard.md` |
+
+Two files are the source of truth in code, not prose:
+`supertool/src/lib/capabilities.ts` says what the product can do **now**, and
+`supertool/src/lib/roadmap.ts` says what is planned. A capability may be sold
+only if the roadmap phase delivering it is complete —
+`supertool/tests/constitution.test.ts` enforces that, so a roadmap entry can
+never upgrade a public claim.
+
+Verification for `supertool/` is `npm run typecheck`, `npm run lint`,
+`npm test`, `npm run build`, plus PHP lint and Elementor JSON validation for
+`wordpress/`. CI runs all of it on any change to `supertool/**` or `docs/**`.
