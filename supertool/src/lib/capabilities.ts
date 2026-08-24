@@ -56,31 +56,34 @@ const OWNER = 'product-owner';
 const REGISTRY = {
   ai_visibility_tracking: {
     label: 'AI visibility tracking',
-    status: 'beta',
+    status: 'unavailable',
     source:
-      'Live calls to OpenAI, Anthropic, Google Gemini, Perplexity and xAI developer APIs, one row per prompt per surface. Surfaces without a configured credential are recorded as unavailable, never simulated.',
-    evidence: 'tests/ai.test.ts, tests/provenance.test.ts',
+      'Adapters exist for OpenAI, Anthropic, Google Gemini, Perplexity and xAI developer APIs, and Gate 1 added run-scoped observations, repeated sampling, coverage and confidence intervals. But the Gate 1 provider audit found that four of the five adapters make a plain completion call with no web-retrieval tool, and no adapter has had its model confirmed against the vendor’s current official documentation. Every surface is therefore marked unavailable and nothing is measured.',
+    evidence:
+      'tests/provider-audit.test.ts, tests/measurement-run.test.ts, tests/measurement-stats.test.ts',
     externalValidation:
-      'No provider credential has been exercised in this environment, so no live response has ever been parsed. Sampling design, repeat counts and confidence intervals do not exist yet.',
+      'None. No provider credential has been exercised, and official vendor documentation is unreachable from the build environment, so no model identifier could be verified against a primary source.',
     marketingLanguage:
-      'Runs a fixed prompt set against the answer engines you have connected and records whether your brand was named or cited.',
+      'Not available. The measurement pipeline is built and tested, but no answer engine currently meets the bar for a trustworthy measurement — see docs/release-truth-audit.md.',
   },
   citation_monitoring: {
     label: 'Citation monitoring',
-    status: 'beta',
-    source: 'Citation URLs returned by a provider, plus URLs parsed out of the answer text.',
-    evidence: 'tests/ai.test.ts',
+    status: 'unavailable',
+    source:
+      'Citation URLs returned by a provider, plus URLs parsed out of the answer text. Blocked by the same audit as AI visibility tracking: an ungrounded adapter returns no citations at all, so a citation rate against it would be zero for reasons unrelated to the brand.',
+    evidence: 'tests/ai.test.ts, tests/provider-audit.test.ts',
     externalValidation: 'Never validated against real provider citation payloads.',
     marketingLanguage:
-      'Records which URLs an answer pointed at, and whether one of them was yours.',
+      'Not available. Citation evidence requires a grounded answer engine, and none is currently connected.',
   },
   competitor_share_of_voice: {
     label: 'Competitor share of voice',
-    status: 'beta',
+    status: 'unavailable',
     source: 'Prose mentions of each named competitor within observed answers, URLs excluded.',
     evidence: 'tests/ai.test.ts',
     externalValidation: 'Never validated against real answers.',
-    marketingLanguage: 'Shows which competitors were named alongside you in the answers you observed.',
+    marketingLanguage:
+      'Not available. Depends on observed answers, and no answer engine is currently measurable.',
   },
   site_audit: {
     label: 'Site audit',
@@ -100,7 +103,7 @@ const REGISTRY = {
     externalValidation:
       'No held-out dataset, no outcome data. The score is not known to predict anything.',
     marketingLanguage:
-      'Grades a draft against nine structural signals and names what to change. It is a heuristic, not a prediction of citations.',
+      'Grades a draft against nine structural signals and names what to change. It is a modelled, experimental heuristic with hand-chosen weights — not a validated prediction of citations, and not recalibrated by Gate 1.',
   },
   content_briefs: {
     label: 'Content briefs',
@@ -132,10 +135,11 @@ const REGISTRY = {
   scheduled_runs: {
     label: 'Scheduled runs',
     status: 'beta',
-    source: 'A cron endpoint that works out which projects are due and runs their prompt sets.',
-    evidence: 'CI boot check in .github/workflows/supertool.yml',
+    source:
+      'A cron endpoint that works out which projects are due from the last measurement run and starts a new one through the same orchestrator as a manual run.',
+    evidence: 'tests/measurement-run.test.ts, CI boot check in .github/workflows/supertool.yml',
     externalValidation:
-      'Runs in a single process with no durable queue, no retry and no partial-run persistence. A crash mid-run loses the run.',
+      'Gate 1 made runs durable and retries idempotent: the run row is written before any provider call, each observation is persisted as it completes, and a uniqueness constraint means a retry fills gaps rather than duplicating. There is still no distributed queue or lock, so two schedulers running concurrently is untested. Gate 2 owns durable queueing.',
     marketingLanguage: 'Re-runs your prompt set on a schedule so you have a trend rather than a snapshot.',
   },
   wordpress_publishing: {
@@ -180,6 +184,19 @@ const REGISTRY = {
     evidence: 'tests/email.test.ts, tests/password-reset.test.ts',
     externalValidation: 'No message has been delivered through a real provider from this environment.',
     marketingLanguage: 'Sends password resets and account email through your configured provider.',
+  },
+
+  measurement_foundation: {
+    label: 'Run-scoped measurement with confidence intervals',
+    status: 'beta',
+    source:
+      'Immutable MeasurementRun and Observation records. Every rate is computed inside one run, identified by run id and never by date; failed and unavailable observations are excluded from rate denominators and reported as coverage; binary rates carry a 95% Wilson interval; run-to-run spread is reported separately from the within-run interval.',
+    evidence:
+      'tests/measurement-stats.test.ts, tests/measurement-run.test.ts, docs/measurement-spec.md',
+    externalValidation:
+      'The arithmetic and the run lifecycle are unit- and database-tested. They have never operated on a live provider response, because no engine is currently measurable.',
+    marketingLanguage:
+      'Every figure is tied to a specific run, states how much of that run produced data, and carries a confidence interval rather than a bare percentage.',
   },
 
   /* ---- Not sellable ---------------------------------------------------- */

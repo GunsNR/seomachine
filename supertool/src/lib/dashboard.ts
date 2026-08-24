@@ -1,17 +1,20 @@
 import 'server-only';
-import { rollUpVisibility } from './ai/analysis';
-import { MEASURABLE_ENGINES, type EngineId } from './ai/engines';
+import { MEASURABLE_ENGINES } from './ai/engines';
 import { db } from './db';
 import { ctrForPosition, estimatedTraffic, opportunityScore, shareOfVoice } from './seo/metrics';
-import { isObserved, type CheckStatus } from './ai/providers';
-import { summarizeProvenance, type Provenance } from './provenance';
+import { binaryRate, isObservedStatus } from './measurement/stats';
+import {
+  getLatestRun,
+  getLegacySummary,
+  getRunReport,
+  getRunTrend,
+  getRunVariation,
+} from './measurement/report';
 import { keywordMetricsSource, rankSource } from './data-sources';
 import { parseJson } from './utils';
 
-/** A daily/weekly point for the trend charts. */
+/** A weekly point for the lead chart. */
 export interface TrendPoint { date: string; value: number }
-
-export type { Provenance };
 
 export async function getProjects(orgId: string) {
   return db.project.findMany({ where: { orgId }, orderBy: { createdAt: 'asc' } });
@@ -21,101 +24,71 @@ export async function getProjects(orgId: string) {
 /* AI visibility                                                       */
 /* ------------------------------------------------------------------ */
 
+/**
+ * AI visibility for the latest measurement RUN.
+ *
+ * Gate 1 replaced date-based grouping with run-ID grouping. Two runs on the
+ * same UTC day are two runs: merging them invented a run that never happened,
+ * hid before/after comparisons, silently weighted the bigger run, and split or
+ * merged depending on the viewer's timezone. See docs/measurement-spec.md
+ * section 7.
+ */
 export async function getAiVisibility(projectId: string) {
-  const prompts = await db.aiPrompt.findMany({
-    where: { projectId },
-    include: { checks: { orderBy: { runAt: 'desc' } } },
-  });
+  const [latestRun, trend, variation, legacy] = await Promise.all([
+    getLatestRun(projectId),
+    getRunTrend(projectId),
+    getRunVariation(projectId),
+    getLegacySummary(projectId),
+  ]);
 
-  const allChecks = prompts.flatMap((p) => p.checks);
-  if (!allChecks.length) {
+  const prompts = await db.aiPrompt.findMany({ where: { projectId } });
+
+  if (!latestRun) {
     return {
-      rollup: rollUpVisibility([]),
-      previousScore: 0,
-      byEngine: [] as Array<{
-        id: EngineId; name: string; color: string;
-        score: number | null; mentionRate: number | null; citationRate: number | null;
-        checks: number; observed: number; status: string; reason: string;
-      }>,
-      trend: [] as TrendPoint[],
-      promptRows: [] as Array<{
-        id: string; text: string; cluster: string;
-        mentionRate: number | null; citationRate: number | null;
-        engines: number; observed: number; lastRun: Date | null;
-      }>,
+      run: null,
+      report: null,
+      trend,
+      variation,
+      legacy,
+      promptRows: [] as PromptRow[],
       competitorShare: [] as Array<{ domain: string; mentions: number; share: number }>,
       gaps: [] as Array<{ id: string; text: string; cluster: string }>,
-      provenance: summarizeProvenance([]),
-      totalChecks: 0,
+      totalPrompts: prompts.length,
+      previousInclusion: null as number | null,
     };
   }
 
-  // Group runs into discrete dates so the trend is per-run, not per-check.
-  const runDates = [...new Set(allChecks.map((c) => c.runAt.toISOString().slice(0, 10)))].sort();
-  const latestDate = runDates[runDates.length - 1];
-  const previousDate = runDates[runDates.length - 2];
+  const report = await getRunReport(latestRun.id);
 
-  const latest = allChecks.filter((c) => c.runAt.toISOString().slice(0, 10) === latestDate);
-  const previous = previousDate
-    ? allChecks.filter((c) => c.runAt.toISOString().slice(0, 10) === previousDate)
-    : [];
-
-  // Every rate below is computed over *observed* checks. A check that failed
-  // or was never attempted is a hole in the run, and treating it as a zero
-  // would silently report an outage as a drop in visibility.
-  const observed = (rows: typeof allChecks) => rows.filter((c) => isObserved(c.status as CheckStatus));
-
-  const provenance = summarizeProvenance(latest);
-  const latestObserved = observed(latest);
-  const rollup = rollUpVisibility(latestObserved);
-  const previousObserved = observed(previous);
-  const previousScore = previousObserved.length ? rollUpVisibility(previousObserved).score : rollup.score;
-
-  const byEngine = MEASURABLE_ENGINES.map((e) => {
-    const rows = latest.filter((c) => c.engine === e.id);
-    const seen = observed(rows);
-    const r = rollUpVisibility(seen);
-    const p = summarizeProvenance(rows);
-    return {
-      id: e.id, name: e.name, color: e.color,
-      // null, not zero: "we did not measure" is not "we measured nothing".
-      score: seen.length ? r.score : null,
-      mentionRate: seen.length ? r.mentionRate : null,
-      citationRate: seen.length ? r.citationRate : null,
-      checks: rows.length,
-      observed: seen.length,
-      status: p.mode,
-      reason: rows.find((c) => c.errorCategory)?.errorCategory ?? '',
-    };
+  const observations = await db.observation.findMany({
+    where: { runId: latestRun.id },
   });
 
-  const trend: TrendPoint[] = runDates
-    .map((date) => {
-      const rows = observed(allChecks.filter((c) => c.runAt.toISOString().slice(0, 10) === date));
-      return { date, value: rows.length ? rollUpVisibility(rows).score : null };
-    })
-    // A day on which nothing was observed is omitted rather than plotted as a
-    // crash to zero.
-    .filter((p): p is TrendPoint => p.value !== null);
-
-  const promptRows = prompts.map((p) => {
-    const rows = p.checks.filter((c) => c.runAt.toISOString().slice(0, 10) === latestDate);
-    const seen = observed(rows);
-    const r = rollUpVisibility(seen);
+  // Per-prompt rates, computed over that prompt's OBSERVED rows only. A prompt
+  // whose every engine failed has no rate — that is a gap in measurement, not a
+  // finding about visibility.
+  const promptRows: PromptRow[] = prompts.map((p) => {
+    const rows = observations.filter((o) => o.promptId === p.id);
+    const seen = rows.filter((o) => isObservedStatus(o.status));
+    const inclusion = binaryRate(seen.filter((o) => o.brandMentioned).length, seen.length);
+    const citation = binaryRate(seen.filter((o) => o.brandCited).length, seen.length);
     return {
-      id: p.id, text: p.text, cluster: p.cluster,
-      mentionRate: seen.length ? r.mentionRate : null,
-      citationRate: seen.length ? r.citationRate : null,
-      engines: rows.length,
+      id: p.id,
+      text: p.text,
+      cluster: p.cluster,
+      attempted: rows.length,
       observed: seen.length,
-      lastRun: rows[0]?.runAt ?? null,
+      inclusionRate: inclusion.rate,
+      citationRate: citation.rate,
+      insufficientEvidence: inclusion.insufficientEvidence,
     };
-  }).sort((a, b) => (a.mentionRate ?? 1) - (b.mentionRate ?? 1));
+  }).sort((a, b) => (a.inclusionRate ?? 1) - (b.inclusionRate ?? 1));
 
-  // Competitor share of voice across the latest run.
+  // Competitor share over observed rows in this run only.
+  const observedRows = observations.filter((o) => isObservedStatus(o.status));
   const tally = new Map<string, number>();
-  for (const c of latestObserved) {
-    for (const domain of parseJson<string[]>(c.competitors, [])) {
+  for (const o of observedRows) {
+    for (const domain of parseJson<string[]>(o.competitors, [])) {
       tally.set(domain, (tally.get(domain) ?? 0) + 1);
     }
   }
@@ -124,21 +97,38 @@ export async function getAiVisibility(projectId: string) {
     .map(([domain, mentions]) => ({ domain, mentions, share: mentions / totalCompetitorMentions }))
     .sort((a, b) => b.mentions - a.mentions);
 
+  // The previous run's inclusion rate, for a delta. Undefined when there is no
+  // comparable prior run — never defaulted to the current value.
+  const previous = trend.length >= 2 ? trend[trend.length - 2] : null;
+
   return {
-    rollup,
-    previousScore,
-    byEngine,
+    run: latestRun,
+    report,
     trend,
+    variation,
+    legacy,
     promptRows,
     competitorShare,
-    // Prompts where the brand was observed and never named — the
-    // highest-leverage list. A prompt with no observation is not a gap in
-    // visibility, it is a gap in measurement, so it is excluded.
-    gaps: promptRows.filter((p) => p.observed > 0 && p.mentionRate === 0).slice(0, 10)
+    // Prompts observed at least MIN times and never naming the brand. A prompt
+    // with no observation is a gap in measurement, not a gap in visibility.
+    gaps: promptRows
+      .filter((p) => p.observed > 0 && p.inclusionRate === 0)
+      .slice(0, 10)
       .map((p) => ({ id: p.id, text: p.text, cluster: p.cluster })),
-    provenance,
-    totalChecks: allChecks.length,
+    totalPrompts: prompts.length,
+    previousInclusion: previous?.inclusionRate ?? null,
   };
+}
+
+export interface PromptRow {
+  id: string;
+  text: string;
+  cluster: string;
+  attempted: number;
+  observed: number;
+  inclusionRate: number | null;
+  citationRate: number | null;
+  insufficientEvidence: boolean;
 }
 
 /* ------------------------------------------------------------------ */

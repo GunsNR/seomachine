@@ -10,7 +10,7 @@ import { breadcrumbSchema, pageMetadata } from '@/lib/metadata';
 export const metadata = pageMetadata({
   title: 'Platform',
   description:
-    'AI visibility tracking, citation monitoring, site audit, keyword research, content briefs and scoring, and WordPress publishing — in one platform.',
+    'Site audit, keyword research, content briefs and scoring, WordPress publishing, and a run-scoped measurement foundation — in one platform. Answer-engine measurement is not available: see the release truth audit.',
   path: '/platform',
   keywords: ['AI SEO platform', 'GEO software', 'SEO tool suite'],
 });

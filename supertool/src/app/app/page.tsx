@@ -2,7 +2,8 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 import { ArrowRight, Sparkles } from 'lucide-react';
 import { BarList, LineChart } from '@/components/app/Chart';
-import { Badge, EmptyState, PageHeader, Panel, ProvenanceBanner, StatTile } from '@/components/app/ui';
+import { Badge, EmptyState, PageHeader, Panel, StatTile } from '@/components/app/ui';
+import { RunHeader } from '@/components/app/RunEvidence';
 import { getSession, resolveProject } from '@/lib/auth';
 import { getOverview } from '@/lib/dashboard';
 import { compact, pct } from '@/lib/utils';
@@ -30,9 +31,15 @@ export default async function OverviewPage() {
   }
 
   const { visibility, keywords, audit, content, leads, topOpportunities } = await getOverview(project.id, { dataMode: project.dataMode });
-  const scoreDelta = visibility.rollup.score - visibility.previousScore;
-  // A run in which nothing came back is not a run with a score of zero.
-  const anyObserved = visibility.provenance.observed > 0;
+  const report = visibility.report;
+  // A run in which nothing came back is not a run with a rate of zero.
+  const anyObserved = (report?.observed ?? 0) > 0;
+  // Change since the previous RUN, not since a calendar bucket. Undefined when
+  // there is no comparable prior run — never defaulted to the current value.
+  const inclusionDelta =
+    report?.inclusion.rate != null && visibility.previousInclusion != null
+      ? Math.round((report.inclusion.rate - visibility.previousInclusion) * 100)
+      : undefined;
 
   return (
     <>
@@ -48,28 +55,57 @@ export default async function OverviewPage() {
       />
 
       <div className="mt-6 space-y-6">
-        <ProvenanceBanner provenance={visibility.provenance} />
+        {report ? (
+          <RunHeader
+            run={{
+              runId: report.runId,
+              startedAt: report.startedAt,
+              finishedAt: report.finishedAt,
+              status: report.status,
+              interrupted: report.interrupted,
+              trigger: report.trigger,
+              dataMode: report.dataMode,
+              promptSetVersion: report.promptSetVersion,
+              methodologyVersion: report.methodologyVersion,
+              samplesPerPair: report.samplesPerPair,
+              localeTag: report.localeTag,
+              regionCode: report.regionCode,
+              attempted: report.attempted,
+              observed: report.observed,
+              failed: report.failed,
+              unavailable: report.unavailable,
+              coverage: report.coverage,
+            }}
+          />
+        ) : (
+          <p className="rounded-xl bg-surface-alt p-4 text-[0.84rem] leading-relaxed text-body ring-1 ring-line">
+            <strong className="font-semibold text-ink">No measurement run yet.</strong> Nothing is
+            reported for AI visibility until a run has produced observations.
+          </p>
+        )}
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatTile
-            label="AI visibility score"
-            value={anyObserved ? visibility.rollup.score : '—'}
-            delta={anyObserved ? scoreDelta : undefined}
+            label="Inclusion rate"
+            value={anyObserved && report?.inclusion.rate != null ? pct(report.inclusion.rate) : '—'}
+            delta={inclusionDelta}
             sub={
-              anyObserved
-                ? `${visibility.rollup.checks} observed of ${visibility.provenance.total} checks`
-                : 'Nothing observed in the latest run'
+              !report
+                ? 'No run yet'
+                : report.inclusion.insufficientEvidence
+                  ? `Insufficient evidence · ${report.observed} observed`
+                  : `${report.inclusion.successes} of ${report.inclusion.n} observed answers`
             }
-            tone={
-              anyObserved
-                ? visibility.rollup.score >= 60 ? 'good' : visibility.rollup.score >= 35 ? 'warn' : 'bad'
-                : 'default'
-            }
+            tone="default"
           />
           <StatTile
             label="Citation rate"
-            value={anyObserved ? pct(visibility.rollup.citationRate) : '—'}
-            sub="Of answers actually observed"
+            value={anyObserved && report?.citation.rate != null ? pct(report.citation.rate) : '—'}
+            sub={
+              report?.citation.insufficientEvidence
+                ? 'Insufficient evidence to state a rate'
+                : 'Of answers actually observed'
+            }
           />
           <StatTile
             label="Keywords in top 10"
@@ -89,31 +125,40 @@ export default async function OverviewPage() {
 
         <div className="grid items-start gap-6 xl:grid-cols-[1.5fr_1fr]">
           <Panel
-            title="AI visibility trend"
-            sub="Convenience index across the engines you have connected"
+            title="Inclusion rate by run"
+            sub="One point per run — never one point per day"
             action={<Link href="/app/ai-visibility" className="text-[0.82rem] font-bold text-brand hover:underline">Details</Link>}
           >
             <div className="p-5">
-              <LineChart points={visibility.trend} label="AI visibility score over time" height={260} />
+              <LineChart
+                points={visibility.trend
+                  .filter((t) => t.inclusionRate !== null)
+                  .map((t) => ({
+                    date: t.startedAt.toISOString().slice(0, 10),
+                    value: Math.round((t.inclusionRate ?? 0) * 100),
+                  }))}
+                label="Inclusion rate per measurement run"
+                height={260}
+              />
             </div>
           </Panel>
 
           <Panel title="By engine" sub="Latest run">
             <div className="p-5">
-              {visibility.byEngine.length ? (
+              {report?.byEngine.length ? (
                 <BarList
-                  rows={visibility.byEngine.map((e) => ({
+                  rows={report.byEngine.map((e) => ({
                     label: e.name,
-                    value: e.score ?? 0,
+                    value: Math.round((e.inclusionRate ?? 0) * 100),
                     color: e.color,
                     sub: e.observed
-                      ? `Named in ${pct(e.mentionRate ?? 0)} · cited in ${pct(e.citationRate ?? 0)}`
-                      : `Not measured — ${e.reason || e.status}`,
+                      ? `${e.observed}/${e.attempted} observed${e.insufficientEvidence ? ' · insufficient evidence' : ''}`
+                      : `Not measured — ${e.reason.slice(0, 80)}`,
                   }))}
                   max={100}
                 />
               ) : (
-                <p className="text-[0.85rem] text-body">No checks recorded yet.</p>
+                <p className="text-[0.85rem] text-body">No observations recorded yet.</p>
               )}
             </div>
           </Panel>

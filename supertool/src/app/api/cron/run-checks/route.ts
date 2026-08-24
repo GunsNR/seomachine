@@ -1,11 +1,9 @@
 import { NextResponse } from 'next/server';
 import { timingSafeEqual } from 'node:crypto';
-import { analyzeAnswer } from '@/lib/ai/analysis';
-import { MEASURABLE_ENGINES } from '@/lib/ai/engines';
-import { ask, isObserved, type DataMode } from '@/lib/ai/providers';
+import type { DataMode } from '@/lib/ai/providers';
+import { startRun } from '@/lib/measurement/run';
 import { db } from '@/lib/db';
 import { getPlan } from '@/lib/plan';
-import { summarizeProvenance } from '@/lib/provenance';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -68,12 +66,21 @@ async function run(req: Request) {
     include: {
       org: true,
       competitors: true,
-      prompts: { include: { checks: { orderBy: { runAt: 'desc' }, take: 1 } } },
+      prompts: true,
+      // Due-ness is decided from the last measurement RUN, not from legacy
+      // per-check timestamps.
+      runs: { orderBy: { startedAt: 'desc' }, take: 1, select: { startedAt: true } },
     },
   });
 
   const now = Date.now();
-  const results: Array<{ project: string; status: string; checks?: number; reason?: string }> = [];
+  const results: Array<{
+    project: string;
+    runId?: string;
+    status: string;
+    checks?: number;
+    reason?: string;
+  }> = [];
   let processed = 0;
 
   for (const project of projects) {
@@ -90,9 +97,7 @@ async function run(req: Request) {
     const plan = getPlan(project.org.plan);
     const intervalMs = plan.frequency === 'daily' ? DAY_MS : 7 * DAY_MS;
 
-    const lastRun = project.prompts
-      .flatMap((p) => p.checks)
-      .reduce<number>((latest, c) => Math.max(latest, c.runAt.getTime()), 0);
+    const lastRun = project.runs[0]?.startedAt.getTime() ?? 0;
 
     if (!force && lastRun && now - lastRun < intervalMs) {
       const hours = Math.ceil((intervalMs - (now - lastRun)) / 3_600_000);
@@ -102,69 +107,31 @@ async function run(req: Request) {
 
     processed++;
 
-    const competitors = project.competitors.map((c) => ({ name: c.label, domain: c.domain }));
-    const runAt = new Date();
     const mode: DataMode = project.dataMode === 'demo' ? 'demo' : 'live';
-    const rows: Array<Record<string, unknown>> = [];
 
     try {
-      for (const prompt of project.prompts) {
-        const engineResults = await Promise.all(
-          MEASURABLE_ENGINES.map(async (engine) => {
-            const answer = await ask({
-              prompt: prompt.text,
-              engine: engine.id,
-              brand: project.name,
-              domain: project.domain,
-              competitors,
-              seed: `${project.id}|${runAt.toISOString().slice(0, 10)}`,
-              mode,
-            });
+      // Same orchestration path as a manual run: one run id, observations
+      // persisted as they complete, coverage reported honestly.
+      const result = await startRun({
+        orgId: project.orgId,
+        projectId: project.id,
+        projectName: project.name,
+        projectDomain: project.domain,
+        prompts: project.prompts.map((p) => ({ id: p.id, text: p.text, cluster: p.cluster })),
+        competitors: project.competitors.map((c) => ({ name: c.label, domain: c.domain })),
+        dataMode: mode,
+        trigger: 'scheduled',
+      });
 
-            const base = {
-              promptId: prompt.id,
-              engine: engine.id as string,
-              status: answer.status,
-              errorCategory: answer.errorCategory,
-              errorDetail: answer.error ?? '',
-              model: answer.model,
-              latencyMs: answer.latencyMs,
-              runAt,
-            };
-            if (!isObserved(answer.status)) return base;
-
-            const a = analyzeAnswer({
-              answer: answer.answer,
-              brand: project.name,
-              domain: project.domain,
-              competitors,
-              providedCitations: answer.citations,
-            });
-            return {
-              ...base,
-              brandMentioned: a.brandMentioned,
-              brandCited: a.brandCited,
-              mentionRank: a.mentionRank,
-              sentiment: a.sentiment,
-              shareOfVoice: a.shareOfVoice,
-              citedUrls: JSON.stringify(a.citedUrls),
-              competitors: JSON.stringify(a.competitorsMentioned),
-              excerpt: a.excerpt,
-            };
-          }),
-        );
-        rows.push(...engineResults);
-      }
-
-      await db.aiCheck.createMany({ data: rows as never });
-      const p = summarizeProvenance(rows as Array<{ status: string }>);
-      // "ran" alone would hide a run in which every provider call failed, so
-      // the batch report carries the coverage it actually achieved.
       results.push({
         project: project.name,
-        status: p.observed ? 'ran' : 'ran-empty',
-        checks: rows.length,
-        reason: p.observed === rows.length ? undefined : `${p.observed}/${rows.length} observed`,
+        runId: result.runId,
+        status: result.status,
+        checks: result.attempted,
+        reason:
+          result.observed === result.attempted
+            ? undefined
+            : `${result.observed}/${result.attempted} observed`,
       });
     } catch (err) {
       // One project failing must not abort the rest of the batch.
@@ -181,7 +148,7 @@ async function run(req: Request) {
     ok: true,
     ranAt: new Date().toISOString(),
     projectsConsidered: projects.length,
-    projectsRun: results.filter((r) => r.status === 'ran').length,
+    projectsRun: results.filter((r) => ['completed', 'partial'].includes(r.status)).length,
     totalChecks: results.reduce((s, r) => s + (r.checks ?? 0), 0),
     results,
   });

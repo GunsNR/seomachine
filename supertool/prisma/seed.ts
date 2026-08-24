@@ -12,10 +12,9 @@
  */
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
-import { MEASURABLE_ENGINES } from '../src/lib/ai/engines';
 import { generatePromptSet } from '../src/lib/ai/prompts';
-import { analyzeAnswer } from '../src/lib/ai/analysis';
-import { ask } from '../src/lib/ai/providers';
+import { DEMO_ENGINE_IDS } from '../src/lib/ai/engines';
+import { startRun } from '../src/lib/measurement/run';
 import { classifyIntent } from '../src/lib/seo/keywords';
 import { keywordDifficulty } from '../src/lib/seo/metrics';
 
@@ -157,7 +156,7 @@ async function main() {
   }
   console.log(`  ${KEYWORDS.length} keywords with 90 days of rank history`);
 
-  /* ---------------- Prompt set + AI checks across 6 engines ---------------- */
+  /* ---------------- Prompt set + measurement runs ---------------- */
   const generated = generatePromptSet({
     brand: 'Rank Logic SuperTool',
     category: 'AI SEO platform',
@@ -167,57 +166,61 @@ async function main() {
   });
 
   const competitors = project.competitors.map((c) => ({ name: c.label, domain: c.domain }));
-  let checkCount = 0;
 
+  const prompts = [];
   for (const g of generated) {
-    const prompt = await db.aiPrompt.create({
-      data: { projectId: project.id, text: g.text, cluster: g.cluster, intent: g.intent },
-    });
-
-    // Four weekly runs so the dashboard has a trend, not a single point.
-    for (let week = 3; week >= 0; week--) {
-      const runAt = new Date(Date.now() - week * 7 * 864e5);
-      const rows = [];
-      for (const engine of MEASURABLE_ENGINES) {
-        const result = await ask({
-          prompt: g.text,
-          engine: engine.id,
-          brand: 'Rank Logic SuperTool',
-          domain: project.domain,
-          competitors,
-          seed: `${project.id}|w${week}`,
-          mode: 'demo',
-        });
-        const a = analyzeAnswer({
-          answer: result.answer,
-          brand: 'Rank Logic SuperTool',
-          domain: project.domain,
-          competitors,
-          providedCitations: result.citations,
-        });
-        rows.push({
-          promptId: prompt.id,
-          engine: engine.id,
-          brandMentioned: a.brandMentioned,
-          brandCited: a.brandCited,
-          mentionRank: a.mentionRank,
-          sentiment: a.sentiment,
-          shareOfVoice: a.shareOfVoice,
-          citedUrls: JSON.stringify(a.citedUrls),
-          competitors: JSON.stringify(a.competitorsMentioned),
-          excerpt: a.excerpt,
-          status: result.status,
-          errorCategory: result.errorCategory,
-          model: result.model,
-          latencyMs: result.latencyMs,
-          runAt,
-        });
-      }
-      await db.aiCheck.createMany({ data: rows });
-      checkCount += rows.length;
-    }
+    prompts.push(
+      await db.aiPrompt.create({
+        data: { projectId: project.id, text: g.text, cluster: g.cluster, intent: g.intent },
+      }),
+    );
   }
-  console.log(`  ${generated.length} prompts, ${checkCount} engine checks over 4 weeks`);
+
+  // Four separate runs, each with its own run id, so the demo workspace shows
+  // the run-based model rather than a date bucket. Two of them land on the same
+  // UTC day on purpose: the dashboard must keep them apart.
+  // Hours before now, anchored so the last two land on the SAME UTC calendar
+  // day at different times. That pair is the demonstration: date-grouping would
+  // have merged them into one run that never happened.
+  const runOffsetsHours = [21 * 24, 14 * 24, 7 * 24, 14, 2];
+  let observationCount = 0;
+  const runIds: string[] = [];
+
+  for (let i = 0; i < runOffsetsHours.length; i++) {
+    const result = await startRun({
+      orgId: org.id,
+      projectId: project.id,
+      projectName: 'Rank Logic SuperTool',
+      projectDomain: project.domain,
+      prompts: prompts.map((p) => ({ id: p.id, text: p.text, cluster: p.cluster })),
+      competitors,
+      dataMode: 'demo',
+      trigger: i === runOffsetsHours.length - 1 ? 'manual' : 'scheduled',
+      // Two samples per pair so the demo shows repeated sampling and the
+      // interval has something to be computed from.
+      samplesPerPair: 2,
+    });
+    runIds.push(result.runId);
+    observationCount += result.attempted;
+
+    // Backdate from midday UTC so the two short offsets cannot straddle
+    // midnight and accidentally land on different calendar days.
+    const anchor = new Date();
+    anchor.setUTCHours(23, 0, 0, 0);
+    const startedAt = new Date(anchor.getTime() - runOffsetsHours[i] * 3600e3);
+    await db.measurementRun.update({
+      where: { id: result.runId },
+      data: { startedAt, finishedAt: new Date(startedAt.getTime() + 90_000) },
+    });
+    await db.observation.updateMany({
+      where: { runId: result.runId },
+      data: { observedAt: startedAt },
+    });
+  }
+
+  console.log(
+    `  ${prompts.length} prompts, ${runIds.length} measurement runs, ${observationCount} observations`,
+  );
 
   /* ---------------- Articles ---------------- */
   const ar = rng('articles');
@@ -281,7 +284,9 @@ async function main() {
 
   /* ---------------- Leads ---------------- */
   const lr = rng('leads');
-  const engines = MEASURABLE_ENGINES.map((e) => e.id);
+  // Referral telemetry names the consumer surface a visit claimed to come from,
+  // which is unrelated to whether SuperTool can measure that surface.
+  const engines = DEMO_ENGINE_IDS;
   const leads = Array.from({ length: 34 }, (_, i) => {
     const fromAi = lr() < 0.58;
     return {

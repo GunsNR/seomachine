@@ -1,9 +1,10 @@
 import { redirect } from 'next/navigation';
-import { Badge, EmptyState, PageHeader, Panel, ProvenanceBanner, StatTile } from '@/components/app/ui';
+import { Badge, EmptyState, PageHeader, Panel, StatTile } from '@/components/app/ui';
+import { RunHeader } from '@/components/app/RunEvidence';
 import { BarList } from '@/components/app/Chart';
-import { engineName, MEASURABLE_ENGINES } from '@/lib/ai/engines';
-import { isObserved, type CheckStatus } from '@/lib/ai/providers';
-import { summarizeProvenance } from '@/lib/provenance';
+import { engineName, getEngine } from '@/lib/ai/engines';
+import { isObservedStatus, binaryRate } from '@/lib/measurement/stats';
+import { getLatestRun, getRunReport } from '@/lib/measurement/report';
 import { ExportButton } from '@/components/app/ExportButton';
 import { getSession, resolveProject } from '@/lib/auth';
 import { db } from '@/lib/db';
@@ -19,20 +20,17 @@ export default async function CitationsPage() {
   const project = await resolveProject(session.orgId);
   if (!project) redirect('/app');
 
-  const checks = await db.aiCheck.findMany({
-    where: { prompt: { projectId: project.id } },
-    include: { prompt: true },
-    orderBy: { runAt: 'desc' },
-    take: 900,
-  });
+  // Citation evidence belongs to one RUN, identified by its id. Grouping by
+  // calendar date merged separate runs into a bucket that never happened.
+  const latestRun = await getLatestRun(project.id);
 
-  if (!checks.length) {
+  if (!latestRun) {
     return (
       <>
         <PageHeader title="Citations" />
         <div className="mt-6 rounded-xl bg-white ring-1 ring-line">
           <EmptyState
-            title="No checks recorded yet"
+            title="No measurement run yet"
             body="Run your prompt set to start collecting citation evidence."
             cta={{ label: 'Run a check', href: '/app/ai-visibility' }}
           />
@@ -41,12 +39,14 @@ export default async function CitationsPage() {
     );
   }
 
-  const latestDate = checks[0].runAt.toISOString().slice(0, 10);
-  const latestAll = checks.filter((c) => c.runAt.toISOString().slice(0, 10) === latestDate);
-  const provenance = summarizeProvenance(latestAll);
-  // Only checks that produced an answer can carry citation evidence. Counting
-  // a failed call as "no citation" would understate the rate.
-  const latest = latestAll.filter((c) => isObserved(c.status as CheckStatus));
+  const [report, latestAll] = await Promise.all([
+    getRunReport(latestRun.id),
+    db.observation.findMany({ where: { runId: latestRun.id } }),
+  ]);
+
+  // Only observations that produced an answer can carry citation evidence.
+  // Counting a failed call as "no citation" would understate the rate.
+  const latest = latestAll.filter((c) => isObservedStatus(c.status));
 
   const cited = latest.filter((c) => c.brandCited);
   const mentionedNotCited = latest.filter((c) => c.brandMentioned && !c.brandCited);
@@ -68,16 +68,22 @@ export default async function CitationsPage() {
   const topUrls = [...urlTally.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
   const topCompetitorUrls = [...competitorUrlTally.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
 
-  const byEngine = MEASURABLE_ENGINES.map((e) => {
-    const all = latestAll.filter((c) => c.engine === e.id);
-    const rows = latest.filter((c) => c.engine === e.id);
+  // Engines that actually appear in this run's observations, so a run is
+  // described by what it did rather than by the current registry.
+  const engineIds = [...new Set(latestAll.map((c) => c.engine))];
+  const byEngine = engineIds.map((id) => {
+    const all = latestAll.filter((c) => c.engine === id);
+    const rows = latest.filter((c) => c.engine === id);
     const won = rows.filter((c) => c.brandCited).length;
+    const rate = binaryRate(won, rows.length);
     return {
-      label: e.name,
+      label: engineName(id),
       value: won,
-      color: e.color,
+      color: getEngine(id)?.color ?? '#888888',
       sub: rows.length
-        ? `${rows.length}/${all.length} observed · ${pct(won / rows.length)} citation rate`
+        ? `${rows.length}/${all.length} observed · ${
+            rate.insufficientEvidence ? 'insufficient evidence' : `${pct(rate.rate ?? 0)} citation rate`
+          }`
         : 'Not measured in this run',
     };
   }).sort((a, b) => b.value - a.value);
@@ -91,14 +97,40 @@ export default async function CitationsPage() {
       />
 
       <div className="mt-6 space-y-6">
-        <ProvenanceBanner provenance={provenance} />
+        {report && (
+          <RunHeader
+            run={{
+              runId: report.runId,
+              startedAt: report.startedAt,
+              finishedAt: report.finishedAt,
+              status: report.status,
+              interrupted: report.interrupted,
+              trigger: report.trigger,
+              dataMode: report.dataMode,
+              promptSetVersion: report.promptSetVersion,
+              methodologyVersion: report.methodologyVersion,
+              samplesPerPair: report.samplesPerPair,
+              localeTag: report.localeTag,
+              regionCode: report.regionCode,
+              attempted: report.attempted,
+              observed: report.observed,
+              failed: report.failed,
+              unavailable: report.unavailable,
+              coverage: report.coverage,
+            }}
+          />
+        )}
 
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          <StatTile label="Citations won" value={cited.length} sub={`of ${latest.length} observed checks in the latest run`} tone="good" />
+          <StatTile label="Citations won" value={cited.length} sub={`of ${latest.length} observed checks in this run`} tone="good" />
           <StatTile
             label="Citation rate"
-            value={latest.length ? pct(cited.length / latest.length) : '—'}
-            sub={`Over observed answers only · ${pct(provenance.coverage)} coverage`}
+            value={report?.citation.insufficientEvidence ? 'Insufficient' : pct(report?.citation.rate ?? 0)}
+            sub={
+              report?.citation.insufficientEvidence
+                ? `${latest.length} observed — below the minimum to state a rate`
+                : `Over observed answers only · ${pct(report?.coverage ?? 0)} coverage`
+            }
           />
           <StatTile label="Mentioned, not cited" value={mentionedNotCited.length} sub="Highest-leverage fixes available" tone="warn" />
           <StatTile label="Your URLs quoted" value={topUrls.length} sub="Distinct pages cited" />
@@ -147,10 +179,12 @@ export default async function CitationsPage() {
                     </Badge>
                     {c.mentionRank > 0 && <Badge>Rank {c.mentionRank}</Badge>}
                   </div>
-                  <p className="mt-2.5 text-[0.85rem] font-semibold text-ink">{c.prompt.text}</p>
-                  {c.excerpt && (
+                  {/* The immutable snapshot of what was asked, not a join to a
+                      prompt row that may since have been edited or deleted. */}
+                  <p className="mt-2.5 text-[0.85rem] font-semibold text-ink">{c.promptTextSnapshot}</p>
+                  {c.evidenceExcerpt && (
                     <p className="mt-1.5 border-l-2 border-line pl-3 text-[0.85rem] leading-relaxed text-body">
-                      {c.excerpt}
+                      {c.evidenceExcerpt}
                     </p>
                   )}
                 </li>

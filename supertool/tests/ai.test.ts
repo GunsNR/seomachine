@@ -2,7 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { analyzeAnswer, rollUpVisibility } from '@/lib/ai/analysis';
 import { ask, askAll, seededRandom } from '@/lib/ai/providers';
 import { generatePromptSet } from '@/lib/ai/prompts';
-import { ENGINE_IDS, ENGINES, MEASURABLE_ENGINES, MEASURABLE_ENGINE_IDS } from '@/lib/ai/engines';
+import {
+  ENGINE_IDS,
+  ENGINES,
+  DEMO_ENGINES,
+  DEMO_ENGINE_IDS,
+  MEASURABLE_ENGINE_IDS,
+} from '@/lib/ai/engines';
 
 const competitors = [{ name: 'Semrush', domain: 'semrush.com' }, { name: 'Ahrefs', domain: 'ahrefs.com' }];
 
@@ -161,7 +167,7 @@ describe('ask (demo mode)', () => {
       domain: 'ranklogicsupertool.com', competitors, seed: 'p1', mode: 'demo' as const,
     };
     const answers = await Promise.all(
-      MEASURABLE_ENGINE_IDS.map((engine) => ask({ ...base, engine })),
+      DEMO_ENGINE_IDS.map((engine) => ask({ ...base, engine })),
     );
     expect(new Set(answers.map((a) => a.answer)).size).toBeGreaterThan(1);
   });
@@ -228,15 +234,28 @@ describe('generatePromptSet', () => {
 });
 
 describe('engine registry', () => {
-  it('knows six surfaces but only measures the five with a compliant source', () => {
+  /**
+   * These expectations tightened in the Gate 1 provider audit.
+   *
+   * Gate 0 required a compliant API. Gate 1 additionally requires that the
+   * adapter enables the vendor's web retrieval and that the model was confirmed
+   * against the vendor's own documentation — because an ungrounded model
+   * answering "which SEO tool is best" reports its training data, not a search.
+   * No surface currently meets all three, so nothing is measurable.
+   */
+  it('knows six surfaces and, under the audit, measures none of them', () => {
     expect(ENGINES).toHaveLength(6);
-    expect(MEASURABLE_ENGINE_IDS).toHaveLength(5);
-    expect(MEASURABLE_ENGINE_IDS).not.toContain('google-ai-mode');
+    expect(MEASURABLE_ENGINE_IDS).toHaveLength(0);
   });
 
-  it('uses unique ids and unique credential keys among measurable surfaces', () => {
+  it('still permits demo sample text only for surfaces with a real public API', () => {
+    expect(DEMO_ENGINE_IDS).toHaveLength(5);
+    expect(DEMO_ENGINE_IDS).not.toContain('google-ai-mode');
+  });
+
+  it('uses unique ids and unique credential keys among API-backed surfaces', () => {
     expect(new Set(ENGINES.map((e) => e.id)).size).toBe(6);
-    const keys = MEASURABLE_ENGINES.map((e) => e.envKey);
+    const keys = DEMO_ENGINES.map((e) => e.envKey);
     expect(keys.every(Boolean)).toBe(true);
     expect(new Set(keys).size).toBe(keys.length);
   });
