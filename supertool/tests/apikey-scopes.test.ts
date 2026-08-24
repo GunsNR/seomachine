@@ -1,5 +1,3 @@
-import { execFileSync } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 /**
@@ -11,16 +9,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
  * it short of deleting the row and losing the audit trail.
  */
 
-const BASE_URL =
-  process.env.TEST_DATABASE_URL ??
-  process.env.DATABASE_URL ??
-  'postgresql://postgres:postgres@127.0.0.1:5432/postgres';
+import { createTestDatabase, type TestDatabase } from './helpers/test-database';
 
-const schemaName = `test_${randomBytes(6).toString('hex')}`;
-const u = new URL(BASE_URL);
-u.searchParams.set('schema', schemaName);
-const testUrl = u.toString();
-process.env.DATABASE_URL = testUrl;
+let database: TestDatabase;
 
 type KeyMod = typeof import('@/lib/apikey');
 type DbMod = typeof import('@/lib/db');
@@ -30,18 +21,15 @@ let db: DbMod['db'];
 let projectId = '';
 
 beforeAll(async () => {
-  execFileSync('npx', ['prisma', 'db', 'push', '--skip-generate', '--accept-data-loss'], {
-    env: { ...process.env, DATABASE_URL: testUrl },
-    stdio: 'pipe',
-  });
+  database = await createTestDatabase('apikey');
 
   keys = await import('@/lib/apikey');
   db = (await import('@/lib/db')).db;
 });
 
 afterAll(async () => {
-  await db?.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`).catch(() => undefined);
   await db?.$disconnect();
+  await database?.drop();
 });
 
 beforeEach(async () => {

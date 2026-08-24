@@ -41,7 +41,14 @@ jobs:
           --health-retries 10
 
     env:
+      # Runtime traffic. In production this points at a pooled endpoint.
       DATABASE_URL: postgresql://supertool:ci-only-password@127.0.0.1:5432/supertool_ci?schema=public
+      # Session-dependent work: migrations, pg_dump, pg_restore. Prisma requires
+      # this once the datasource declares it — a missing DIRECT_URL is a hard
+      # schema-load error, not a fallback. CI has no pooler, so it is the same
+      # value; a hosted deployment points it at the direct endpoint.
+      DIRECT_URL: postgresql://supertool:ci-only-password@127.0.0.1:5432/supertool_ci?schema=public
+      PGPASSWORD: ci-only-password
       # Never a real secret; the app refuses to boot in production without one.
       AUTH_SECRET: ci-only-secret-value-at-least-32-characters-long
 
@@ -84,6 +91,15 @@ jobs:
 
       - name: Production build
         run: npm run build
+
+      - name: Rehearse backup and restore
+        # The migration is only half of a safe deploy. The other half is being
+        # able to get back, and a backup nobody has restored is a hope rather
+        # than a plan. This runs the real pg_dump/pg_restore pair against the
+        # disposable service, then re-checks integrity on the restored copy, so
+        # the procedure in docs/hosted-postgres-validation.md is executed on
+        # every push instead of only being written down.
+        run: npm run db:rehearse
 
       - name: Smoke-test the running server
         run: |

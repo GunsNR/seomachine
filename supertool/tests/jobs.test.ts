@@ -1,5 +1,3 @@
-import { execFileSync } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 /**
@@ -12,21 +10,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
  * of them regardless of whether they hold.
  */
 
-const BASE_URL =
-  process.env.TEST_DATABASE_URL ??
-  process.env.DATABASE_URL ??
-  'postgresql://postgres:postgres@127.0.0.1:5432/postgres';
+import { createTestDatabase, type TestDatabase } from './helpers/test-database';
 
-const schemaName = `test_${randomBytes(6).toString('hex')}`;
-
-function urlWithSchema(base: string, schema: string): string {
-  const u = new URL(base);
-  u.searchParams.set('schema', schema);
-  return u.toString();
-}
-
-const testUrl = urlWithSchema(BASE_URL, schemaName);
-process.env.DATABASE_URL = testUrl;
+let database: TestDatabase;
 
 type QueueMod = typeof import('@/lib/jobs/queue');
 type LockMod = typeof import('@/lib/jobs/lock');
@@ -37,10 +23,7 @@ let lock: LockMod;
 let db: DbMod['db'];
 
 beforeAll(async () => {
-  execFileSync('npx', ['prisma', 'db', 'push', '--skip-generate', '--accept-data-loss'], {
-    env: { ...process.env, DATABASE_URL: testUrl },
-    stdio: 'pipe',
-  });
+  database = await createTestDatabase('jobs');
 
   queue = await import('@/lib/jobs/queue');
   lock = await import('@/lib/jobs/lock');
@@ -48,8 +31,8 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await db?.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`).catch(() => undefined);
   await db?.$disconnect();
+  await database?.drop();
 });
 
 beforeEach(async () => {
