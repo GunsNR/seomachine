@@ -22,8 +22,26 @@ jobs:
       run:
         working-directory: supertool
 
+    # Phase 2 moved the product from SQLite to PostgreSQL with a reviewed
+    # migration history. CI now runs the real engine: a schema that passes on
+    # SQLite proves less than it appears to, because the two do not enforce
+    # uniqueness, nulls or types identically.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: supertool
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: supertool_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
     env:
-      DATABASE_URL: file:./ci.db
+      DATABASE_URL: postgresql://supertool:ci-only-password@127.0.0.1:5432/supertool_ci?schema=public
       # Never a real secret; the app refuses to boot in production without one.
       AUTH_SECRET: ci-only-secret-value-at-least-32-characters-long
 
@@ -42,6 +60,19 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
+      - name: Verify the migration applies to an empty database
+        # `migrate deploy` rather than `db push`: this is the command that will
+        # run against production, so it is the one CI must exercise. A drift
+        # check afterwards proves the migrations and the schema agree — a
+        # migration that no longer produces the declared schema is the failure
+        # mode that only appears at deploy time.
+        run: |
+          npx prisma migrate deploy
+          npx prisma migrate diff \
+            --from-schema-datasource prisma/schema.prisma \
+            --to-schema-datamodel prisma/schema.prisma \
+            --exit-code && echo "No drift between migrations and schema"
+
       - name: Typecheck
         run: npm run typecheck
 
@@ -50,9 +81,6 @@ jobs:
 
       - name: Unit and integration tests
         run: npm test
-
-      - name: Create database schema
-        run: npx prisma db push --skip-generate
 
       - name: Production build
         run: npm run build

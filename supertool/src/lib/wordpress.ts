@@ -1,5 +1,6 @@
 import 'server-only';
 import { decryptSecret } from './crypto';
+import { safeFetch } from './net-fetch';
 
 /**
  * WordPress REST client.
@@ -15,6 +16,8 @@ export interface WordPressCredentials {
   username: string;
   /** Encrypted at rest; decrypted here immediately before use. */
   appPassword: string;
+  /** Test-only; see SafeFetchOptions.allowPrivateHosts. */
+  allowPrivateHosts?: boolean;
 }
 
 export interface PublishInput {
@@ -146,11 +149,12 @@ async function call(
   path: string,
   init: { method?: string; body?: unknown } = {},
 ): Promise<{ ok: boolean; status: number; data: unknown; error?: string }> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 20_000);
-
   try {
-    const res = await fetch(`${apiRoot(creds.siteUrl)}${path}`, {
+    // A customer-supplied site URL is exactly the input SSRF exploits. safeFetch
+    // resolves it, refuses private space, and re-checks each redirect — and
+    // strips the Authorization header if a hop crosses origin, so the WordPress
+    // application password is never replayed to a host that did not earn it.
+    const res = await safeFetch(`${apiRoot(creds.siteUrl)}${path}`, {
       method: init.method ?? 'GET',
       headers: {
         Authorization: authHeader(creds),
@@ -158,7 +162,8 @@ async function call(
         Accept: 'application/json',
       },
       body: init.body ? JSON.stringify(init.body) : undefined,
-      signal: controller.signal,
+      timeoutMs: 20_000,
+      allowPrivateHosts: creds.allowPrivateHosts ?? false,
     });
 
     const text = await res.text();
@@ -176,8 +181,6 @@ async function call(
     return { ok: true, status: res.status, data };
   } catch (err) {
     return { ok: false, status: 0, data: null, error: describeNetworkError(err, creds.siteUrl) };
-  } finally {
-    clearTimeout(timer);
   }
 }
 

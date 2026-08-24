@@ -7,6 +7,7 @@
  */
 import * as cheerio from 'cheerio';
 import { words } from './text';
+import { BlockedRequestError, safeFetch } from '../net-fetch';
 
 export interface CrawledLink {
   href: string;
@@ -95,18 +96,20 @@ export function normalizeUrl(input: string): string {
 
 export async function fetchPage(
   rawUrl: string,
-  opts: { timeoutMs?: number } = {},
+  opts: { timeoutMs?: number; allowPrivateHosts?: boolean } = {},
 ): Promise<CrawledPage> {
   const url = normalizeUrl(rawUrl);
   const started = Date.now();
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), opts.timeoutMs ?? 15_000);
+  const timer: ReturnType<typeof setTimeout> | undefined = undefined;
 
   try {
-    const res = await fetch(url, {
+    // safeFetch resolves the hostname, refuses private and link-local
+    // addresses, and re-validates every redirect hop. `redirect: 'follow'`
+    // here previously let a remote server choose the final destination.
+    const res = await safeFetch(url, {
       headers: { 'User-Agent': UA, Accept: 'text/html,application/xhtml+xml' },
-      redirect: 'follow',
-      signal: controller.signal,
+      timeoutMs: opts.timeoutMs ?? 15_000,
+      allowPrivateHosts: opts.allowPrivateHosts ?? false,
     });
 
     const contentType = res.headers.get('content-type') ?? '';
@@ -128,13 +131,20 @@ export async function fetchPage(
     page.contentType = contentType;
     return page;
   } catch (err) {
+    // A blocked destination is reported as such rather than as a generic
+    // network error: "we refused this" and "this did not answer" are different
+    // findings, and conflating them hides a misconfigured site from its owner.
     const message =
-      err instanceof Error
-        ? err.name === 'AbortError' ? `Timed out after ${opts.timeoutMs ?? 15_000}ms` : err.message
-        : 'Unknown fetch error';
+      err instanceof BlockedRequestError
+        ? err.message
+        : err instanceof Error
+          ? err.name === 'AbortError'
+            ? `Timed out after ${opts.timeoutMs ?? 15_000}ms`
+            : err.message
+          : 'Unknown fetch error';
     return emptyPage(url, 0, message, Date.now() - started);
   } finally {
-    clearTimeout(timer);
+    if (timer) clearTimeout(timer);
   }
 }
 
@@ -253,7 +263,13 @@ function collectSchemaTypes(node: unknown, out: string[], depth = 0): void {
  */
 export async function crawlSite(
   startUrl: string,
-  opts: { maxPages?: number; concurrency?: number; timeoutMs?: number } = {},
+  opts: {
+    maxPages?: number;
+    concurrency?: number;
+    timeoutMs?: number;
+    /** Test-only; see SafeFetchOptions.allowPrivateHosts. */
+    allowPrivateHosts?: boolean;
+  } = {},
 ): Promise<CrawledPage[]> {
   const maxPages = opts.maxPages ?? 25;
   const concurrency = Math.max(1, opts.concurrency ?? 4);
@@ -268,7 +284,9 @@ export async function crawlSite(
 
   while (queue.length && results.length < maxPages) {
     const batch = queue.splice(0, Math.min(concurrency, maxPages - results.length));
-    const pages = await Promise.all(batch.map((u) => fetchPage(u, { timeoutMs: opts.timeoutMs })));
+    const pages = await Promise.all(batch.map((u) =>
+        fetchPage(u, { timeoutMs: opts.timeoutMs, allowPrivateHosts: opts.allowPrivateHosts }),
+      ));
 
     for (const page of pages) {
       results.push(page);

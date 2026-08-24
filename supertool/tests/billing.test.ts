@@ -1,10 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { planForPriceId, priceIdFor, statusLabel, type SubscriptionState } from '@/lib/billing';
+import {
+  PAST_DUE_GRACE_DAYS,
+  planForPriceId,
+  priceIdFor,
+  statusLabel,
+  withinPastDueGrace,
+  type SubscriptionState,
+} from '@/lib/billing';
 
 const state = (over: Partial<SubscriptionState> = {}): SubscriptionState => ({
   plan: 'growth', status: 'active', entitled: true, trialing: false,
   trialDaysLeft: null, currentPeriodEnd: null, cancelAtPeriodEnd: false,
-  hasStripeCustomer: true, billingEnabled: true, ...over,
+  hasStripeCustomer: true, billingEnabled: true,
+  pastDueSince: null, inPastDueGrace: false, ...over,
 });
 
 describe('priceIdFor / planForPriceId', () => {
@@ -55,5 +63,42 @@ describe('statusLabel', () => {
   it('surfaces a failed payment plainly', () => {
     expect(statusLabel(state({ status: 'past_due' }))).toBe('Payment failed');
     expect(statusLabel(state({ status: 'canceled' }))).toBe('Cancelled');
+  });
+});
+
+/**
+ * Phase 2: a failed payment opens a bounded grace window rather than
+ * indefinite full access.
+ *
+ * `past_due` used to sit in the entitled set outright, so a card that stopped
+ * working in January still bought unlimited provider calls in June. Removing it
+ * entirely would be the opposite error — Stripe reports `past_due` for a card
+ * that will retry successfully within hours, and cutting off a paying customer
+ * over a transient decline is its own kind of wrong.
+ */
+describe('past-due grace window', () => {
+  it('keeps a just-failed payment working', () => {
+    expect(withinPastDueGrace(new Date(Date.now() - 60_000))).toBe(true);
+  });
+
+  it('keeps working up to the boundary', () => {
+    const almost = new Date(Date.now() - (PAST_DUE_GRACE_DAYS * 86_400_000 - 60_000));
+    expect(withinPastDueGrace(almost)).toBe(true);
+  });
+
+  it('stops once the window is spent', () => {
+    const expired = new Date(Date.now() - (PAST_DUE_GRACE_DAYS * 86_400_000 + 60_000));
+    expect(withinPastDueGrace(expired)).toBe(false);
+  });
+
+  it('grants grace when the start was never stamped', () => {
+    // A bookkeeping gap on our side must not cost the customer access.
+    expect(withinPastDueGrace(null)).toBe(true);
+    expect(withinPastDueGrace(undefined)).toBe(true);
+  });
+
+  it('is a bounded window, not an open door', () => {
+    expect(PAST_DUE_GRACE_DAYS).toBeGreaterThan(0);
+    expect(PAST_DUE_GRACE_DAYS).toBeLessThanOrEqual(14);
   });
 });

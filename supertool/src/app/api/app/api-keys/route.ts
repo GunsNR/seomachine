@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { generateKey } from '@/lib/apikey';
 import { getSession } from '@/lib/auth';
+import { can } from '@/lib/rbac';
 import { db } from '@/lib/db';
 
 export const runtime = 'nodejs';
@@ -15,6 +16,9 @@ const CreateBody = z.object({
 export async function POST(req: Request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Not signed in.' }, { status: 401 });
+  if (!can(session.role, 'apikey:manage')) {
+    return NextResponse.json({ error: 'Your role cannot perform this action.' }, { status: 403 });
+  }
 
   let input: z.infer<typeof CreateBody>;
   try {
@@ -40,6 +44,9 @@ export async function POST(req: Request) {
 export async function DELETE(req: Request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Not signed in.' }, { status: 401 });
+  if (!can(session.role, 'apikey:manage')) {
+    return NextResponse.json({ error: 'Your role cannot perform this action.' }, { status: 403 });
+  }
 
   const id = new URL(req.url).searchParams.get('id');
   if (!id) return NextResponse.json({ error: 'Provide a key id.' }, { status: 400 });

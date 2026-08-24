@@ -5,8 +5,8 @@ import { getAiVisibility } from '@/lib/dashboard';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export function OPTIONS() {
-  return corsPreflight();
+export function OPTIONS(req: Request) {
+  return corsPreflight(req);
 }
 
 /**
@@ -18,7 +18,7 @@ export function OPTIONS() {
  * the customer could not defend.
  */
 export async function GET(req: Request) {
-  const { project, response } = await requireApiKey(req);
+  const { project, response } = await requireApiKey(req, 'visibility:read');
   if (!project) return response;
 
   const v = await getAiVisibility(project.id);

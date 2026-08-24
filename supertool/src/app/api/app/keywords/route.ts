@@ -69,7 +69,7 @@ export const POST = withSession(AddBody, async ({ session, body }) => {
     skipped: phrases.length - metrics.length,
     measured: metrics.filter((m) => m.source === 'measured').length,
   });
-});
+}, 'project:write');
 
 export const DELETE = withSession(null, async ({ session, req }) => {
   const id = new URL(req.url).searchParams.get('id');
@@ -81,4 +81,4 @@ export const DELETE = withSession(null, async ({ session, req }) => {
   if (result.count === 0) return fail('Keyword not found.', 404);
 
   return NextResponse.json({ ok: true });
-});
+}, 'project:write');

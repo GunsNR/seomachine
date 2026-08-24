@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { db } from '@/lib/db';
-import { clientKey, rateLimit, rateLimitHeaders } from '@/lib/rate-limit';
+import { clientKey, rateLimitHeaders, sharedRateLimit } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -30,7 +30,7 @@ const Body = z.object({
  */
 export async function POST(req: Request) {
   // Unauthenticated write endpoint: cap it per client before doing any work.
-  const limited = rateLimit(clientKey(req, 'contact'), 5, 10 * 60_000);
+  const limited = await sharedRateLimit(clientKey(req, 'contact'), 5, 10 * 60_000);
   if (!limited.ok) {
     return NextResponse.json(
       { error: `Too many submissions. Try again in ${limited.retryAfterSeconds} seconds.` },

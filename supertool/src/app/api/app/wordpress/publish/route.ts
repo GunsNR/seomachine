@@ -83,4 +83,4 @@ export const POST = withSession(Body, async ({ session, body }) => {
     url: result.url,
     status: result.status,
   });
-});
+}, 'publish:execute');

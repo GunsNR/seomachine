@@ -113,4 +113,4 @@ export const POST = withSession(Body, async ({ session, body }) => {
     },
     saved: Boolean(body.save),
   });
-});
+}, 'content:write');

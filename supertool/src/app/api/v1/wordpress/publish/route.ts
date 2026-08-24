@@ -10,8 +10,8 @@ import { slugify } from '@/lib/utils';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export function OPTIONS() {
-  return corsPreflight();
+export function OPTIONS(req: Request) {
+  return corsPreflight(req);
 }
 
 const Body = z.object({
@@ -32,7 +32,7 @@ const Body = z.object({
  * (project, slug): re-publishing the same slug updates rather than duplicates.
  */
 export async function POST(req: Request) {
-  const { project, response } = await requireApiKey(req);
+  const { project, response } = await requireApiKey(req, 'publish:write');
   if (!project) return response;
 
   let input: z.infer<typeof Body>;

@@ -5,6 +5,7 @@ import { scoreContent } from '@/lib/seo/content-score';
 import { readability } from '@/lib/seo/text';
 import { slugify } from '@/lib/utils';
 import { getSession } from '@/lib/auth';
+import { can } from '@/lib/rbac';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -20,6 +21,12 @@ const Body = z.object({
 export async function POST(req: Request) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: 'Not signed in.' }, { status: 401 });
+  // Scoring persists nothing, but it runs two analyses over a body up to 200KB,
+  // so it is gated with the rest of the content workflow rather than left as an
+  // unmetered compute endpoint for any authenticated role.
+  if (!can(session.role, 'content:write')) {
+    return NextResponse.json({ error: 'Your role cannot perform this action.' }, { status: 403 });
+  }
 
   let input: z.infer<typeof Body>;
   try {

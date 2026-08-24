@@ -65,8 +65,17 @@ describe('clientKey', () => {
   const req = (headers: Record<string, string>) =>
     new Request('https://example.com', { headers });
 
-  it('prefers the first x-forwarded-for hop', () => {
-    expect(clientKey(req({ 'x-forwarded-for': '1.2.3.4, 5.6.7.8' }), 'audit')).toBe('audit:1.2.3.4');
+  // METHODOLOGY CHANGE (Phase 2). This previously asserted that the leftmost
+  // X-Forwarded-For entry was used. That entry is written by the caller, so the
+  // old behaviour let anyone choose their own rate-limit bucket — rotating the
+  // header reset the window, and forging someone else's address poisoned
+  // theirs. The assertion was encoding the vulnerability, so it is inverted
+  // rather than deleted: with no trusted proxies configured, the header is
+  // ignored entirely. `tests/client-ip.test.ts` covers the trusted-proxy path.
+  it('ignores x-forwarded-for when no proxies are trusted', () => {
+    expect(clientKey(req({ 'x-forwarded-for': '1.2.3.4, 5.6.7.8' }), 'audit')).toBe(
+      'audit:untrusted',
+    );
   });
 
   it('falls back to x-real-ip', () => {
@@ -74,7 +83,10 @@ describe('clientKey', () => {
   });
 
   it('degrades to a shared bucket when no client IP is present', () => {
-    expect(clientKey(req({}), 'audit')).toBe('audit:unknown');
+    // One bucket for everyone unidentifiable, deliberately: it is better for
+    // anonymous traffic to contend with itself than for a caller to mint
+    // unlimited identities by varying a header.
+    expect(clientKey(req({}), 'audit')).toBe('audit:untrusted');
   });
 
   it('namespaces by scope so endpoints do not share a budget', () => {

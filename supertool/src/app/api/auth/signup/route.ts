@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createSession, hashPassword } from '@/lib/auth';
 import { TRIAL_DAYS } from '@/lib/billing';
+import { clientIp } from '@/lib/client-ip';
 import { db } from '@/lib/db';
 import { sendEmail, welcomeEmail } from '@/lib/email';
 
@@ -67,10 +68,20 @@ export async function POST(req: Request) {
       },
     });
 
-    return { id: created.id, email: created.email, name: created.name, orgId: org.id };
+    return {
+      id: created.id,
+      email: created.email,
+      name: created.name,
+      orgId: org.id,
+      // The first member of a new workspace owns it.
+      role: 'owner' as const,
+    };
   });
 
-  await createSession(user);
+  await createSession(user, {
+    userAgent: req.headers.get('user-agent') ?? '',
+    ip: clientIp(req),
+  });
 
   // Fire and forget: a mail failure must never fail the signup that caused it.
   const welcome = await sendEmail(welcomeEmail(user.email, user.name));

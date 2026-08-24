@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { createSession, hashPassword, verifyPassword } from '@/lib/auth';
+import { createSession, hashPassword, revokeAllSessions, verifyPassword } from '@/lib/auth';
+import { clientIp } from '@/lib/client-ip';
 import { db } from '@/lib/db';
 import { fail, withSession } from '@/lib/route-helpers';
 
@@ -33,7 +34,7 @@ const PasswordBody = z.object({
   newPassword: z.string().min(10, 'Use at least 10 characters.').max(200),
 });
 
-export const POST = withSession(PasswordBody, async ({ session, body }) => {
+export const POST = withSession(PasswordBody, async ({ session, body, req }) => {
   const user = await db.user.findUnique({ where: { id: session.id } });
   if (!user) return fail('Account not found.', 404);
 
@@ -50,8 +51,14 @@ export const POST = withSession(PasswordBody, async ({ session, body }) => {
     data: { passwordHash: await hashPassword(body.newPassword) },
   });
 
-  // Reissue the session so the cookie is not one minted before the change.
-  await createSession(session);
+  // Revoke everything, then reissue for this device only. Changing a password
+  // is how someone evicts a session they no longer control, so leaving other
+  // sessions alive would defeat the point.
+  await revokeAllSessions(user.id, 'password-change');
+  await createSession(session, {
+    userAgent: req.headers.get('user-agent') ?? '',
+    ip: clientIp(req),
+  });
 
   return NextResponse.json({ ok: true });
 });

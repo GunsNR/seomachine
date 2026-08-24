@@ -206,19 +206,52 @@ nobody mistakes this pass for a clean bill of health.
   exposes no uncertainty. It is labelled a convenience index in the UI, but it
   has not been removed or replaced.
 - No repeated sampling, no confidence intervals, no minimum-sample rule.
-- Live checks still run inside request handlers. No durable queue, no retry, no
-  partial-run persistence, no distributed lock.
-- SQLite with `db push` and **no migration history**.
-- SSRF guard does not resolve DNS or defend against rebinding; redirects are
-  not revalidated per hop.
-- Rate limiting is per process and keyed on spoofable proxy headers.
-- Password changes do not revoke sessions on other devices.
-- Membership roles are not enforced; there is no invitation flow.
-- API keys have no scopes and no quotas. `/api/v1` still has wildcard CORS.
-- Missing Stripe configuration still unlocks all workspaces implicitly, and
-  `past_due` remains fully entitled.
-- The health endpoint still exposes more configuration detail than it should.
-- The public referral endpoint still accepts a caller-supplied referrer and
-  matches it by substring. It is now labelled, not fixed.
 - Legal documents are drafts and are marked as requiring counsel review. **No
   compliance claim is made or implied.**
+
+## Closed in Phase 2
+
+Each of these was listed above as open after Gate 0. Each now has a named
+regression test; none was closed by relaxing an expectation.
+
+| Was | Now | Test |
+| --- | --- | --- |
+| SQLite with `db push` and no migration history | PostgreSQL with a reviewed migration history; CI runs `migrate deploy` plus a drift check | `.github/workflows/supertool.yml` |
+| No durable queue, retry, partial-run persistence or distributed lock | `Job` table with atomic claim, expiring leases, classified retry with jittered backoff, cancellation, dead-letter; `JobLock` for recurring sweeps | `tests/jobs.test.ts` |
+| SSRF guard did not resolve DNS; redirects were not revalidated | Every resolved address checked; every redirect hop revalidated; credentials stripped on cross-origin redirect | `tests/net-fetch.test.ts` |
+| Rate limiting per process, keyed on a spoofable header | Shared counter table; client identity derived from an explicit trusted-proxy count | `tests/client-ip.test.ts` |
+| Password changes did not revoke other sessions | Server-side `Session` rows; logout, password change and reset all revoke | `tests/sessions.test.ts` |
+| Membership roles not enforced | Four roles enforced per route, with a structural test that no mutating route is unguarded | `tests/rbac.test.ts` |
+| API keys had no scopes or quotas | Scoped, revocable, expiring, daily-quota'd | `tests/apikey-scopes.test.ts` |
+| `/api/v1` had wildcard CORS | Explicit allowlist from connected sites plus configuration; `Vary: Origin` | `tests/api-auth.test.ts` |
+| `past_due` fully entitled indefinitely | Bounded grace window, stamped from the Stripe transition | `tests/billing.test.ts` |
+| Health endpoint exposed configuration detail publicly | Minimal public shape; detail behind a token | `tests/health.test.ts` |
+| Referral endpoint accepted a caller-supplied engine | Engine always derived; evidence provenance recorded; unverified attribution never counted as measured | `tests/lead-attribution.test.ts` |
+| Provider errors could carry a credential into logs | Redaction at the logging boundary and on job error text | `tests/observability.test.ts` |
+
+**No capability status changed as a result.** These are security and durability
+fixes, not new customer-facing capabilities. In particular:
+
+- `lead_attribution` stays `demo_only`. Closing the forgery hole makes the data
+  less wrong; it does not make a client-supplied referrer trustworthy evidence.
+- `teams_rbac` stays `planned`. Role *enforcement* now exists and is tested, but
+  there is no member-management surface and no invitation flow, so the
+  capability a customer would buy does not exist.
+- `scheduled_runs` stays `beta`. The durable queue exists; **no worker process
+  is deployed to drain it.**
+
+## What Phase 2 did *not* fix
+
+- **No migration has run against production-shaped data.** The migration has
+  been applied to empty databases and a local instance only. No such data
+  exists to rehearse against.
+- **No worker is deployed.** Enqueued jobs sit until something runs them.
+- **DNS rebinding remains open** in a narrow race: the guard resolves and
+  checks, then `fetch` resolves again. Closing it needs socket pinning.
+- **The shared rate limiter fails open** on a database error — a deliberate
+  trade, documented in `docs/operations-runbook.md`.
+- **Backups are a documented procedure, not automation.**
+- Missing Stripe configuration still unlocks all workspaces implicitly. That is
+  the intended self-hosted behaviour, not an oversight, but it is worth stating.
+- `ChatGPT` remains pinned to a retired model and no adapter enables grounded
+  search — Phase 1 work, still externally blocked.

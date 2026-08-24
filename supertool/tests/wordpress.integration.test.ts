@@ -104,7 +104,14 @@ afterAll(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
 });
 
-const creds = () => ({ siteUrl: baseUrl, username: USER, appPassword: PASSWORD });
+// allowPrivateHosts: the fixture server runs on 127.0.0.1, which the SSRF
+// guard correctly refuses in production. Explicit opt-in, test-only.
+const creds = () => ({
+  siteUrl: baseUrl,
+  username: USER,
+  appPassword: PASSWORD,
+  allowPrivateHosts: true,
+});
 
 describe('verifyConnection', () => {
   it('authenticates and reports the site and user', async () => {

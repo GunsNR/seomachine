@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { clientKey, rateLimit, rateLimitHeaders } from '@/lib/rate-limit';
+import { clientKey, rateLimitHeaders, sharedRateLimit } from '@/lib/rate-limit';
 import { z } from 'zod';
 import { analyzeAnswer, rollUpVisibility } from '@/lib/ai/analysis';
 import { MEASURABLE_ENGINES, liveEngines, unavailableEngines } from '@/lib/ai/engines';
@@ -29,7 +29,7 @@ const Body = z.object({
 export async function POST(req: Request) {
   // Each check fans out across every connected engine, so the free tool is
   // capped per IP.
-  const limited = rateLimit(clientKey(req, 'tools-ai-check'), 5, 10 * 60_000);
+  const limited = await sharedRateLimit(clientKey(req, 'tools-ai-check'), 5, 10 * 60_000);
   if (!limited.ok) {
     return NextResponse.json(
       { error: `Too many requests. Try again in ${limited.retryAfterSeconds} seconds, or start a trial for unlimited runs.` },

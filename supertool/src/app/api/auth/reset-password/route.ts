@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { destroySession, hashPassword } from '@/lib/auth';
+import { destroySession, hashPassword, revokeAllSessions } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { passwordChangedEmail, sendEmail } from '@/lib/email';
 import { checkResetToken, consumeResetToken, reasonMessage } from '@/lib/password-reset';
-import { clientKey, rateLimit, rateLimitHeaders } from '@/lib/rate-limit';
+import { clientKey, rateLimitHeaders, sharedRateLimit } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -15,7 +15,7 @@ const Body = z.object({
 });
 
 export async function POST(req: Request) {
-  const limited = rateLimit(clientKey(req, 'reset-password'), 10, 15 * 60_000);
+  const limited = await sharedRateLimit(clientKey(req, 'reset-password'), 10, 15 * 60_000);
   if (!limited.ok) {
     return NextResponse.json(
       { error: `Too many attempts. Try again in ${limited.retryAfterSeconds} seconds.` },
@@ -55,8 +55,10 @@ export async function POST(req: Request) {
 
   await consumeResetToken(input.token);
 
-  // Any session held on this device predates the reset; drop it so the user
-  // signs in with the new password.
+  // Every session for this account predates the reset. Revoking only the
+  // cookie on this device would leave whoever prompted the reset still signed
+  // in elsewhere — which is the situation a password reset exists to end.
+  await revokeAllSessions(user.id, 'password-reset');
   await destroySession();
 
   const notice = await sendEmail(passwordChangedEmail(user.email, user.name));

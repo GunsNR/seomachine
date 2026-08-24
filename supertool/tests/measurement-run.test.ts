@@ -1,22 +1,38 @@
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { randomBytes } from 'node:crypto';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 /**
  * Run lifecycle against a real database.
  *
- * These use a throwaway SQLite file rather than mocks, because the properties
+ * These run against real PostgreSQL rather than mocks, because the properties
  * under test — the uniqueness constraint that makes retries idempotent, and the
  * durability of observations written mid-run — are properties of the schema,
  * not of the code that calls it. A mock would happily agree with a broken
  * constraint.
+ *
+ * Phase 2 moved this from a throwaway SQLite file to a throwaway PostgreSQL
+ * *schema*. Same isolation, but now the constraint being exercised is the one
+ * that actually ships: SQLite and PostgreSQL do not enforce uniqueness or nulls
+ * identically, so a test passing on SQLite proved less than it appeared to.
  */
 
-const dir = mkdtempSync(join(tmpdir(), 'supertool-measurement-'));
-const dbPath = join(dir, 'test.db');
-process.env.DATABASE_URL = `file:${dbPath}`;
+const BASE_URL =
+  process.env.TEST_DATABASE_URL ??
+  process.env.DATABASE_URL ??
+  'postgresql://postgres:postgres@127.0.0.1:5432/postgres';
+
+/** A per-run schema so parallel test files cannot collide. */
+const schemaName = `test_${randomBytes(6).toString('hex')}`;
+
+function urlWithSchema(base: string, schema: string): string {
+  const u = new URL(base);
+  u.searchParams.set('schema', schema);
+  return u.toString();
+}
+
+const testUrl = urlWithSchema(BASE_URL, schemaName);
+process.env.DATABASE_URL = testUrl;
 
 // Imported after DATABASE_URL is set so the client binds to the throwaway file.
 type Mod = typeof import('@/lib/measurement/run');
@@ -31,7 +47,7 @@ let engines: EngineMod;
 
 beforeAll(async () => {
   execFileSync('npx', ['prisma', 'db', 'push', '--skip-generate', '--accept-data-loss'], {
-    env: { ...process.env, DATABASE_URL: `file:${dbPath}` },
+    env: { ...process.env, DATABASE_URL: testUrl },
     stdio: 'pipe',
   });
 
@@ -42,8 +58,10 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // Drop the throwaway schema before disconnecting, so a test run leaves the
+  // database as it found it.
+  await db?.$executeRawUnsafe(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`).catch(() => undefined);
   await db?.$disconnect();
-  rmSync(dir, { recursive: true, force: true });
 });
 
 /**
