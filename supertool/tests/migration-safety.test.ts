@@ -14,10 +14,20 @@ import { describe, expect, it } from 'vitest';
  * integration tests, which is exactly how this kind of thing returns: not by
  * someone arguing for it, but by a convenience script nobody re-read.
  *
- * These checks are deliberately narrow. They look at executable paths only —
- * package scripts, workflows, shell scripts, test setup. Prose may discuss
- * `db push` freely, including saying that it was removed; a documentation ban
- * would make the history unwritable.
+ * These checks are deliberately narrow. They look at paths something *acts on*:
+ * package scripts, workflows, shell scripts, test setup — and documentation that
+ * tells a human or an automation to run the command.
+ *
+ * That last category was the gap. The first version of this guard exempted
+ * Markdown entirely so the history stayed writable, and `README.md` went on
+ * instructing operators to "run `npx prisma db push`" under a heading named
+ * *Deploying*. A README is not executable, but a person following it is: it is
+ * the most dangerous surviving instance precisely because nothing in CI stops
+ * someone who does what the docs say.
+ *
+ * So the Markdown rule distinguishes **instruction** from **description**.
+ * "Run `prisma db push`" fails. "Phase 2 removed `prisma db push`" passes.
+ * Banning the string outright would make it impossible to record why it went.
  */
 
 const REPO = resolve(__dirname, '../..');
@@ -139,6 +149,119 @@ describe('test and script setup', () => {
     });
 
     expect(offenders, `scripts running db push: ${offenders.join(', ')}`).toEqual([]);
+  });
+});
+
+/**
+ * Words that turn a mention into an instruction.
+ *
+ * Matched on the same line as the command, in either order, so both
+ * "run `prisma db push`" and "`prisma db push` should be used" are caught.
+ */
+const IMPERATIVE =
+  /\b(run|execute|invoke|use|using|apply|call|issue|then|first|next|just|simply)\b/i;
+
+/**
+ * Words that mark a mention as historical or prohibitive.
+ *
+ * Checked before the imperative test, because "never use `db push`" and
+ * "we used to run `db push`" both contain an imperative word while forbidding
+ * or describing rather than instructing.
+ */
+const HISTORICAL =
+  /\b(never|not|no longer|removed|replaced|instead of|rather than|used to|previously|deprecated|bypass(es|ed)?|forbidden|prohibited|must not|cannot|do not|don't|stopped|dropped|was|were|had)\b/i;
+
+/** True when a documentation line tells someone to run db push. */
+export function isInstructionalDbPush(line: string): boolean {
+  if (!DB_PUSH.test(line)) return false;
+  if (HISTORICAL.test(line)) return false;
+  return IMPERATIVE.test(line);
+}
+
+describe('documentation does not instruct anyone to run db push', () => {
+  // Every Markdown file in the repo, excluding dependencies.
+  const docs = [
+    ...globSync('*.md', { cwd: REPO }),
+    ...globSync('docs/**/*.md', { cwd: REPO }),
+    ...globSync('supertool/**/*.md', { cwd: REPO, exclude: (p) => p.includes('node_modules') }),
+    ...globSync('wordpress/**/*.md', { cwd: REPO }),
+  ];
+
+  it('finds the documentation at all', () => {
+    // Guards against this suite passing because the glob silently broke.
+    expect(docs.length).toBeGreaterThan(5);
+  });
+
+  it('contains no imperative db push anywhere', () => {
+    const offenders: string[] = [];
+
+    for (const file of docs) {
+      const source = readFileSync(resolve(REPO, file), 'utf8');
+      for (const [i, line] of source.split('\n').entries()) {
+        if (isInstructionalDbPush(line)) offenders.push(`${file}:${i + 1} — ${line.trim()}`);
+      }
+    }
+
+    expect(
+      offenders,
+      `documentation instructing db push:\n  ${offenders.join('\n  ')}`,
+    ).toEqual([]);
+  });
+
+  it('still allows a historical or prohibitive mention', () => {
+    // The guard must not make the history unwritable.
+    expect(isInstructionalDbPush('Phase 2 removed `prisma db push` from CI.')).toBe(false);
+    expect(isInstructionalDbPush('**Never use `prisma db push` for deployment.**')).toBe(false);
+    expect(isInstructionalDbPush('We used to run `prisma db push` here.')).toBe(false);
+    expect(isInstructionalDbPush('`db push` bypasses migration history.')).toBe(false);
+    expect(isInstructionalDbPush('Use `npm run db:deploy` instead of `prisma db push`.')).toBe(false);
+  });
+
+  it('catches the exact instruction this guard was written for', () => {
+    // The line that shipped in README.md and slipped past the first version.
+    expect(
+      isInstructionalDbPush('and run `npx prisma db push`. No schema changes are needed.'),
+    ).toBe(true);
+  });
+
+  it('catches other phrasings of the same instruction', () => {
+    for (const line of [
+      'Run `prisma db push` to create the schema.',
+      'Then execute prisma db push against your instance.',
+      'Apply the schema with `npx prisma db push`.',
+      'Just use db push for a quick setup.',
+    ]) {
+      expect(isInstructionalDbPush(line), line).toBe(true);
+    }
+  });
+});
+
+describe('the README describes the real database posture', () => {
+  const readme = readFileSync(resolve(APP, 'README.md'), 'utf8');
+
+  it('states that PostgreSQL is required rather than optional', () => {
+    expect(readme).toMatch(/PostgreSQL is the required datasource/i);
+    // The old text told operators to switch the provider from SQLite.
+    expect(readme).not.toMatch(/SQLite by default/i);
+  });
+
+  it('documents both connection variables and their roles', () => {
+    expect(readme).toContain('DATABASE_URL');
+    expect(readme).toContain('DIRECT_URL');
+    expect(readme).toMatch(/pooled/i);
+  });
+
+  it('permits identical values only when there is no separate pooled endpoint', () => {
+    expect(readme).toMatch(/same.*only when.*no separate pooled endpoint/is);
+  });
+
+  it('applies migrations with db:deploy and checks drift with db:drift', () => {
+    expect(readme).toContain('npm run db:deploy');
+    expect(readme).toContain('npm run db:drift');
+  });
+
+  it('forbids db push for deployment and setup', () => {
+    expect(readme).toMatch(/Never use `prisma db push` for deployment or setup/i);
   });
 });
 
