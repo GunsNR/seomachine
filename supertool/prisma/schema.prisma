@@ -107,6 +107,7 @@ model Project {
   leads       Lead[]
   connections SiteConnection[]
   apiKeys     ApiKey[]
+  runs        MeasurementRun[]
 
   @@index([orgId])
 }
@@ -372,4 +373,137 @@ model ContactInquiry {
   createdAt DateTime @default(now())
 
   @@index([createdAt])
+}
+
+/// One execution of one prompt set against one project.
+///
+/// The unit of reporting. Every rate the product displays is computed inside a
+/// single run, identified by this row's id — never by grouping on a date. Two
+/// runs on the same UTC day are two runs; see docs/measurement-spec.md §7 for
+/// why merging them was wrong in four separate ways.
+///
+/// The row is written before the first provider call, so an interrupted
+/// process leaves an honest partial run rather than nothing.
+model MeasurementRun {
+  id        String @id @default(cuid())
+  orgId     String
+  projectId String
+
+  /// manual | scheduled | backfill
+  trigger  String @default("manual")
+  /// live | demo. A demo run never calls a provider; a live run never simulates.
+  dataMode String @default("live")
+  /// queued | running | partial | completed | failed | cancelled
+  status   String @default("queued")
+
+  /// Content hash of the prompt texts at the moment this run started. Two runs
+  /// with different versions measured with different instruments.
+  promptSetVersion   String @default("")
+  /// Which revision of docs/measurement-spec.md produced these numbers.
+  methodologyVersion String @default("m1")
+  /// Repetitions per (prompt, engine) pair in this run.
+  samplesPerPair     Int    @default(1)
+
+  /// The locale context the run declared. Not proof the provider honoured it.
+  localeTag  String @default("en-US")
+  regionCode String @default("US")
+
+  /// attempted = expectedObservations once the run finishes fanning out.
+  expectedObservations Int @default(0)
+  /// live + simulated. The denominator of every rate.
+  observedCount        Int @default(0)
+  failedCount          Int @default(0)
+  unavailableCount     Int @default(0)
+
+  /// Estimated from a local price table, never reconciled against an invoice.
+  totalCostUsd       Float @default(0)
+  totalInputTokens   Int   @default(0)
+  totalOutputTokens  Int   @default(0)
+  /// How many observations actually reported token usage. 0 tokens means "not
+  /// reported", not "none used".
+  usageReportedCount Int   @default(0)
+
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  /// Operator-facing failure detail. Never contains a credential.
+  error      String    @default("")
+
+  project      Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  observations Observation[]
+
+  @@index([projectId, startedAt])
+  @@index([orgId, startedAt])
+  @@index([status])
+}
+
+/// One attempt to ask one prompt, on one engine, at one sample index.
+///
+/// Immutable by contract: the repository layer only ever creates these rows.
+/// A correction is a new run, never an edit. The compound uniqueness constraint
+/// is what makes retrying a run idempotent — a retry fills gaps and cannot
+/// duplicate an observation that already landed.
+model Observation {
+  id    String @id @default(cuid())
+  runId String
+
+  /// The prompt row this came from. Prompts can be edited or deleted, so the
+  /// snapshot below — not this id — is the record of what was actually asked.
+  promptId           String
+  promptTextSnapshot String @default("")
+  promptVersion      String @default("")
+  promptCluster      String @default("")
+
+  engine             String
+  vendor             String  @default("")
+  accessMethod       String  @default("")
+  /// The model identifier SuperTool sent. Always known.
+  modelRequested     String  @default("")
+  /// The model identifier the provider said it used. Empty when the provider
+  /// does not return one — never inferred from the request.
+  modelReturned      String  @default("")
+  /// Whether the request enabled the vendor's web-retrieval tool. A property of
+  /// our own code, so known with certainty.
+  groundingRequested Boolean @default(false)
+  /// Whether the response actually carried retrieval evidence.
+  groundingConfirmed Boolean @default(false)
+
+  /// 0-based repetition of this (prompt, engine) pair within the run.
+  sampleIndex Int    @default(0)
+  localeTag   String @default("en-US")
+  regionCode  String @default("US")
+
+  /// live | simulated | failed | unavailable.
+  /// Defaults to unavailable so a row of unknown provenance fails closed.
+  status        String @default("unavailable")
+  errorCategory String @default("")
+  errorDetail   String @default("")
+
+  latencyMs        Int   @default(0)
+  inputTokens      Int   @default(0)
+  outputTokens     Int   @default(0)
+  /// Estimated from a local price table. Labelled as an estimate everywhere.
+  estimatedCostUsd Float @default(0)
+
+  // --- Parsed outcomes. Meaningful only when status is live or simulated. ---
+  brandMentioned  Boolean @default(false)
+  brandCited      Boolean @default(false)
+  mentionRank     Int     @default(0)
+  sentiment       String  @default("neutral")
+  shareOfVoice    Float   @default(0)
+  citedUrls       String  @default("[]")
+  competitors     String  @default("[]")
+  evidenceExcerpt String  @default("")
+  /// Hash of the raw answer, so a stored number can be tied to the exact text
+  /// that produced it without keeping the full text in this table.
+  rawAnswerHash   String  @default("")
+
+  parserVersion      String   @default("p1")
+  methodologyVersion String   @default("m1")
+  observedAt         DateTime @default(now())
+
+  run MeasurementRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@unique([runId, promptId, engine, sampleIndex])
+  @@index([runId])
+  @@index([engine, observedAt])
 }

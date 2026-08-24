@@ -8,7 +8,7 @@
  * therefore never be handed a plausible-looking simulated answer in place of a
  * real one, and a run with mixed outcomes can never be summarised as live.
  */
-import { getEngine, type EngineId } from './engines';
+import { getEngine, type Engine, type EngineId } from './engines';
 
 /** Provenance of a single observation. */
 export type CheckStatus =
@@ -46,6 +46,19 @@ export interface AskResult {
   citations: string[];
   /** Exact model asked, or '' when no call was made. */
   model: string;
+  /**
+   * The model identifier the provider said it used. Empty when the provider
+   * does not return one — never inferred from the request, because a silent
+   * model substitution is exactly what this field exists to catch.
+   */
+  modelReturned: string;
+  /** Whether the request enabled the vendor's web-retrieval tool. */
+  groundingRequested: boolean;
+  /** Whether the response actually carried retrieval evidence. */
+  groundingConfirmed: boolean;
+  /** 0 means "not reported by the provider", not "none used". */
+  inputTokens: number;
+  outputTokens: number;
   latencyMs: number;
   errorCategory: ErrorCategory;
   /** Operator-facing detail. Never contains a credential. */
@@ -195,6 +208,11 @@ export function simulate(input: AskInput): AskResult {
     answer: lines.join('\n'),
     citations,
     model: `${getEngine(engine)?.model ?? engine} (simulated sample)`,
+    modelReturned: '',
+    groundingRequested: false,
+    groundingConfirmed: false,
+    inputTokens: 0,
+    outputTokens: 0,
     latencyMs: Math.round(300 + rng() * 900),
     errorCategory: '',
   };
@@ -246,13 +264,30 @@ async function readError(res: Response): Promise<never> {
   throw new ProviderError(`${res.status} ${redact(body).slice(0, 200)}`, res.status);
 }
 
+/**
+ * What every adapter returns.
+ *
+ * `modelReturned`, token counts and `groundedEvidence` are optional because not
+ * every provider reports them. Absent means absent — never substituted with the
+ * requested value or with a zero that would read as a measurement.
+ */
+export interface ProviderResponse {
+  text: string;
+  citations: string[];
+  modelReturned?: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  /** Retrieval evidence in the response beyond the citation list. */
+  groundedEvidence?: boolean;
+}
+
 async function askOpenAiCompatible(
   url: string,
   apiKey: string,
   model: string,
   prompt: string,
   extraHeaders: Record<string, string> = {},
-): Promise<{ text: string; citations: string[] }> {
+): Promise<ProviderResponse> {
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}`, ...extraHeaders },
@@ -265,16 +300,21 @@ async function askOpenAiCompatible(
   });
   if (!res.ok) await readError(res);
   const json = (await res.json()) as {
+    model?: string;
     choices?: Array<{ message?: { content?: string } }>;
     citations?: string[];
+    usage?: { prompt_tokens?: number; completion_tokens?: number };
   };
   return {
     text: json.choices?.[0]?.message?.content ?? '',
     citations: json.citations ?? [],
+    modelReturned: json.model ?? '',
+    inputTokens: json.usage?.prompt_tokens ?? 0,
+    outputTokens: json.usage?.completion_tokens ?? 0,
   };
 }
 
-async function askAnthropic(apiKey: string, model: string, prompt: string) {
+async function askAnthropic(apiKey: string, model: string, prompt: string): Promise<ProviderResponse> {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -290,14 +330,23 @@ async function askAnthropic(apiKey: string, model: string, prompt: string) {
     }),
   });
   if (!res.ok) await readError(res);
-  const json = (await res.json()) as { content?: Array<{ type: string; text?: string }> };
+  const json = (await res.json()) as {
+    model?: string;
+    content?: Array<{ type: string; text?: string }>;
+    usage?: { input_tokens?: number; output_tokens?: number };
+  };
   return {
     text: (json.content ?? []).filter((b) => b.type === 'text').map((b) => b.text ?? '').join('\n'),
+    // No web search tool is passed, so no citations can come back. This empty
+    // array means "we never searched", not "the search found nothing".
     citations: [] as string[],
+    modelReturned: json.model ?? '',
+    inputTokens: json.usage?.input_tokens ?? 0,
+    outputTokens: json.usage?.output_tokens ?? 0,
   };
 }
 
-async function askGemini(apiKey: string, model: string, prompt: string) {
+async function askGemini(apiKey: string, model: string, prompt: string): Promise<ProviderResponse> {
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
     {
@@ -311,21 +360,48 @@ async function askGemini(apiKey: string, model: string, prompt: string) {
   );
   if (!res.ok) await readError(res);
   const json = (await res.json()) as {
+    modelVersion?: string;
     candidates?: Array<{
       content?: { parts?: Array<{ text?: string }> };
       groundingMetadata?: { groundingChunks?: Array<{ web?: { uri?: string } }> };
     }>;
+    usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
   };
   const cand = json.candidates?.[0];
+  const chunks = cand?.groundingMetadata?.groundingChunks ?? [];
   return {
     text: (cand?.content?.parts ?? []).map((p) => p.text ?? '').join(''),
-    citations: (cand?.groundingMetadata?.groundingChunks ?? [])
-      .map((c) => c.web?.uri).filter((u): u is string => !!u),
+    // No google_search tool is requested, so groundingMetadata is always empty.
+    // Parsing it anyway is harmless; treating the empty result as "no citations
+    // found" would not be, which is why the engine is marked unavailable.
+    citations: chunks.map((c) => c.web?.uri).filter((u): u is string => !!u),
+    modelReturned: json.modelVersion ?? '',
+    inputTokens: json.usageMetadata?.promptTokenCount ?? 0,
+    outputTokens: json.usageMetadata?.candidatesTokenCount ?? 0,
+    groundedEvidence: chunks.length > 0,
   };
 }
 
-function notObserved(status: 'failed' | 'unavailable', errorCategory: ErrorCategory, error: string, latencyMs = 0): AskResult {
-  return { status, answer: '', citations: [], model: '', latencyMs, errorCategory, error };
+function notObserved(
+  status: 'failed' | 'unavailable',
+  errorCategory: ErrorCategory,
+  error: string,
+  latencyMs = 0,
+): AskResult {
+  return {
+    status,
+    answer: '',
+    citations: [],
+    model: '',
+    modelReturned: '',
+    groundingRequested: false,
+    groundingConfirmed: false,
+    inputTokens: 0,
+    outputTokens: 0,
+    latencyMs,
+    errorCategory,
+    error,
+  };
 }
 
 /**
@@ -334,61 +410,50 @@ function notObserved(status: 'failed' | 'unavailable', errorCategory: ErrorCateg
  * Never throws, and never substitutes one kind of answer for another. The four
  * outcomes are distinct and all of them are recordable.
  */
-export async function ask(input: AskInput): Promise<AskResult> {
-  const engine = getEngine(input.engine);
-  if (!engine) {
-    return notObserved('unavailable', 'unsupported_engine', `Unknown answer surface "${input.engine}".`);
-  }
-
-  // Captured before the narrowing below, which removes the unavailable
-  // members from `engine`'s type and takes `.name` with them.
+/**
+ * Execute one live provider call against an already-authorised engine.
+ *
+ * Split out from `ask()` so that policy — which surfaces this product is
+ * willing to call at all — is separate from mechanics. `ask()` owns the policy;
+ * this owns the request, the response parsing and the honest failure
+ * categorisation. Tests exercise the mechanics here without having to defeat
+ * the policy, which must stay strict.
+ */
+export async function askEngine(
+  engine: Engine,
+  apiKey: string,
+  prompt: string,
+): Promise<AskResult> {
   const surface = engine.name;
-
-  if (engine.availability !== 'available') {
-    return notObserved(
-      'unavailable',
-      'surface_unavailable',
-      engine.unavailableReason ?? `${surface} has no compliant source and is not measured.`,
-    );
-  }
-
-  // A demo workspace never spends a provider credit and never touches a live
-  // endpoint, so demo rows and real rows can never be confused for each other.
-  if (input.mode === 'demo') return simulate(input);
-
-  const apiKey = engine.envKey ? process.env[engine.envKey] : undefined;
-  if (!apiKey) {
-    return notObserved(
-      'unavailable',
-      'no_credential',
-      `${surface} is not measured because ${engine.envKey} is not configured.`,
-    );
-  }
-
   const model = engine.model;
+
   if (!model) {
     return notObserved('unavailable', 'surface_unavailable', `${surface} has no model configured.`);
   }
 
+  // Known with certainty from the adapter code, not guessed: 'intrinsic' means
+  // the model retrieves as part of answering, 'enabled' means we pass a tool.
+  const groundingRequested = engine.grounding === 'enabled' || engine.grounding === 'intrinsic';
+
   const started = Date.now();
   try {
-    let out: { text: string; citations: string[] };
+    let out: ProviderResponse;
 
     switch (engine.id) {
       case 'chatgpt':
-        out = await askOpenAiCompatible('https://api.openai.com/v1/chat/completions', apiKey, model, input.prompt);
+        out = await askOpenAiCompatible('https://api.openai.com/v1/chat/completions', apiKey, model, prompt);
         break;
       case 'perplexity':
-        out = await askOpenAiCompatible('https://api.perplexity.ai/chat/completions', apiKey, model, input.prompt);
+        out = await askOpenAiCompatible('https://api.perplexity.ai/chat/completions', apiKey, model, prompt);
         break;
       case 'grok':
-        out = await askOpenAiCompatible('https://api.x.ai/v1/chat/completions', apiKey, model, input.prompt);
+        out = await askOpenAiCompatible('https://api.x.ai/v1/chat/completions', apiKey, model, prompt);
         break;
       case 'claude':
-        out = await askAnthropic(apiKey, model, input.prompt);
+        out = await askAnthropic(apiKey, model, prompt);
         break;
       case 'gemini':
-        out = await askGemini(apiKey, model, input.prompt);
+        out = await askGemini(apiKey, model, prompt);
         break;
       default:
         return notObserved(
@@ -405,6 +470,12 @@ export async function ask(input: AskInput): Promise<AskResult> {
       answer: out.text,
       citations: out.citations,
       model,
+      modelReturned: out.modelReturned ?? '',
+      groundingRequested,
+      // Evidence of retrieval in the response itself, not an assumption.
+      groundingConfirmed: groundingRequested && (out.citations.length > 0 || out.groundedEvidence === true),
+      inputTokens: out.inputTokens ?? 0,
+      outputTokens: out.outputTokens ?? 0,
       latencyMs: Date.now() - started,
       errorCategory: '',
     };
@@ -412,6 +483,60 @@ export async function ask(input: AskInput): Promise<AskResult> {
     const message = err instanceof Error ? redact(err.message) : 'Unknown provider error';
     return notObserved('failed', categorizeError(err), `${surface} call failed: ${message}`, Date.now() - started);
   }
+}
+
+/**
+ * Ask one surface one question.
+ *
+ * Never throws, and never substitutes one kind of answer for another. The four
+ * outcomes are distinct and all of them are recordable.
+ */
+export async function ask(input: AskInput): Promise<AskResult> {
+  const engine = getEngine(input.engine);
+  if (!engine) {
+    return notObserved('unavailable', 'unsupported_engine', `Unknown answer surface "${input.engine}".`);
+  }
+
+  const surface = engine.name;
+
+  // A demo workspace never spends a provider credit and never touches a live
+  // endpoint, so demo rows and real rows can never be confused for each other.
+  //
+  // Demo text is allowed for a surface whose adapter is merely unfinished,
+  // because it is labelled sample data and is never a measurement. It is NOT
+  // allowed for a surface with no public API at all — simulating that would
+  // fabricate a product capability rather than demonstrate a screen.
+  if (input.mode === 'demo') {
+    if (!engine.simulatableInDemo) {
+      return notObserved(
+        'unavailable',
+        'surface_unavailable',
+        engine.unavailableReason ?? `${surface} has no compliant source and is not measured.`,
+      );
+    }
+    return simulate(input);
+  }
+
+  // Policy gate. An unavailable surface is never called, whatever credentials
+  // are present, and the reason travels with the observation.
+  if (engine.availability !== 'available') {
+    return notObserved(
+      'unavailable',
+      'surface_unavailable',
+      engine.unavailableReason ?? `${surface} has no compliant source and is not measured.`,
+    );
+  }
+
+  const apiKey = engine.envKey ? process.env[engine.envKey] : undefined;
+  if (!apiKey) {
+    return notObserved(
+      'unavailable',
+      'no_credential',
+      `${surface} is not measured because ${engine.envKey} is not configured.`,
+    );
+  }
+
+  return askEngine(engine, apiKey, input.prompt);
 }
 
 /**

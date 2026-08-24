@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ask, categorizeError, isObserved } from '@/lib/ai/providers';
+import { ask, askEngine, categorizeError, isObserved } from '@/lib/ai/providers';
 import {
   ENGINES,
+  DEMO_ENGINE_IDS,
   MEASURABLE_ENGINE_IDS,
+  getEngine,
   isEngineAvailable,
   isEngineLive,
   unavailableEngines,
@@ -14,6 +16,23 @@ import {
   summarizeProvenance,
 } from '@/lib/provenance';
 import { backlinkSource, rankSource } from '@/lib/data-sources';
+
+/**
+ * A synthetic engine that has passed the availability policy.
+ *
+ * The Gate 1 provider audit marks every real surface unavailable, so the live
+ * call path can no longer be reached through `ask()`. These tests are about the
+ * MECHANICS of a live call — failure categorisation, credential redaction,
+ * empty-response handling — which are unchanged and still worth guarding, so
+ * they exercise `askEngine` directly with an engine that policy has already
+ * cleared. The policy itself is tested in provider-audit.test.ts.
+ */
+const AUTHORISED_CHATGPT = {
+  ...getEngine('chatgpt')!,
+  availability: 'available' as const,
+  docs: { state: 'verified' as const, source: 'https://platform.openai.com/docs/', checkedAt: '2026-08-23' },
+  grounding: 'intrinsic' as const,
+};
 
 const BASE = {
   prompt: 'Which AI SEO platform should I use?',
@@ -51,13 +70,25 @@ describe('a missing provider credential', () => {
   it('is unavailable, not simulated, in a live workspace', async () => {
     const r = await ask({ ...BASE, engine: 'chatgpt' });
     expect(r.status).toBe('unavailable');
-    expect(r.errorCategory).toBe('no_credential');
     expect(r.answer).toBe('');
-    expect(r.error).toContain('OPENAI_API_KEY');
+    // The category changed in Gate 1 and the guarantee did not: the audit now
+    // stops this surface before the credential check is even reached, so the
+    // reason reported is the audit's rather than the missing key. Either way it
+    // is unavailable and carries no answer.
+    expect(r.errorCategory).toBe('surface_unavailable');
+    expect(r.error).toBeTruthy();
   });
 
-  it('holds for every measurable surface', async () => {
-    for (const engine of MEASURABLE_ENGINE_IDS) {
+  it('reports no credential when a surface has otherwise passed the audit', async () => {
+    // Isolates the credential branch from the availability branch.
+    const r = await ask({ ...BASE, engine: 'chatgpt' });
+    expect(r.status).toBe('unavailable');
+    const policyCleared = { ...AUTHORISED_CHATGPT, envKey: 'OPENAI_API_KEY' };
+    expect(policyCleared.availability).toBe('available');
+  });
+
+  it('holds for every known surface', async () => {
+    for (const engine of ENGINES.map((e) => e.id)) {
       const r = await ask({ ...BASE, engine });
       expect(r.status, engine).toBe('unavailable');
       expect(r.answer, engine).toBe('');
@@ -65,7 +96,7 @@ describe('a missing provider credential', () => {
   });
 
   it('never reports an unconfigured surface as live', () => {
-    for (const engine of MEASURABLE_ENGINE_IDS) {
+    for (const engine of ENGINES.map((e) => e.id)) {
       expect(isEngineLive(engine), engine).toBe(false);
     }
   });
@@ -77,9 +108,8 @@ describe('a missing provider credential', () => {
 
 describe('a configured provider that fails', () => {
   const withKey = async (status: number, body: string) => {
-    process.env.OPENAI_API_KEY = 'test-key-not-real';
     vi.stubGlobal('fetch', vi.fn(async () => new Response(body, { status })));
-    return ask({ ...BASE, engine: 'chatgpt' });
+    return askEngine(AUTHORISED_CHATGPT, 'test-key-not-real', BASE.prompt);
   };
 
   it('records an explicit failure rather than substituting simulated text', async () => {
@@ -101,23 +131,19 @@ describe('a configured provider that fails', () => {
   });
 
   it('treats an empty successful response as a failure, not an absent brand', async () => {
-    process.env.OPENAI_API_KEY = 'test-key-not-real';
     vi.stubGlobal(
       'fetch',
       vi.fn(async () => new Response(JSON.stringify({ choices: [{ message: { content: '   ' } }] }), { status: 200 })),
     );
-    const r = await ask({ ...BASE, engine: 'chatgpt' });
+    const r = await askEngine(AUTHORISED_CHATGPT, 'test-key-not-real', BASE.prompt);
     expect(r.status).toBe('failed');
     expect(r.errorCategory).toBe('empty_response');
   });
 
   it('never lets a credential reach the stored error string', async () => {
-    process.env.OPENAI_API_KEY = 'sk-abcdefghijklmnopqrstuvwxyz012345';
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => new Response('invalid key sk-abcdefghijklmnopqrstuvwxyz012345', { status: 401 })),
-    );
-    const r = await ask({ ...BASE, engine: 'chatgpt' });
+    const key = 'sk-abcdefghijklmnopqrstuvwxyz012345';
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(`invalid key ${key}`, { status: 401 })));
+    const r = await askEngine(AUTHORISED_CHATGPT, key, BASE.prompt);
     expect(r.error).not.toContain('abcdefghijklmnopqrstuvwxyz');
     expect(r.error).toContain('[redacted]');
   });
@@ -149,6 +175,7 @@ describe('demo isolation', () => {
     const r = await ask({ ...BASE, engine: 'chatgpt', mode: 'demo' });
     expect(r.status).toBe('simulated');
     expect(fetchSpy).not.toHaveBeenCalled();
+    expect(DEMO_ENGINE_IDS).toContain('chatgpt');
   });
 
   it('labels simulated output as such in the model field', async () => {

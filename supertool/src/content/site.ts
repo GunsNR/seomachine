@@ -88,19 +88,19 @@ export const STATS = [
 export const SERVICES = [
   {
     icon: 'Sparkles',
-    title: 'AI Visibility Tracking',
+    title: 'Measurement foundation',
     href: '/platform/ai-visibility',
     blurb:
-      'Run a fixed prompt set across the answer engines you have connected, on a schedule. See mention rate, citation rate, share of voice and where you sit against every competitor named alongside you — with the coverage of each run stated next to it.',
-    bullets: ['Scheduled automated runs', 'Per-engine breakdown', 'Coverage shown with every rate'],
+      'Every figure belongs to one identified run, states how much of that run produced data, and carries a 95% interval rather than a bare percentage. Failed and unreachable checks are reported as gaps in coverage, never counted as evidence that your brand was absent.',
+    bullets: ['Run-scoped, never date-grouped', 'Repeated sampling per prompt', 'Coverage and interval on every rate'],
   },
   {
-    icon: 'Quote',
-    title: 'Citation Monitoring',
+    icon: 'ShieldCheck',
+    title: 'Published provider audit',
     href: '/platform/citations',
     blurb:
-      'Know which of your URLs answer engines actually quote — and which competitor page took the citation when they did not. Every check keeps the answer excerpt as evidence.',
-    bullets: ['URL-level attribution', 'Answer excerpts stored', 'Sentiment on every mention'],
+      'Each answer engine is assessed against three tests: a compliant API, an adapter that actually enables web retrieval, and a model confirmed against the vendor’s own documentation. Any engine failing one is marked unavailable with the reason published, rather than quietly measured anyway.',
+    bullets: ['Grounding recorded per request', 'Model requested and returned stored separately', 'Reasons published, not hidden'],
   },
   {
     icon: 'PenTool',
@@ -188,7 +188,7 @@ export const PRICING: readonly Plan[] = [
     annualPrice: 65,
     tagline: 'For founders and single-site brands proving the channel.',
     limits: ['1 project', '25 tracked prompts', '250 tracked keywords', 'Weekly automated runs', '100-page site audit'],
-    capabilities: ['ai_visibility_tracking', 'citation_monitoring', 'site_audit', 'keyword_research', 'wordpress_publishing', 'csv_export'],
+    capabilities: ['site_audit', 'keyword_research', 'wordpress_publishing', 'csv_export'],
     cta: 'Start free trial',
     highlight: false,
   },
@@ -199,9 +199,9 @@ export const PRICING: readonly Plan[] = [
     tagline: 'For marketing teams running content as a channel.',
     limits: ['5 projects', '150 tracked prompts', '2,000 tracked keywords', 'Daily automated runs', '1,000-page site audit'],
     capabilities: [
-      'ai_visibility_tracking', 'citation_monitoring', 'competitor_share_of_voice', 'site_audit',
-      'keyword_research', 'content_briefs', 'geo_scoring', 'wordpress_publishing',
-      'elementor_widgets', 'scheduled_runs', 'csv_export',
+      'site_audit', 'keyword_research', 'content_briefs', 'geo_scoring',
+      'wordpress_publishing', 'elementor_widgets', 'measurement_foundation',
+      'scheduled_runs', 'csv_export',
     ],
     cta: 'Start free trial',
     highlight: true,
@@ -213,9 +213,9 @@ export const PRICING: readonly Plan[] = [
     tagline: 'For portfolios running the same process across many sites.',
     limits: ['Unlimited projects', '1,000 tracked prompts', '20,000 tracked keywords', 'Daily automated runs', 'Unlimited site audit'],
     capabilities: [
-      'ai_visibility_tracking', 'citation_monitoring', 'competitor_share_of_voice', 'site_audit',
-      'keyword_research', 'content_briefs', 'geo_scoring', 'wordpress_publishing',
-      'elementor_widgets', 'scheduled_runs', 'csv_export', 'public_api',
+      'site_audit', 'keyword_research', 'content_briefs', 'geo_scoring',
+      'wordpress_publishing', 'elementor_widgets', 'measurement_foundation',
+      'scheduled_runs', 'csv_export', 'public_api',
     ],
     cta: 'Talk to sales',
     highlight: false,
@@ -227,7 +227,7 @@ export const PRICING: readonly Plan[] = [
  * the same place as what it does.
  */
 export const PRICING_DISCLOSURE = [
-  'Answer-engine checks run against the surfaces this deployment has credentials for. A surface without a credential is recorded as unavailable and excluded from your rates — never simulated.',
+  'Answer-engine measurement is currently not available on any plan. The measurement pipeline is built — runs, repeated sampling, coverage and confidence intervals — but a provider audit found that no engine adapter currently meets the bar for a trustworthy measurement, so none is offered. The per-engine reasons are published in the release truth audit.',
   'Search position tracking, backlink data, Search Console and GA4 integrations, article generation, multi-seat roles, white-label reporting and per-tenant provider keys are not built. They are not included on any plan at any price.',
   'Google AI Mode has no compliant API and is not measured.',
 ] as const;

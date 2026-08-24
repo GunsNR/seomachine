@@ -1,7 +1,7 @@
 # Release truth audit — Rank Logic SuperTool
 
 **Baseline commit:** `82c171b0c13a09cbfa5ff77a42f27cf43ab7cdba`
-**Gate:** 0 (truth, containment, one source of product truth)
+**Gate:** 1 (trustworthy measurement) — supersedes the Gate 0 audit below
 **Last verified against source:** 2026-08-23
 **Owner:** product-owner
 
@@ -42,9 +42,7 @@ reach a pricing table by accident.
 
 | Capability | Status | Actual source / data | User-visible label | Test evidence | External validation | Permitted marketing language |
 | --- | --- | --- | --- | --- | --- | --- |
-| `ai_visibility_tracking` | `beta` | Live calls to OpenAI, Anthropic, Google Gemini, Perplexity and xAI developer APIs. One row per prompt per surface. A surface without a credential is recorded `unavailable`, never simulated. | AI visibility tracking | `tests/ai.test.ts`, `tests/provenance.test.ts` | **None.** No provider credential has been exercised in this environment, so no live provider response has ever been parsed. Sampling design, repeat counts and confidence intervals do not exist (Gate 1). | "Runs a fixed prompt set against the answer engines you have connected and records whether your brand was named or cited." |
-| `citation_monitoring` | `beta` | Citation URLs returned by a provider, plus URLs parsed from answer text. | Citation monitoring | `tests/ai.test.ts` | Never validated against real provider citation payloads. | "Records which URLs an answer pointed at, and whether one of them was yours." |
-| `competitor_share_of_voice` | `beta` | Prose mentions of each named competitor within observed answers, URLs excluded from the count. | Competitor share of voice | `tests/ai.test.ts` | Never validated against real answers. | "Shows which competitors were named alongside you in the answers you observed." |
+| `measurement_foundation` | `beta` | Immutable `MeasurementRun` and `Observation` records. Rates computed inside one run by run id, never by date; failed/unavailable excluded from rate denominators and reported as coverage; 95% Wilson interval on every binary rate; run-to-run spread reported separately. | Run-scoped measurement with confidence intervals | `tests/measurement-stats.test.ts`, `tests/measurement-run.test.ts` | The arithmetic and run lifecycle are unit- and database-tested. They have never operated on a live provider response, because no engine is measurable. | "Every figure is tied to a specific run, states how much of that run produced data, and carries a confidence interval rather than a bare percentage." |
 | `site_audit` | `verified` | SuperTool crawls the URL you give it and applies a fixed 25-rule set to what it fetches. | Site audit | `tests/crawler.integration.test.ts`, `tests/scoring.test.ts` | None required — the audit reads only the site under test. | "Crawls your pages and reports technical, on-page, schema and answer-readiness issues with a fix for each." |
 | `geo_scoring` | `beta` | A nine-signal heuristic over page text. Weights were chosen by hand. | Answer-readiness scoring | `tests/scoring.test.ts` | **No held-out dataset, no outcome data.** The score is not known to predict citations or anything else. | "Grades a draft against nine structural signals and names what to change. It is a heuristic, not a prediction of citations." |
 | `content_briefs` | `beta` | Generated from the project keyword set and prompt set. | Content briefs | `tests/brief.test.ts` | Not benchmarked against live SERP data — no SERP provider is connected. | "Produces an outline, target questions and a word-count target for a page you plan to write." |
@@ -63,7 +61,51 @@ reach a pricing table by accident.
 | --- | --- | --- | --- | --- | --- | --- |
 | `lead_attribution` | `demo_only` | A public endpoint the WordPress plugin calls with a **caller-supplied** referrer. Forgeable by anyone, matched by substring rather than parsed hostname, and records an anonymous visit rather than a verified lead. | Referral events (renamed from "Leads") | None — there is no test asserting the events are trustworthy, because they are not. | The chain from an assistant answer to a real conversion has never been demonstrated end to end. | **Not sold.** Shown only with a standing in-product notice, and never described as leads. |
 
-### Withdrawn — previously advertised, does not exist
+### Withdrawn in Gate 1 — pipeline built, no trustworthy source
+
+The Gate 1 provider audit applied three tests to every answer engine: a compliant
+public API, an adapter that **actually enables web retrieval**, and a model
+**confirmed against the vendor's own current documentation**. Any one failing
+forces `unavailable`.
+
+The decisive finding was the second test. Four of five adapters make a plain
+completion call with no web-search tool. Asking an ungrounded model "which SEO
+tool is best" measures what it absorbed during training months earlier — not
+what a search returns today. Reporting that as *AI search visibility* is a real
+number about the wrong thing, the same category of error as answering Google AI
+Mode with Gemini.
+
+| Capability | Status | Actual source / data | User-visible label | Test evidence | External validation | Permitted marketing language |
+| --- | --- | --- | --- | --- | --- | --- |
+| `ai_visibility_tracking` | `unavailable` | Adapters exist for five vendors and the Gate 1 pipeline is complete, but no engine passes the audit. | "No answer engine is currently measurable" panel | `tests/provider-audit.test.ts` | None. No credential exercised; vendor documentation unreachable from the build environment. | "Not available. The measurement pipeline is built and tested, but no answer engine currently meets the bar for a trustworthy measurement." |
+| `citation_monitoring` | `unavailable` | An ungrounded adapter returns no citations at all, so a citation rate against it would be zero for reasons unrelated to the brand. | Not offered | `tests/provider-audit.test.ts` | Never validated against real citation payloads. | "Not available. Citation evidence requires a grounded answer engine." |
+| `competitor_share_of_voice` | `unavailable` | Depends on observed answers, and none can be observed. | Not offered | `tests/ai.test.ts` | Never validated against real answers. | "Not available. Depends on observed answers." |
+
+#### Per-engine audit result
+
+| Engine | API | Grounding requested | Docs verified | Verdict |
+| --- | --- | --- | --- | --- |
+| ChatGPT | official | **no** — plain `/v1/chat/completions`, no `web_search` tool | no | unavailable; also pinned to a preview model identifier |
+| Claude | official | **no** — `/v1/messages` with no `tools` array | no | unavailable; would return zero citations by construction |
+| Gemini | official | **no** — `generateContent` with no `google_search` tool | no | unavailable; parses `groundingMetadata` that can never populate |
+| Grok | official | **no** — no live-search parameters | no | unavailable |
+| Perplexity | official | yes — Sonar retrieves intrinsically | no | unavailable **on documentation grounds only** |
+| Google AI Mode | none | n/a | n/a | unavailable; no public API |
+
+**Why documentation could not be verified:** every official vendor documentation
+domain (`platform.openai.com`, `developers.openai.com`, `docs.anthropic.com`,
+`ai.google.dev`, `docs.x.ai`, `docs.perplexity.ai`) is blocked by this
+environment's network egress proxy. Third-party summaries and model recollection
+were deliberately **not** substituted — that would be exactly the unsourced claim
+Gate 0 removed from this product.
+
+**What unblocks each engine:** wire the vendor's web-retrieval tool into the
+adapter, then verify the model identifier against the vendor's own docs from an
+environment with egress, then record the source URL and check date in
+`engines.ts`. Availability is derived from those facts, so it flips
+automatically — it cannot be hand-set.
+
+### Withdrawn earlier — previously advertised, does not exist
 
 | Capability | Status | Actual source / data | User-visible label | Test evidence | External validation | Permitted marketing language |
 | --- | --- | --- | --- | --- | --- | --- |

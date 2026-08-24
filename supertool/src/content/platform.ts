@@ -32,7 +32,7 @@ export const PLATFORM_PAGES: FeaturePageData[] = [
       'Measure how often ChatGPT, Perplexity, Claude, Gemini and Grok name your brand. Mention rate, citation rate, share of voice and competitor benchmarks, on a schedule you set.',
     keywords: ['AI visibility tracking', 'ChatGPT brand monitoring', 'AI search rank tracker', 'LLM visibility'],
     lead:
-      'A fixed prompt set, run on a schedule against the answer engines you have connected, turning "are we showing up in AI?" from an argument into a number you can move.',
+      'Not currently available. The measurement pipeline is built — run-scoped observations, repeated sampling, coverage and confidence intervals — but a provider audit found that no answer engine adapter currently meets the bar for a trustworthy measurement, so none is offered. This page describes how it works and what would unblock it.',
     problem: {
       heading: 'You cannot optimise what you cannot see',
       body: [
@@ -97,7 +97,7 @@ export const PLATFORM_PAGES: FeaturePageData[] = [
       'Track which of your URLs answer engines cite as sources, which competitor page took the citation when they did not, and how each citation trends over time.',
     keywords: ['AI citation tracking', 'ChatGPT citations', 'Perplexity sources', 'answer engine attribution'],
     lead:
-      'Mentions are nice. Citations send traffic. Citation monitoring tells you which specific URLs answer engines are willing to quote — and which page beat yours when they were not.',
+      'Not currently available. Citation evidence requires an answer engine that actually retrieves from the web, and no connected adapter currently does — an ungrounded model returns no citations at all, so a citation rate against it would be zero for reasons unrelated to your brand. This page describes the design and what would unblock it.',
     problem: {
       heading: 'A mention without a citation is a dead end',
       body: [
