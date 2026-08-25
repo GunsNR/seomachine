@@ -168,6 +168,9 @@ Unchanged from §2 of the runbook, and none of it was exercised:
   temporary `validation-runner` service and its domain
   (plus `validation-runner-iad`, an empty service created while diagnosing the
   region fault) are **staged for deletion and awaiting a human apply**. Pending
-  that, the runner was neutralized: both bearer tokens were rotated to fresh
-  random values, the payload variables were cleared, and its start command now
-  exits immediately so nothing listens on the domain.
+  that, the runner was neutralized and verified neutralized: both bearer tokens
+  were rotated to fresh random values, the validation payload was replaced in
+  the service variables, and the start command now exits immediately. The
+  deployment that served the report is recorded `REMOVED`, the current one runs
+  to exit with a `NEVER` restart policy, and nothing listens on the temporary
+  domain.
