@@ -32,7 +32,7 @@ anything it depends on is outstanding.
 | `foundation` | Truth Gate 0 and Measurement Gate 1 | `complete` | — | 14 capabilities incl. `site_audit`, `csv_export`, `measurement_foundation`, `wordpress_publishing` | None |
 | `phase-0` | Product constitution and executable blueprint | `complete` | `foundation` | — (documentation only) | None |
 | `phase-1` | Grounded provider activation | `not-started` | `phase-0` | `ai_visibility_tracking`, `citation_monitoring`, `competitor_share_of_voice` | Credentials, doc access, spend, legal review |
-| `phase-2` | Production data, jobs, tenancy and security | `in-progress` | `phase-0` | `teams_rbac`, `byo_provider_keys` | Hosted PostgreSQL instance, representative data copy for migration rehearsal |
+| `phase-2` | Production data, jobs, tenancy and security | `in-progress` | `phase-0` | `teams_rbac`, `byo_provider_keys` | Production-sized data copy, provider-native backup rehearsal, pooled endpoint |
 | `phase-3` | First-party integrations and verified publishing | `not-started` | `phase-2` | `google_search_console`, `google_analytics` | Google Cloud project, real WordPress install, Stripe test account, email provider |
 | `phase-4` | Core classic SEO intelligence | `not-started` | `phase-3` | `rank_tracking`, `backlink_tracking`, `local_device_tracking` | Licensed data provider contracts, recurring spend, legal review |
 | `phase-5` | Action-first product and original design system | `not-started` | `phase-4` | — (experience, not new capabilities) | Access to representative users |
@@ -193,9 +193,16 @@ unblocked by writing code.
   returned content.
 
 **`phase-2`**
-- A hosted PostgreSQL instance.
-- A representative data copy to rehearse migration against.
-- Network egress to the database provider control plane and outbound TCP 5432.
+- A representative data copy to rehearse migration against. The hosted run used production-shaped synthetic data, not production-sized real data.
+- Provider-native backup: Railway snapshot and PITR restore are untested; only the portable `pg_dump`/`pg_restore` path has been rehearsed.
+- A pooled endpoint to exercise pooler behaviour and connection limits under load.
+
+A hosted PostgreSQL instance is no longer among these: one was provisioned on
+Railway and the full runbook procedure passed against it on 2026-08-25, recorded
+in `evidence/2026-08-25-hosted-postgres-validation-railway.md`. The egress
+blocker noted earlier that day was bypassed, not fixed — the procedure ran inside
+the provider — and it still applies to anything that must reach a database from
+the build environment.
   Discovered on 2026-08-25 while attempting to provision one: reaching a hosted
   database needs both, and this build environment's egress policy allows
   neither. See `evidence/2026-08-25-hosted-postgres-provisioning-attempt.md`.

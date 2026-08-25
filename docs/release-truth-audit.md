@@ -242,15 +242,18 @@ fixes, not new customer-facing capabilities. In particular:
 
 ## What Phase 2 did *not* fix
 
-- **No migration has run against a hosted database.** The migration has been
-  applied to empty databases and local instances only. `npm run db:rehearse`
-  does exercise it against production-*shaped* synthetic data — two tenants,
-  four projects, eight runs, twenty-four observations — and proves a
-  `pg_dump`/`pg_restore` round trip preserves tenant scoping, run identity,
-  observation provenance, key scopes and the idempotency constraint. What is
-  still missing is a hosted endpoint and production-*sized* data. Provisioning
-  one was attempted on 2026-08-25 and blocked on egress policy; see
-  `evidence/2026-08-25-hosted-postgres-provisioning-attempt.md`.
+- **The migration has now run against a hosted database, but not against
+  production-sized data.** On 2026-08-25 the full runbook procedure passed
+  against Railway PostgreSQL 16.15: migrations applied to the provisioned
+  database with zero drift, and a `pg_dump`/`pg_restore` round trip preserved
+  tenant scoping, run identity, observation provenance, key scopes and the
+  idempotency constraint, field for field. The dataset was production-*shaped*
+  synthetic data — two tenants, four projects, eight runs, twenty-four
+  observations — so production-*sized* data remains untested, as do the
+  provider's own snapshot/PITR path and any pooled endpoint. The run also found
+  that the hosted server **offers TLS without enforcing it** and presents a
+  self-signed certificate. See
+  `evidence/2026-08-25-hosted-postgres-validation-railway.md`.
 - **No worker is deployed.** Enqueued jobs sit until something runs them.
 - **DNS rebinding remains open** in a narrow race: the guard resolves and
   checks, then `fetch` resolves again. Closing it needs socket pinning.

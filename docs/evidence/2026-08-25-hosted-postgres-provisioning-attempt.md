@@ -1,6 +1,13 @@
 # Hosted PostgreSQL provisioning attempt — 2026-08-25
 
-Status: **not provisioned — blocked by network egress policy**
+Status: **not provisioned — blocked by network egress policy** · **SUPERSEDED the same day**
+
+> A hosted run did subsequently succeed, by a different route: the procedure was
+> executed *inside* Railway rather than reached from here, which needs neither the
+> control plane over the local egress path nor outbound TCP 5432. See
+> [`2026-08-25-hosted-postgres-validation-railway.md`](2026-08-25-hosted-postgres-validation-railway.md).
+> This document is kept because the blockers it records are still real for this
+> environment, and because a superseded record should be corrected, not deleted.
 
 This records an authorized attempt to create the hosted PostgreSQL staging
 environment for the private Rank Logic pilot, what stopped it, and what was
@@ -134,5 +141,12 @@ Either of these, and both are the product owner's to arrange:
    machine or a CI runner with unrestricted egress — following
    `hosted-postgres-validation.md` §1 and filing the `--report` JSON here.
 
-Until one of them happens, no claim of hosted validation may be made anywhere in
-this repository or in any public-facing material.
+~~Until one of them happens, no claim of hosted validation may be made anywhere in
+this repository or in any public-facing material.~~
+
+**Resolved 2026-08-25 by a third route neither option anticipated:** running the
+procedure inside the provider, driven through the Railway MCP, so the database
+was reached over Railway's private network and never from this environment at
+all. Both blockers above remain true of this environment — they were bypassed,
+not fixed. The hosted claim now rests on
+[`2026-08-25-hosted-postgres-validation-railway.md`](2026-08-25-hosted-postgres-validation-railway.md).

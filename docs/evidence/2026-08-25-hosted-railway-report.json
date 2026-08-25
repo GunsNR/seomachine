@@ -1,0 +1,264 @@
+{
+  "procedure": "docs/hosted-postgres-validation.md",
+  "provider": "Railway",
+  "project": "rank-logic-pilot",
+  "environment": "production",
+  "databaseRegion": "iad (US East)",
+  "runnerRegion": "iad",
+  "databaseImage": "ghcr.io/railwayapp-templates/postgres-ssl:16",
+  "connectivity": "Railway private network only. The database has no public TCP proxy and no domain; the runner reaches it over Railway private DNS and never over the public internet.",
+  "sourceCommit": "458b32bf0128f2dbd66ffeda71fc46ce4e35c707",
+  "payloadSha256": "cf3b5125b2f253d320101724a2e2b5e8e4fa7c44b9840661eabcb0063ca26b74",
+  "payloadSha256Matches": true,
+  "startedAt": "2026-08-25T02:44:21.429Z",
+  "primaryDatabase": {
+    "what": "The database Railway provisioned, migrated in place — not one the rehearsal created.",
+    "migrateDeploy": {
+      "exitCode": 0,
+      "lastLine": "All migrations have been successfully applied.",
+      "ok": true
+    },
+    "migrateStatus": {
+      "exitCode": 0,
+      "lastLine": "Database schema is up to date!",
+      "ok": true
+    },
+    "drift": {
+      "exitCode": 0,
+      "lastLine": "No difference detected.",
+      "ok": true,
+      "meaning": "no difference detected"
+    },
+    "ok": true
+  },
+  "tls": {
+    "sslmodeRequire": {
+      "connected": true,
+      "encrypted": true,
+      "protocol": "TLSv1.3",
+      "cipher": "TLS_AES_256_GCM_SHA384",
+      "bits": 256,
+      "reason": null
+    },
+    "sslmodeDisable": {
+      "connected": true,
+      "meaning": "the server also accepts unencrypted connections; TLS is available, not enforced",
+      "reason": null
+    },
+    "sslmodeVerifyFull": {
+      "connected": false,
+      "meaning": "certificate verification failed — expected for a self-signed certificate on a private-network-only database",
+      "reason": "no trusted root certificate for the server certificate"
+    },
+    "serverSslEnabled": "on",
+    "serverVersion": "16.15 (Debian 16.15-1.pgdg13+2)",
+    "caveat": "Encryption here is TLS between the runner and the database inside Railway's private network. It is not evidence about a public endpoint, because there is none.",
+    "ok": true
+  },
+  "latency": {
+    "what": "Round trips from the runner to the database, both inside Railway's private network, same region.",
+    "firstConnectMs": 71.481,
+    "firstConnectNote": "Includes Prisma query-engine startup and TLS handshake, not network time alone. The per-query figures below are the round-trip measurement.",
+    "selectOneMs": {
+      "samples": 50,
+      "min": 0.473,
+      "p50": 0.666,
+      "p95": 1.732,
+      "max": 3.546
+    },
+    "caveat": "A private-network round trip on an idle trial instance. It is not a figure for application load, for a pooled endpoint, or for production data volume.",
+    "ok": true
+  },
+  "rehearsal": {
+    "script": "scripts/db-rehearse.mjs, byte-identical to the commit under test",
+    "exitCode": 0,
+    "ok": true,
+    "wallClockMs": 6813,
+    "report": {
+      "startedAt": "2026-08-25T02:44:25.505Z",
+      "finishedAt": "2026-08-25T02:44:30.824Z",
+      "totalMs": 5319,
+      "postgresVersion": "PostgreSQL 16.15 (Debian 16.15-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+      "prismaVersion": "6.16.2",
+      "migrations": [
+        "20260824172219_phase2_production_foundation",
+        "20260824173435_phase2_lead_attribution_provenance"
+      ],
+      "sourceIntegrity": {
+        "organizations": 2,
+        "projects": 4,
+        "measurementRuns": 8,
+        "observations": 24,
+        "jobs": 4,
+        "sessions": 2,
+        "apiKeys": 4,
+        "orphanedProjects": 0,
+        "orphanedObservations": 0,
+        "observedCount": 8,
+        "failedCount": 8,
+        "unavailableCount": 8,
+        "daysWithMultipleRuns": 1,
+        "keysWithoutScopes": 0,
+        "keysWithQuota": 4,
+        "idempotencyConstraintEnforced": true
+      },
+      "restoredIntegrity": {
+        "organizations": 2,
+        "projects": 4,
+        "measurementRuns": 8,
+        "observations": 24,
+        "jobs": 4,
+        "sessions": 2,
+        "apiKeys": 4,
+        "orphanedProjects": 0,
+        "orphanedObservations": 0,
+        "observedCount": 8,
+        "failedCount": 8,
+        "unavailableCount": 8,
+        "daysWithMultipleRuns": 1,
+        "keysWithoutScopes": 0,
+        "keysWithQuota": 4,
+        "idempotencyConstraintEnforced": true
+      },
+      "steps": [
+        {
+          "name": "Check pg_dump and pg_restore are present and compatible",
+          "ok": true,
+          "ms": 51,
+          "detail": "pg_dump (PostgreSQL) 16.15 (Debian 16.15-1.pgdg12+2)"
+        },
+        {
+          "name": "Read server version",
+          "ok": true,
+          "ms": 78,
+          "detail": "PostgreSQL 16.15 (Debian 16.15-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit"
+        },
+        {
+          "name": "Create empty source database (rehearse_src_69d507a1)",
+          "ok": true,
+          "ms": 205,
+          "detail": 0
+        },
+        {
+          "name": "Apply migrations with migrate deploy",
+          "ok": true,
+          "ms": 1291,
+          "detail": "All migrations have been successfully applied."
+        },
+        {
+          "name": "Confirm zero drift",
+          "ok": true,
+          "ms": 1095,
+          "detail": "no difference detected"
+        },
+        {
+          "name": "Confirm migration status is applied",
+          "ok": true,
+          "ms": 1129,
+          "detail": "up to date"
+        },
+        {
+          "name": "Load representative dataset",
+          "ok": true,
+          "ms": 271,
+          "detail": {
+            "orgs": 2,
+            "projects": 4,
+            "runs": 8,
+            "observations": 24,
+            "jobs": 4,
+            "sessions": 2,
+            "keys": 4
+          }
+        },
+        {
+          "name": "Check integrity (source)",
+          "ok": true,
+          "ms": 108,
+          "detail": {
+            "organizations": 2,
+            "projects": 4,
+            "measurementRuns": 8,
+            "observations": 24,
+            "jobs": 4,
+            "sessions": 2,
+            "apiKeys": 4,
+            "orphanedProjects": 0,
+            "orphanedObservations": 0,
+            "observedCount": 8,
+            "failedCount": 8,
+            "unavailableCount": 8,
+            "daysWithMultipleRuns": 1,
+            "keysWithoutScopes": 0,
+            "keysWithQuota": 4,
+            "idempotencyConstraintEnforced": true
+          }
+        },
+        {
+          "name": "Back up with pg_dump",
+          "ok": true,
+          "ms": 138,
+          "detail": "/tmp/rl-rehearse-iA5TwL/backup.dump"
+        },
+        {
+          "name": "Create isolated restore target (rehearse_dst_69d507a1)",
+          "ok": true,
+          "ms": 378,
+          "detail": 0
+        },
+        {
+          "name": "Restore with pg_restore",
+          "ok": true,
+          "ms": 472,
+          "detail": "restored"
+        },
+        {
+          "name": "Check integrity (restored)",
+          "ok": true,
+          "ms": 100,
+          "detail": {
+            "organizations": 2,
+            "projects": 4,
+            "measurementRuns": 8,
+            "observations": 24,
+            "jobs": 4,
+            "sessions": 2,
+            "apiKeys": 4,
+            "orphanedProjects": 0,
+            "orphanedObservations": 0,
+            "observedCount": 8,
+            "failedCount": 8,
+            "unavailableCount": 8,
+            "daysWithMultipleRuns": 1,
+            "keysWithoutScopes": 0,
+            "keysWithQuota": 4,
+            "idempotencyConstraintEnforced": true
+          }
+        },
+        {
+          "name": "Compare source and restored",
+          "ok": true,
+          "ms": 0,
+          "detail": "identical"
+        },
+        {
+          "name": "Assert the dataset was actually loaded",
+          "ok": true,
+          "ms": 0,
+          "detail": "2 tenants, 24 observations"
+        }
+      ],
+      "result": "passed",
+      "localWorktreeSha": "f31a2b2501c7bf88cc04bb17d98bd17d645226a1"
+    }
+  },
+  "finishedAt": "2026-08-25T02:44:32.267Z",
+  "result": "passed",
+  "unproven": [
+    "Pooler behaviour — this database has no separate pooled endpoint and none was exercised.",
+    "Connection limits under application concurrency.",
+    "Railway's own snapshot/PITR backup path. pg_dump/pg_restore is the portable path only.",
+    "Production data volume. The dataset is production-shaped, not production-sized.",
+    "Certificate-chain verification against a public CA — the database is private-network-only and its certificate is self-signed."
+  ]
+}
