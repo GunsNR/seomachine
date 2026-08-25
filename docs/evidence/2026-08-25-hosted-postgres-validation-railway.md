@@ -163,14 +163,21 @@ Unchanged from §2 of the runbook, and none of it was exercised:
   No TCP proxy, no domain, volume and data intact.
 - Its primary database now carries the Phase 2 schema, applied by this run.
 - The rehearsal's disposable databases dropped themselves, as designed.
-- **Teardown is incomplete.** Deleting a Railway service requires two-factor
-  verification in the dashboard, which an API/MCP token cannot supply, so the
-  temporary `validation-runner` service and its domain
-  (plus `validation-runner-iad`, an empty service created while diagnosing the
-  region fault) are **staged for deletion and awaiting a human apply**. Pending
-  that, the runner was neutralized and verified neutralized: both bearer tokens
-  were rotated to fresh random values, the validation payload was replaced in
-  the service variables, and the start command now exits immediately. The
-  deployment that served the report is recorded `REMOVED`, the current one runs
-  to exit with a `NEVER` restart policy, and nothing listens on the temporary
-  domain.
+- **Teardown is complete.** The temporary `validation-runner` service, its
+  `*.up.railway.app` domain, and `validation-runner-iad` (an empty service
+  created while diagnosing the region fault) were **deleted successfully**. A
+  read-only check of the project afterwards returns a single service,
+  `Postgres`, with no service domains and no custom domains.
+
+  Deleting a Railway service requires two-factor verification in the dashboard,
+  which an API/MCP token cannot supply, so the deletions were staged from here
+  and applied by a human. Before that apply the runner was neutralized and
+  verified neutralized: both bearer tokens were rotated to fresh random values,
+  the validation payload was replaced in the service variables, the start
+  command was changed to exit immediately, and the deployment that had served
+  the report was already recorded `REMOVED`.
+
+  No deletion timestamp is recorded here. Railway removes a service's
+  deployments and events along with the service, so once the apply completed
+  its API no longer exposes an authoritative time for it, and a reconstructed
+  one would not be evidence.
