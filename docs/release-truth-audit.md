@@ -242,9 +242,15 @@ fixes, not new customer-facing capabilities. In particular:
 
 ## What Phase 2 did *not* fix
 
-- **No migration has run against production-shaped data.** The migration has
-  been applied to empty databases and a local instance only. No such data
-  exists to rehearse against.
+- **No migration has run against a hosted database.** The migration has been
+  applied to empty databases and local instances only. `npm run db:rehearse`
+  does exercise it against production-*shaped* synthetic data — two tenants,
+  four projects, eight runs, twenty-four observations — and proves a
+  `pg_dump`/`pg_restore` round trip preserves tenant scoping, run identity,
+  observation provenance, key scopes and the idempotency constraint. What is
+  still missing is a hosted endpoint and production-*sized* data. Provisioning
+  one was attempted on 2026-08-25 and blocked on egress policy; see
+  `evidence/2026-08-25-hosted-postgres-provisioning-attempt.md`.
 - **No worker is deployed.** Enqueued jobs sit until something runs them.
 - **DNS rebinding remains open** in a narrow race: the guard resolves and
   checks, then `fetch` resolves again. Closing it needs socket pinning.

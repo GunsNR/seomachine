@@ -174,6 +174,12 @@ const PHASES: readonly Phase[] = [
     externallyBlocked: [
       'A hosted PostgreSQL instance.',
       'A representative data copy to rehearse migration against.',
+      // Discovered 2026-08-25 attempting to provision one. Reaching a hosted
+      // database needs BOTH: the provider control plane over HTTPS, and raw
+      // outbound TCP 5432 for Prisma, psql, pg_dump and pg_restore. This build
+      // environment's egress policy allows neither, so a credential alone
+      // would not be enough. See docs/evidence/2026-08-25-hosted-postgres-provisioning-attempt.md.
+      'Network egress to the database provider control plane and outbound TCP 5432.',
     ],
   },
   {

@@ -1,0 +1,177 @@
+{
+  "startedAt": "2026-08-25T00:14:33.554Z",
+  "finishedAt": "2026-08-25T00:14:38.672Z",
+  "totalMs": 5118,
+  "postgresVersion": "PostgreSQL 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1) on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0, 64-bit",
+  "prismaVersion": "6.16.2",
+  "migrationSha": "eb57f0823dbc43c69e3d0d485b2d8983f696ad57",
+  "migrations": [
+    "20260824172219_phase2_production_foundation",
+    "20260824173435_phase2_lead_attribution_provenance"
+  ],
+  "sourceIntegrity": {
+    "organizations": 2,
+    "projects": 4,
+    "measurementRuns": 8,
+    "observations": 24,
+    "jobs": 4,
+    "sessions": 2,
+    "apiKeys": 4,
+    "orphanedProjects": 0,
+    "orphanedObservations": 0,
+    "observedCount": 8,
+    "failedCount": 8,
+    "unavailableCount": 8,
+    "daysWithMultipleRuns": 1,
+    "keysWithoutScopes": 0,
+    "keysWithQuota": 4,
+    "idempotencyConstraintEnforced": true
+  },
+  "restoredIntegrity": {
+    "organizations": 2,
+    "projects": 4,
+    "measurementRuns": 8,
+    "observations": 24,
+    "jobs": 4,
+    "sessions": 2,
+    "apiKeys": 4,
+    "orphanedProjects": 0,
+    "orphanedObservations": 0,
+    "observedCount": 8,
+    "failedCount": 8,
+    "unavailableCount": 8,
+    "daysWithMultipleRuns": 1,
+    "keysWithoutScopes": 0,
+    "keysWithQuota": 4,
+    "idempotencyConstraintEnforced": true
+  },
+  "steps": [
+    {
+      "name": "Check pg_dump and pg_restore are present and compatible",
+      "ok": true,
+      "ms": 67,
+      "detail": "pg_dump (PostgreSQL) 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)"
+    },
+    {
+      "name": "Read server version",
+      "ok": true,
+      "ms": 79,
+      "detail": "PostgreSQL 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1) on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0, 64-bit"
+    },
+    {
+      "name": "Create empty source database (rehearse_src_a536652b)",
+      "ok": true,
+      "ms": 110,
+      "detail": 0
+    },
+    {
+      "name": "Apply migrations with migrate deploy",
+      "ok": true,
+      "ms": 1433,
+      "detail": "All migrations have been successfully applied."
+    },
+    {
+      "name": "Confirm zero drift",
+      "ok": true,
+      "ms": 1315,
+      "detail": "no difference detected"
+    },
+    {
+      "name": "Confirm migration status is applied",
+      "ok": true,
+      "ms": 1364,
+      "detail": "up to date"
+    },
+    {
+      "name": "Load representative dataset",
+      "ok": true,
+      "ms": 172,
+      "detail": {
+        "orgs": 2,
+        "projects": 4,
+        "runs": 8,
+        "observations": 24,
+        "jobs": 4,
+        "sessions": 2,
+        "keys": 4
+      }
+    },
+    {
+      "name": "Check integrity (source)",
+      "ok": true,
+      "ms": 87,
+      "detail": {
+        "organizations": 2,
+        "projects": 4,
+        "measurementRuns": 8,
+        "observations": 24,
+        "jobs": 4,
+        "sessions": 2,
+        "apiKeys": 4,
+        "orphanedProjects": 0,
+        "orphanedObservations": 0,
+        "observedCount": 8,
+        "failedCount": 8,
+        "unavailableCount": 8,
+        "daysWithMultipleRuns": 1,
+        "keysWithoutScopes": 0,
+        "keysWithQuota": 4,
+        "idempotencyConstraintEnforced": true
+      }
+    },
+    {
+      "name": "Back up with pg_dump",
+      "ok": true,
+      "ms": 110,
+      "detail": "/tmp/rl-rehearse-5nNInc/backup.dump"
+    },
+    {
+      "name": "Create isolated restore target (rehearse_dst_a536652b)",
+      "ok": true,
+      "ms": 138,
+      "detail": 0
+    },
+    {
+      "name": "Restore with pg_restore",
+      "ok": true,
+      "ms": 158,
+      "detail": "restored"
+    },
+    {
+      "name": "Check integrity (restored)",
+      "ok": true,
+      "ms": 82,
+      "detail": {
+        "organizations": 2,
+        "projects": 4,
+        "measurementRuns": 8,
+        "observations": 24,
+        "jobs": 4,
+        "sessions": 2,
+        "apiKeys": 4,
+        "orphanedProjects": 0,
+        "orphanedObservations": 0,
+        "observedCount": 8,
+        "failedCount": 8,
+        "unavailableCount": 8,
+        "daysWithMultipleRuns": 1,
+        "keysWithoutScopes": 0,
+        "keysWithQuota": 4,
+        "idempotencyConstraintEnforced": true
+      }
+    },
+    {
+      "name": "Compare source and restored",
+      "ok": true,
+      "ms": 0,
+      "detail": "identical"
+    },
+    {
+      "name": "Assert the dataset was actually loaded",
+      "ok": true,
+      "ms": 0,
+      "detail": "2 tenants, 24 observations"
+    }
+  ],
+  "result": "passed"
+}

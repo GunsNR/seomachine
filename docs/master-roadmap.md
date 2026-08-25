@@ -195,6 +195,10 @@ unblocked by writing code.
 **`phase-2`**
 - A hosted PostgreSQL instance.
 - A representative data copy to rehearse migration against.
+- Network egress to the database provider control plane and outbound TCP 5432.
+  Discovered on 2026-08-25 while attempting to provision one: reaching a hosted
+  database needs both, and this build environment's egress policy allows
+  neither. See `evidence/2026-08-25-hosted-postgres-provisioning-attempt.md`.
 
 **`phase-3`**
 - Google Cloud project, OAuth client and consent screen.

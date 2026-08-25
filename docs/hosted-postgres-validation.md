@@ -1,6 +1,6 @@
 # Hosted PostgreSQL validation
 
-Status: prepared, not executed · last reviewed 2026-08-24
+Status: prepared, not executed · last reviewed 2026-08-25
 
 This is the procedure that closes Phase 2's last open acceptance criterion:
 proving the migration works against a real hosted database with
@@ -12,6 +12,13 @@ the procedure itself is exercised continuously. What has *not* happened is the
 same procedure against a hosted endpoint, which is the only thing that can tell
 you about that provider's pooler, connection limits, TLS, latency and backup
 tooling.
+
+A hosted run was attempted on 2026-08-25 and did not get as far as provisioning:
+the environment's egress policy denies access to the provider's control plane,
+and it does not route outbound TCP 5432 at all. Both blockers and the local
+run performed instead are recorded in
+`evidence/2026-08-25-hosted-postgres-provisioning-attempt.md`. The status above
+is unchanged, because an attempt that provisioned nothing validates nothing.
 
 ---
 
