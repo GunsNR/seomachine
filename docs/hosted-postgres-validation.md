@@ -1,17 +1,27 @@
 # Hosted PostgreSQL validation
 
-Status: prepared, not executed · last reviewed 2026-08-24
+Status: **executed against Railway PostgreSQL 16.15 on 2026-08-25 — passed** · last reviewed 2026-08-25
 
 This is the procedure that closes Phase 2's last open acceptance criterion:
 proving the migration works against a real hosted database with
 production-shaped data, and proving a backup can actually be restored.
 
-**Nothing here has been run against a hosted provider.** Steps 1–9 are automated
-and are executed on every CI push against a disposable PostgreSQL 16 service, so
-the procedure itself is exercised continuously. What has *not* happened is the
-same procedure against a hosted endpoint, which is the only thing that can tell
-you about that provider's pooler, connection limits, TLS, latency and backup
-tooling.
+Steps 1–9 are automated and run on every CI push against a disposable
+PostgreSQL 16 service, so the procedure itself is exercised continuously. On
+2026-08-25 the same procedure also ran against a **hosted** endpoint — Railway
+PostgreSQL 16.15, `iad`, private-network-only — and passed: migrations applied
+to the provisioned database with zero drift, and a `pg_dump`/`pg_restore` round
+trip preserved every integrity field. Evidence, including the TLS and latency
+findings and an explicit list of what the run still does not prove, is in
+`evidence/2026-08-25-hosted-postgres-validation-railway.md`.
+
+An earlier attempt the same day reached no database at all, blocked by egress
+policy; it is kept in `evidence/2026-08-25-hosted-postgres-provisioning-attempt.md`
+and is superseded by the run above.
+
+**What a hosted pass still does not settle** is §2 below: pooler behaviour,
+connection limits, the provider's own snapshot/PITR path, and production-*sized*
+data. Those remain open, and a green run here may not be read as covering them.
 
 ---
 

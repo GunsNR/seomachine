@@ -172,8 +172,16 @@ const PHASES: readonly Phase[] = [
       'Billing entitlements are correct for trialing, active, past-due, canceled and misconfigured states.',
     ],
     externallyBlocked: [
-      'A hosted PostgreSQL instance.',
-      'A representative data copy to rehearse migration against.',
+      // A hosted PostgreSQL instance is no longer blocking: one was provisioned
+      // on Railway and the full runbook procedure passed against it on
+      // 2026-08-25. See docs/evidence/2026-08-25-hosted-postgres-validation-railway.md.
+      // The egress blocker recorded earlier that day was bypassed rather than
+      // fixed — the procedure ran inside the provider, so this environment never
+      // needed the control plane or outbound TCP 5432 — and it still applies to
+      // anything that must reach a database from here.
+      'A representative data copy to rehearse migration against. The hosted run used production-shaped synthetic data, not production-sized real data.',
+      'Provider-native backup: Railway snapshot and PITR restore are untested; only the portable pg_dump/pg_restore path has been rehearsed.',
+      'A pooled endpoint to exercise pooler behaviour and connection limits under load.',
     ],
   },
   {
