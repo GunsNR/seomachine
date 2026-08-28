@@ -200,6 +200,16 @@ reported as blocked at connection time rather than being reachable through a
 racing DNS answer, and `Blocked` in a crawl result is a decision the product
 made, not one it hoped for.
 
+**Redirect replay and resolver hangs.** A redirect could still choose what was
+*sent* to the host it named, even after the pin fixed where the request went.
+Cross-origin hops that would repeat a non-GET method or a request body are now
+refused, a 303 and a POST-answering 302 become GET with the body dropped, and
+`Proxy-Authorization` is stripped alongside the other credentials. DNS
+resolution runs inside the request's remaining timeout instead of before the
+clock is read. Operationally: a publish to a site stored as `http://` that
+redirects to `https://` now arrives as a GET and does not publish — store the
+`https://` URL. See ADR-017.
+
 ### Residual risks — known and open
 
 1. **The shared rate limiter fails open.** On a database error it allows the
@@ -219,7 +229,13 @@ made, not one it hoped for.
    fallen back. This is the deliberate cost of pinning — see ADR-016 — and it
    shows up as a connection failure, never as a wrong destination.
 
-5. **Backups are documented, not automated.** The `pg_dump` above is a
+5. **A timed-out DNS lookup is abandoned, not cancelled.** `dns.lookup` offers
+   no cancellation, so a resolver that blows its budget may still be in flight
+   after the request has failed. Nothing is learned from it and no socket is
+   opened, but the operating system's resolver work continues until it
+   finishes on its own.
+
+6. **Backups are documented, not automated.** The `pg_dump` above is a
    procedure, not a cron job. No backup exists because no database exists.
 
 ---
