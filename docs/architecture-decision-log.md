@@ -370,6 +370,18 @@ followed manually; each hop now resolves, validates and pins independently.
 `allowPrivateHosts` disables validation only — the pin still applies, since a
 request whose destination is unknowable is not made safer by skipping a check.
 
+Multi-address handling changed, and this is the consequence worth knowing about
+in production. Previously every resolved address was validated and the *name*
+was then handed to `fetch`, so Node chose an address and could fall back to
+another if the first refused the connection. Now every address is still
+validated, but exactly one is connected to and there is no fallback: a host
+whose first address is unreachable fails rather than trying the second. Failing
+over would mean connecting to an address chosen after the check, which is the
+hole this ADR closes, so the fallback cannot simply be restored — a future
+version that wants it must re-pin per attempt and walk the validated list
+explicitly. Connection reuse is gone for the same reason: a pooled socket is a
+socket opened against an earlier request's pinned address.
+
 **Also closed here.** The address parser this depends on replaced a
 dotted-quad regex, which had recognised exactly one spelling of an address.
 `127.1`, `0177.0.0.1`, `0x7f000001` and `2130706433` all reach loopback through

@@ -212,7 +212,14 @@ made, not one it hoped for.
 
 3. **No production migration rehearsal.** See §2.
 
-4. **Backups are documented, not automated.** The `pg_dump` above is a
+4. **A pinned request does not fail over to a second address.** Every address
+   a name resolves to is validated, but only one is connected to. A
+   multi-homed host whose first address is unreachable fails the request
+   instead of trying the next, where the previous implementation would have
+   fallen back. This is the deliberate cost of pinning — see ADR-016 — and it
+   shows up as a connection failure, never as a wrong destination.
+
+5. **Backups are documented, not automated.** The `pg_dump` above is a
    procedure, not a cron job. No backup exists because no database exists.
 
 ---
