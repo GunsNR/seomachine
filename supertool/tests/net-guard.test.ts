@@ -87,3 +87,81 @@ describe('checkPublicUrl', () => {
     expect(checkPublicUrl('http://192.168.0.10:8080/wp-json').allowed).toBe(false);
   });
 });
+
+describe('checkPublicHost — spellings the dotted-quad check could not see', () => {
+  it('blocks loopback written in octal, hex, decimal and short form', () => {
+    // Each of these reaches 127.0.0.1 through getaddrinfo, and each was
+    // previously allowed: no dotted quad matched, so they fell through as
+    // ordinary hostnames.
+    for (const host of ['127.1', '0177.0.0.1', '0x7f000001', '2130706433', '0x7f.0.0.1']) {
+      expect(checkPublicHost(host).allowed, host).toBe(false);
+    }
+  });
+
+  it('blocks private space written in octal', () => {
+    expect(checkPublicHost('0300.0250.0.1').allowed).toBe(false);
+  });
+
+  it('blocks the IPv4-mapped form a URL parser actually produces', () => {
+    // new URL('http://[::ffff:127.0.0.1]/').hostname is '[::ffff:7f00:1]', so
+    // a check written against the dotted spelling never fired in production.
+    for (const host of ['::ffff:7f00:1', '[::ffff:7f00:1]', '::ffff:a9fe:a9fe', '0:0:0:0:0:ffff:127.0.0.1']) {
+      expect(checkPublicHost(host).allowed, host).toBe(false);
+    }
+  });
+
+  it('blocks IPv6 ranges outside global unicast', () => {
+    for (const host of ['::', '100::1', '2001::1', '2001:db8::1', '2002:7f00:1::', '64:ff9b::7f00:1', 'fec0::1', 'ff02::1']) {
+      expect(checkPublicHost(host).allowed, host).toBe(false);
+    }
+  });
+
+  it('allows a real public IPv6 address', () => {
+    const result = checkPublicHost('2606:4700:4700::1111');
+    expect(result.allowed).toBe(true);
+    expect(result.canonicalAddress).toBe('2606:4700:4700::1111');
+  });
+
+  it('blocks a link-local address carrying a zone id', () => {
+    expect(checkPublicHost('fe80::1%eth0').allowed).toBe(false);
+  });
+
+  it('blocks reserved IPv4 ranges the previous table omitted', () => {
+    for (const host of ['192.0.0.1', '192.0.2.1', '192.88.99.1', '198.18.0.1', '198.51.100.1', '203.0.113.1']) {
+      expect(checkPublicHost(host).allowed, host).toBe(false);
+    }
+  });
+
+  it('blocks the Azure metadata address, which is globally routable', () => {
+    expect(checkPublicHost('168.63.129.16').allowed).toBe(false);
+  });
+
+  it('normalizes a trailing FQDN dot before deciding', () => {
+    // 'localhost.' and 'localhost' name the same host to a resolver.
+    expect(checkPublicHost('localhost.').allowed).toBe(false);
+    expect(checkPublicHost('db.internal.').allowed).toBe(false);
+    expect(checkPublicHost('example.com.').allowed).toBe(true);
+  });
+
+  it('returns the canonical address so the caller can pin to it', () => {
+    expect(checkPublicHost('0x08.0x08.0x08.0x08').canonicalAddress).toBe('8.8.8.8');
+    expect(checkPublicHost('example.com').canonicalAddress).toBeUndefined();
+  });
+});
+
+describe('checkPublicUrl — the host as the URL parser hands it over', () => {
+  it('blocks an IPv4-mapped IPv6 URL', () => {
+    // The parser rewrites this to [::ffff:7f00:1] before the guard sees it.
+    expect(checkPublicUrl('http://[::ffff:127.0.0.1]/').allowed).toBe(false);
+  });
+
+  it('blocks a URL whose host is loopback in an unusual notation', () => {
+    for (const url of ['http://0177.0.0.1/', 'http://127.1/', 'http://2130706433/']) {
+      expect(checkPublicUrl(url).allowed, url).toBe(false);
+    }
+  });
+
+  it('allows a normal public URL with a port and credentials-free path', () => {
+    expect(checkPublicUrl('https://example.com:8443/wp-json/wp/v2/posts').allowed).toBe(true);
+  });
+});

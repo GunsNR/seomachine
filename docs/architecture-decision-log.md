@@ -333,6 +333,70 @@ rather than transitively true through a fiction.
 
 ---
 
+## ADR-016 — The socket is pinned to the address the guard approved
+
+**Status:** accepted · Phase 2 · `src/lib/net-pinned.ts`, `src/lib/ip-address.ts`
+
+**Decision.** Outbound requests to user-supplied URLs resolve the hostname once
+through a controlled resolver, validate every address returned, and then open
+the connection to the validated address. The HTTP client is `node:http` /
+`node:https` with a per-request `lookup` that returns the pinned address and
+never consults DNS. `fetch` is no longer used for these requests.
+
+**Why.** Validating a hostname and then handing that hostname to a client that
+resolves it again is a time-of-check/time-of-use bug. An attacker who controls
+the authoritative DNS for a name they own answers the guard's lookup with a
+public address and the client's lookup with `169.254.169.254`. Every check the
+guard performed described an address the request never used. The only fix is
+for the checked address and the connected address to be the same value, which
+means the address has to reach the socket.
+
+Node's `fetch` cannot express this. The `dispatcher` option that would allow it
+requires an `undici` dependency the project does not carry, so the transport
+was moved to the core HTTP modules, where `lookup` is a documented per-request
+option.
+
+**What is deliberately not pinned.** The hostname. `options.host` stays the
+name, so TLS SNI, certificate validation and the `Host` header are unchanged;
+only the TCP peer is substituted. Pinning by rewriting the URL to the IP — the
+obvious shortcut — disables certificate validation and trades an SSRF hole for
+a transport-security hole.
+
+**Consequences.** Response bodies are buffered under an explicit byte cap
+rather than streamed, and `Content-Encoding` is decompressed in-process with
+the cap applied to the decoded bytes as well, because a compression bomb
+exhausts memory before any decoded limit is consulted. Redirects were already
+followed manually; each hop now resolves, validates and pins independently.
+`allowPrivateHosts` disables validation only — the pin still applies, since a
+request whose destination is unknowable is not made safer by skipping a check.
+
+Multi-address handling changed, and this is the consequence worth knowing about
+in production. Previously every resolved address was validated and the *name*
+was then handed to `fetch`, so Node chose an address and could fall back to
+another if the first refused the connection. Now every address is still
+validated, but exactly one is connected to and there is no fallback: a host
+whose first address is unreachable fails rather than trying the second. Failing
+over would mean connecting to an address chosen after the check, which is the
+hole this ADR closes, so the fallback cannot simply be restored — a future
+version that wants it must re-pin per attempt and walk the validated list
+explicitly. Connection reuse is gone for the same reason: a pooled socket is a
+socket opened against an earlier request's pinned address.
+
+**Also closed here.** The address parser this depends on replaced a
+dotted-quad regex, which had recognised exactly one spelling of an address.
+`127.1`, `0177.0.0.1`, `0x7f000001` and `2130706433` all reach loopback through
+`getaddrinfo` and were previously treated as ordinary hostnames; so was
+`::ffff:7f00:1`, which is the IPv4-mapped form the WHATWG URL parser actually
+produces — meaning the old mapped-address check could not fire on a parsed URL.
+IPv6 is now allow-listed to global unicast rather than block-listed.
+
+**Rejected.** Adding `undici` to gain a dispatcher (a dependency for one
+option); re-checking the address after connecting via `fetch` (there is no such
+hook); accepting the race as residual (it was recorded as residual for one
+release and is the last SSRF item on the Phase 2 criterion).
+
+---
+
 ## How to add an ADR
 
 Append. Never edit an accepted decision in place — supersede it with a new entry

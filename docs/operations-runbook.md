@@ -180,7 +180,7 @@ Phase 2 closed these. Each has a regression test named beside it.
 | Session revocation | Logout deleted the cookie; the JWT stayed valid for 14 days | Server-side `Session` row checked per request | `tests/sessions.test.ts` |
 | Roles | `Membership.role` never read; every member could do everything | Enforced per route | `tests/rbac.test.ts` |
 | API keys | All-or-nothing, immortal | Scoped, revocable, expiring, quota'd | `tests/apikey-scopes.test.ts` |
-| SSRF | Literal hostname only | DNS-resolved, every address checked, every redirect re-checked | `tests/net-fetch.test.ts` |
+| SSRF | Literal hostname only | DNS-resolved, every address checked, socket pinned to the checked address, every redirect re-checked and re-pinned | `tests/net-fetch.test.ts`, `tests/net-pinned.test.ts`, `tests/ip-address.test.ts` |
 | Rate limiting | Per-process, keyed on caller-chosen `X-Forwarded-For` | Shared table, trusted-proxy arithmetic | `tests/client-ip.test.ts` |
 | CORS | `Access-Control-Allow-Origin: *` | Explicit allowlist, `Vary: Origin` | `tests/api-auth.test.ts` |
 | `past_due` | Fully entitled forever | Bounded grace window | `tests/billing.test.ts` |
@@ -188,23 +188,36 @@ Phase 2 closed these. Each has a regression test named beside it.
 | Referral attribution | Caller could assert `engine` | Always derived; provenance recorded | `tests/lead-attribution.test.ts` |
 | Secrets in logs | `console.error(err)` | Redacted at the boundary | `tests/observability.test.ts` |
 
+### Closed since the last release
+
+**DNS rebinding.** The guard used to resolve and check an address, then hand
+the *hostname* to `fetch`, which resolved it again — so an attacker serving a
+zero-TTL record answered the second lookup with the address the first one had
+refused. Outbound requests now connect to the address that was checked
+(`src/lib/net-pinned.ts`), and each redirect hop is resolved, checked and
+pinned on its own. Operationally this means a blocked destination is now
+reported as blocked at connection time rather than being reachable through a
+racing DNS answer, and `Blocked` in a crawl result is a decision the product
+made, not one it hoped for.
+
 ### Residual risks — known and open
 
-1. **DNS rebinding.** The guard resolves and checks every address, then calls
-   `fetch`, which resolves again. Between those two resolutions the name can
-   change. Closing it properly requires pinning the socket to the validated
-   address via a custom agent. The practical attacks are closed; this narrow
-   race is not.
-
-2. **The shared rate limiter fails open.** On a database error it allows the
+1. **The shared rate limiter fails open.** On a database error it allows the
    request. A limiter that fails closed converts a database blip into a total
    sign-in outage. The exposure is the length of the outage.
 
-3. **No worker process is deployed.** The queue, leases and retries are
+2. **No worker process is deployed.** The queue, leases and retries are
    implemented and tested, but nothing runs them on a schedule yet. Enqueued
    jobs will sit until a worker exists.
 
-4. **No production migration rehearsal.** See §2.
+3. **No production migration rehearsal.** See §2.
+
+4. **A pinned request does not fail over to a second address.** Every address
+   a name resolves to is validated, but only one is connected to. A
+   multi-homed host whose first address is unreachable fails the request
+   instead of trying the next, where the previous implementation would have
+   fallen back. This is the deliberate cost of pinning — see ADR-016 — and it
+   shows up as a connection failure, never as a wrong destination.
 
 5. **Backups are documented, not automated.** The `pg_dump` above is a
    procedure, not a cron job. No backup exists because no database exists.

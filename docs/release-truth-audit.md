@@ -218,7 +218,7 @@ regression test; none was closed by relaxing an expectation.
 | --- | --- | --- |
 | SQLite with `db push` and no migration history | PostgreSQL with a reviewed migration history; CI runs `migrate deploy` plus a drift check | `.github/workflows/supertool.yml` |
 | No durable queue, retry, partial-run persistence or distributed lock | `Job` table with atomic claim, expiring leases, classified retry with jittered backoff, cancellation, dead-letter; `JobLock` for recurring sweeps | `tests/jobs.test.ts` |
-| SSRF guard did not resolve DNS; redirects were not revalidated | Every resolved address checked; every redirect hop revalidated; credentials stripped on cross-origin redirect | `tests/net-fetch.test.ts` |
+| SSRF guard did not resolve DNS; redirects were not revalidated | Every resolved address checked; the socket pinned to the checked address; every redirect hop revalidated and re-pinned; credentials stripped on cross-origin redirect | `tests/net-fetch.test.ts`, `tests/net-pinned.test.ts` |
 | Rate limiting per process, keyed on a spoofable header | Shared counter table; client identity derived from an explicit trusted-proxy count | `tests/client-ip.test.ts` |
 | Password changes did not revoke other sessions | Server-side `Session` rows; logout, password change and reset all revoke | `tests/sessions.test.ts` |
 | Membership roles not enforced | Four roles enforced per route, with a structural test that no mutating route is unguarded | `tests/rbac.test.ts` |
@@ -240,6 +240,21 @@ fixes, not new customer-facing capabilities. In particular:
 - `scheduled_runs` stays `beta`. The durable queue exists; **no worker process
   is deployed to drain it.**
 
+## Closed after Phase 2
+
+One item listed below as open has since been closed. It is recorded here rather
+than edited out of the list above, so the sequence stays visible.
+
+| Was | Now | Test |
+| --- | --- | --- |
+| DNS rebinding open in a narrow race: the guard resolved and checked an address, then `fetch` resolved the name again and could get a different one | The connection is opened to the address that was checked, through a resolver that is asked once; each redirect hop is resolved, checked and pinned on its own | `tests/net-pinned.test.ts`, `tests/net-fetch.test.ts` |
+| The address check read one spelling of an address — a dotted quad. `127.1`, `0177.0.0.1`, `0x7f000001`, `2130706433` and `::ffff:7f00:1` all reach blocked addresses and were treated as ordinary hostnames | Addresses are parsed to bytes and classified as bytes, in every notation a resolver accepts, for both families | `tests/ip-address.test.ts`, `tests/net-guard.test.ts` |
+
+**No capability status changed as a result**, and no roadmap phase moved. This
+closes one of `phase-2`'s acceptance criteria — "SSRF protection resolves DNS
+and defends against redirects and rebinding" — and leaves the phase's other
+criteria exactly as they were.
+
 ## What Phase 2 did *not* fix
 
 - **The migration has now run against a hosted database, but not against
@@ -255,8 +270,6 @@ fixes, not new customer-facing capabilities. In particular:
   self-signed certificate. See
   `evidence/2026-08-25-hosted-postgres-validation-railway.md`.
 - **No worker is deployed.** Enqueued jobs sit until something runs them.
-- **DNS rebinding remains open** in a narrow race: the guard resolves and
-  checks, then `fetch` resolves again. Closing it needs socket pinning.
 - **The shared rate limiter fails open** on a database error — a deliberate
   trade, documented in `docs/operations-runbook.md`.
 - **Backups are a documented procedure, not automation.**
