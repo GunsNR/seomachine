@@ -397,6 +397,55 @@ release and is the last SSRF item on the Phase 2 criterion).
 
 ---
 
+## ADR-017 — A redirect is a new request, not a replay of the old one
+
+**Status:** accepted · Phase 2 · `src/lib/net-fetch.ts`
+
+**Decision.** When following a redirect, `safeFetch` applies RFC 9110 §15.4
+method semantics and refuses any cross-origin hop that would repeat a non-GET
+method or a request body. `Proxy-Authorization` joins the credentials stripped
+across an origin boundary, and DNS resolution runs inside the caller's
+remaining timeout.
+
+**Why.** ADR-016 stopped a redirect choosing an unchecked *destination*. It did
+not stop a redirect choosing what got *sent* there. The guard stripped
+credentials across an origin boundary but preserved the method and the body, so
+a 307 — or a 302 answering a PUT — re-issued the whole request against whatever
+host the redirect named. For `publishPost` that is an article body, sent to a
+site chosen by whoever controls the redirect, on behalf of a customer who asked
+only to publish to their own WordPress.
+
+Method rewriting alone fixes the common case: a 303, and a 302 answering a POST,
+both become GET with the body dropped, which is what every browser has done for
+decades. What rewriting cannot fix is 307 and 308, whose entire definition is
+that the method and body survive. There the only safe answer across an origin
+boundary is to refuse, and the same reasoning covers a 301 or 302 answering a
+method that is not POST, since those preserve the method too.
+
+The resolver deadline is a smaller thing with the same shape: the budget was
+read only *after* resolution returned, so a hanging name server ran past the
+timeout it was supposed to obey. It now races the remaining budget. The lookup
+itself cannot be cancelled and may still be in flight when the race is lost —
+what matters is that no address is learned and no socket is opened.
+
+**Consequences.** A POST that receives a 301 or 302 becomes a GET and loses its
+body. That is correct and matches browsers, but it makes one real case fail
+differently than before: a WordPress site stored as `http://` that redirects to
+`https://` will now see the publish arrive as a GET rather than a POST, because
+a scheme change is an origin change. It previously arrived as a POST stripped of
+its credentials, and failed as a 401. Neither is a working publish; the fix in
+both cases is to store the `https://` URL. A same-origin 307 still preserves
+method and body, so ordinary same-site redirects are unaffected.
+
+**Rejected.** Refusing every cross-origin redirect that had a body, including
+ones the method rules already neutralise (stricter, but it would refuse the
+http-to-https case that a downgrade to GET handles safely); stripping the body
+on 307 while following it anyway (the method still says "repeat this", so the
+new host receives a request nobody addressed to it); cancelling the DNS lookup
+itself (`dns.lookup` offers no cancellation).
+
+---
+
 ## How to add an ADR
 
 Append. Never edit an accepted decision in place — supersede it with a new entry

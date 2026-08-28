@@ -303,6 +303,235 @@ describe('safeFetch pins the socket to the address it validated', () => {
   });
 });
 
+describe('a redirect is not a replay', () => {
+  /**
+   * Credentials were already stripped across an origin boundary. The body was
+   * not, and neither was the method — so a compromised site could answer a
+   * publish with `302 Location: https://attacker.example/` and be handed the
+   * article. These close that.
+   */
+
+  /** Answers the first request with `first`, everything after it with 200. */
+  const twoHop = (first: Response) => {
+    let served = false;
+    return recordingTransport(() => {
+      if (served) return ok();
+      served = true;
+      return first;
+    });
+  };
+
+  const bothHosts = resolving({
+    'example.com': ['93.184.216.34'],
+    'other.example': ['93.184.216.35'],
+  });
+
+  it('never lets article content reach a cross-origin redirect target', async () => {
+    const { transport, calls } = twoHop(
+      new Response(null, { status: 302, headers: { location: 'https://other.example/' } }),
+    );
+
+    await safeFetch(
+      'https://example.com/wp-json/wp/v2/posts',
+      { method: 'POST', body: JSON.stringify({ content: 'THE-ARTICLE-BODY' }), transport },
+      bothHosts,
+    );
+
+    // The hop that crosses the boundary carries neither the body nor the POST.
+    expect(calls[1].url.hostname).toBe('other.example');
+    expect(calls[1].body).toBeUndefined();
+    expect(calls[1].method).toBe('GET');
+    expect(JSON.stringify(calls[1])).not.toContain('THE-ARTICLE-BODY');
+  });
+
+  it('turns a 303 into a GET and drops the body', async () => {
+    const { transport, calls } = twoHop(
+      new Response(null, { status: 303, headers: { location: 'https://example.com/result' } }),
+    );
+
+    await safeFetch(
+      'https://example.com/',
+      { method: 'POST', body: 'payload', headers: { 'Content-Type': 'application/json' }, transport },
+      bothHosts,
+    );
+
+    expect(calls[1].method).toBe('GET');
+    expect(calls[1].body).toBeUndefined();
+  });
+
+  it('removes the headers that described a dropped body', async () => {
+    const { transport, calls } = twoHop(
+      new Response(null, { status: 303, headers: { location: 'https://example.com/result' } }),
+    );
+
+    await safeFetch(
+      'https://example.com/',
+      {
+        method: 'POST',
+        body: 'payload',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': '7', Accept: 'application/json' },
+        transport,
+      },
+      bothHosts,
+    );
+
+    // A stale content-length would make the next request wait for bytes that
+    // will never be written.
+    expect(calls[1].headers['Content-Type']).toBeUndefined();
+    expect(calls[1].headers['Content-Length']).toBeUndefined();
+    expect(calls[1].headers.Accept).toBe('application/json');
+  });
+
+  it('refuses a cross-origin 307 or 308, which would repeat the request as-is', async () => {
+    for (const status of [307, 308]) {
+      const { transport, calls } = twoHop(
+        new Response(null, { status, headers: { location: 'https://other.example/' } }),
+      );
+
+      await expect(
+        safeFetch('https://example.com/', { method: 'POST', body: 'payload', transport }, bothHosts),
+        `status ${status}`,
+      ).rejects.toThrow(/different origin/i);
+
+      // Refused before the second host was contacted at all.
+      expect(calls, `status ${status}`).toHaveLength(1);
+    }
+  });
+
+  it('refuses a cross-origin 301 or 302 that would preserve a non-GET method', async () => {
+    // Only POST is downgraded by 301/302; a PUT is preserved, so it must not
+    // cross an origin boundary either.
+    const { transport } = twoHop(
+      new Response(null, { status: 302, headers: { location: 'https://other.example/' } }),
+    );
+
+    await expect(
+      safeFetch('https://example.com/', { method: 'PUT', body: 'payload', transport }, bothHosts),
+    ).rejects.toThrow(/different origin/i);
+  });
+
+  it('still allows a same-origin 307 to preserve method and body', async () => {
+    // The rule is about crossing origins, not about 307. Over-refusing here
+    // would break ordinary same-site redirects.
+    const { transport, calls } = twoHop(
+      new Response(null, { status: 307, headers: { location: 'https://example.com/moved' } }),
+    );
+
+    await safeFetch('https://example.com/', { method: 'POST', body: 'payload', transport }, bothHosts);
+
+    expect(calls[1].method).toBe('POST');
+    expect(calls[1].body).toBe('payload');
+  });
+
+  it('allows a cross-origin redirect of a plain GET', async () => {
+    const { transport, calls } = twoHop(
+      new Response(null, { status: 307, headers: { location: 'https://other.example/' } }),
+    );
+
+    await safeFetch('https://example.com/', { transport }, bothHosts);
+    expect(calls[1].url.hostname).toBe('other.example');
+  });
+
+  it('strips proxy-authorization along with the other credentials', async () => {
+    const { transport, calls } = twoHop(
+      new Response(null, { status: 302, headers: { location: 'https://other.example/' } }),
+    );
+
+    await safeFetch(
+      'https://example.com/',
+      {
+        headers: {
+          Authorization: 'Bearer secret',
+          'Proxy-Authorization': 'Basic proxy-secret',
+          Cookie: 'session=1',
+          'X-SuperTool-Key': 'k',
+          'X-Keep': 'yes',
+        },
+        transport,
+      },
+      bothHosts,
+    );
+
+    expect(calls[1].headers['Proxy-Authorization']).toBeUndefined();
+    expect(calls[1].headers.Authorization).toBeUndefined();
+    expect(calls[1].headers.Cookie).toBeUndefined();
+    expect(calls[1].headers['X-SuperTool-Key']).toBeUndefined();
+    expect(calls[1].headers['X-Keep']).toBe('yes');
+  });
+});
+
+describe('DNS resolution runs inside the shared budget', () => {
+  it('fails closed when the resolver hangs, without opening a socket', async () => {
+    // A name server that never answers used to hang the request well past its
+    // own timeout, because the clock was only read once resolution returned.
+    const hanging = () => new Promise<Array<{ address: string }>>(() => {});
+    const { transport, calls } = recordingTransport(ok);
+
+    const started = Date.now();
+    await expect(
+      safeFetch('https://example.com/', { timeoutMs: 150, transport }, hanging),
+    ).rejects.toThrow(/too long to resolve/i);
+
+    expect(Date.now() - started).toBeLessThan(1_000);
+    // No address was ever learned, so nothing was connected to.
+    expect(calls).toHaveLength(0);
+    expect(transport).not.toHaveBeenCalled();
+  });
+
+  it('charges a slow resolver against the budget the connection then inherits', async () => {
+    const slow = async () => {
+      await new Promise((r) => setTimeout(r, 80));
+      return [{ address: '93.184.216.34' }];
+    };
+    const { calls, transport } = recordingTransport(ok);
+
+    await safeFetch('https://example.com/', { timeoutMs: 1_000, transport }, slow);
+
+    // The transport gets what resolution left behind, not the full budget.
+    expect(calls[0].timeoutMs).toBeLessThan(1_000 - 70);
+  });
+
+  it('gives each redirect hop the remaining budget, never a fresh one', async () => {
+    const { calls, transport } = recordingTransport(async (spec) => {
+      await new Promise((r) => setTimeout(r, 40));
+      return spec.url.pathname === '/3'
+        ? ok()
+        : new Response(null, {
+            status: 302,
+            headers: { location: `https://example.com/${Number(spec.url.pathname.slice(1)) + 1}` },
+          });
+    });
+
+    await safeFetch(
+      'https://example.com/1',
+      { timeoutMs: 2_000, maxRedirects: 5, transport },
+      resolving({ 'example.com': ['93.184.216.34'] }),
+    );
+
+    const budgets = calls.map((c) => c.timeoutMs);
+    expect(budgets).toHaveLength(3);
+    // Strictly decreasing: a reset budget would let a redirect chain run
+    // forever, one hop at a time.
+    expect(budgets[1]).toBeLessThan(budgets[0]);
+    expect(budgets[2]).toBeLessThan(budgets[1]);
+  });
+
+  it('refuses once the budget is gone, before resolving again', async () => {
+    const resolver = vi.fn(resolving({ 'example.com': ['93.184.216.34'] }));
+    const { transport } = recordingTransport(async () => {
+      await new Promise((r) => setTimeout(r, 120));
+      return new Response(null, { status: 302, headers: { location: 'https://example.com/next' } });
+    });
+
+    await expect(
+      safeFetch('https://example.com/', { timeoutMs: 100, maxRedirects: 3, transport }, resolver),
+    ).rejects.toThrow(/timed out/i);
+
+    // One resolution for the one hop that was attempted.
+    expect(resolver).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('the private-host escape hatch stays out of production code', () => {
   it('is never set by a route handler', () => {
     const routes = globSync('app/api/**/route.ts', { cwd: SRC });
