@@ -8,6 +8,20 @@ import { db } from '@/lib/db';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+/**
+ * Every response from this route, including the errors.
+ *
+ * Two of these responses carry a plaintext API key, which is the only copy
+ * that will ever exist. `dynamic = 'force-dynamic'` does not imply a
+ * cache directive — the route was observed emitting no `Cache-Control` header
+ * at all — so a shared cache or a back/forward navigation could hold a secret
+ * the server intended to hand over exactly once. Setting it here rather than on
+ * the two secret-bearing returns means a future handler cannot forget.
+ */
+function json(body: unknown, status = 200): NextResponse {
+  return NextResponse.json(body, { status, headers: { 'Cache-Control': 'no-store' } });
+}
+
 const CreateBody = z.object({
   projectId: z.string().min(1).max(64),
   label: z.string().min(1).max(80),
@@ -15,22 +29,22 @@ const CreateBody = z.object({
 
 export async function POST(req: Request) {
   const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Not signed in.' }, { status: 401 });
+  if (!session) return json({ error: 'Not signed in.' }, 401);
   if (!can(session.role, 'apikey:manage')) {
-    return NextResponse.json({ error: 'Your role cannot perform this action.' }, { status: 403 });
+    return json({ error: 'Your role cannot perform this action.' }, 403);
   }
 
   let input: z.infer<typeof CreateBody>;
   try {
     input = CreateBody.parse(await req.json());
   } catch {
-    return NextResponse.json({ error: 'Provide a projectId and a label.' }, { status: 400 });
+    return json({ error: 'Provide a projectId and a label.' }, 400);
   }
 
   const project = await db.project.findFirst({
     where: { id: input.projectId, orgId: session.orgId },
   });
-  if (!project) return NextResponse.json({ error: 'Project not found.' }, { status: 404 });
+  if (!project) return json({ error: 'Project not found.' }, 404);
 
   const { plaintext, prefix, hashed } = generateKey();
   await db.apiKey.create({
@@ -38,7 +52,7 @@ export async function POST(req: Request) {
   });
 
   // The plaintext is returned exactly once and never persisted.
-  return NextResponse.json({ ok: true, key: plaintext, prefix });
+  return json({ ok: true, key: plaintext, prefix });
 }
 
 const RotateBody = z.object({ id: z.string().min(1).max(64) });
@@ -67,16 +81,16 @@ const ROTATION_MESSAGE: Record<RotationRejection, string> = {
  */
 export async function PATCH(req: Request) {
   const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Not signed in.' }, { status: 401 });
+  if (!session) return json({ error: 'Not signed in.' }, 401);
   if (!can(session.role, 'apikey:manage')) {
-    return NextResponse.json({ error: 'Your role cannot perform this action.' }, { status: 403 });
+    return json({ error: 'Your role cannot perform this action.' }, 403);
   }
 
   let input: z.infer<typeof RotateBody>;
   try {
     input = RotateBody.parse(await req.json());
   } catch {
-    return NextResponse.json({ error: 'Provide a key id.' }, { status: 400 });
+    return json({ error: 'Provide a key id.' }, 400);
   }
 
   const result = await rotateApiKey({
@@ -87,13 +101,10 @@ export async function PATCH(req: Request) {
   });
 
   if (!result.ok) {
-    return NextResponse.json(
-      { error: ROTATION_MESSAGE[result.reason] },
-      { status: ROTATION_STATUS[result.reason] },
-    );
+    return json({ error: ROTATION_MESSAGE[result.reason] }, ROTATION_STATUS[result.reason]);
   }
 
-  return NextResponse.json({
+  return json({
     ok: true,
     key: result.plaintext,
     prefix: result.prefix,
@@ -105,19 +116,19 @@ export async function PATCH(req: Request) {
 
 export async function DELETE(req: Request) {
   const session = await getSession();
-  if (!session) return NextResponse.json({ error: 'Not signed in.' }, { status: 401 });
+  if (!session) return json({ error: 'Not signed in.' }, 401);
   if (!can(session.role, 'apikey:manage')) {
-    return NextResponse.json({ error: 'Your role cannot perform this action.' }, { status: 403 });
+    return json({ error: 'Your role cannot perform this action.' }, 403);
   }
 
   const id = new URL(req.url).searchParams.get('id');
-  if (!id) return NextResponse.json({ error: 'Provide a key id.' }, { status: 400 });
+  if (!id) return json({ error: 'Provide a key id.' }, 400);
 
   // Delete only if the key belongs to a project in the caller's org.
   const result = await db.apiKey.deleteMany({
     where: { id, project: { orgId: session.orgId } },
   });
-  if (result.count === 0) return NextResponse.json({ error: 'Key not found.' }, { status: 404 });
+  if (result.count === 0) return json({ error: 'Key not found.' }, 404);
 
-  return NextResponse.json({ ok: true });
+  return json({ ok: true });
 }

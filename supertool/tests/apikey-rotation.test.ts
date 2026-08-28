@@ -370,6 +370,90 @@ describe('only an authorized role may rotate', () => {
   });
 });
 
+describe('the response carrying a secret is never cacheable', () => {
+  const route = () =>
+    readFileSync(resolve(__dirname, '../src/app/api/app/api-keys/route.ts'), 'utf8');
+
+  it('sends Cache-Control: no-store from every response in the route', () => {
+    // The route was observed emitting no Cache-Control header at all — the
+    // `force-dynamic` export does not imply one — so a shared cache or a
+    // back/forward navigation could retain the single copy of a plaintext key.
+    const source = route();
+    expect(source).toContain("headers: { 'Cache-Control': 'no-store' }");
+
+    // Exactly one bare NextResponse.json: the helper that sets the header.
+    // Everything else must route through it, so a new handler cannot forget.
+    expect(source.match(/NextResponse\.json\(/g)).toHaveLength(1);
+    expect(source.match(/return json\(/g)?.length ?? 0).toBeGreaterThanOrEqual(10);
+  });
+
+  it('never puts key material in a URL, a log or browser storage', () => {
+    const source = route();
+    const ui = readFileSync(
+      resolve(__dirname, '../src/app/app/settings/ApiKeyManager.tsx'),
+      'utf8',
+    );
+    for (const file of [source, ui]) {
+      expect(file).not.toMatch(/localStorage|sessionStorage/);
+      expect(file).not.toMatch(/console\.(log|info|warn|error)/);
+    }
+    // Only the key *id* is ever a query parameter; the secret travels in a
+    // request body and a response body, never in a URL.
+    expect(ui).not.toMatch(/\?key=|&key=/);
+  });
+});
+
+describe('keys that predate rotation are each their own quota group', () => {
+  it('does not let backfilled keys share a budget across tenants', async () => {
+    // The migration backfills `quotaGroupId` to the empty string. If that were
+    // ever treated as a real group id, every key in the database — across every
+    // tenant — would share one budget and one tenant could exhaust another's.
+    const mine = await issue({ dailyQuota: 2, quotaGroupId: '' });
+    const theirs = await issue({ dailyQuota: 2, quotaGroupId: '' }, otherProjectId);
+
+    // Exhaust one tenant's key completely.
+    expect((await keys.authenticateApiKey(mine.plaintext)).ok).toBe(true);
+    expect((await keys.authenticateApiKey(mine.plaintext)).ok).toBe(true);
+    const exhausted = await keys.authenticateApiKey(mine.plaintext);
+    expect(exhausted.ok).toBe(false);
+
+    // The other tenant's key is untouched by that.
+    expect((await keys.authenticateApiKey(theirs.plaintext)).ok).toBe(true);
+    expect((await keys.authenticateApiKey(theirs.plaintext)).ok).toBe(true);
+  });
+
+  it('gives a backfilled key a group scoped to itself when it is rotated', async () => {
+    const backfilled = await issue({ quotaGroupId: '' });
+    const result = await rotate(backfilled.id);
+    if (!result.ok) throw new Error('rotation failed');
+
+    const predecessor = await db.apiKey.findUniqueOrThrow({ where: { id: backfilled.id } });
+    const successor = await db.apiKey.findUniqueOrThrow({ where: { id: result.newKeyId } });
+
+    // The group is the predecessor's own id — never the empty string, and
+    // never a value another tenant's key could also land on.
+    expect(predecessor.quotaGroupId).toBe(backfilled.id);
+    expect(successor.quotaGroupId).toBe(backfilled.id);
+    expect(successor.quotaGroupId).not.toBe('');
+  });
+
+  it('keeps one group across a chain of rotations', async () => {
+    const first = await issue({ quotaGroupId: '' });
+    const second = await rotate(first.id);
+    if (!second.ok) throw new Error('rotation failed');
+    const third = await keys.rotateApiKey({
+      keyId: second.newKeyId, orgId, actorUserId: 'user-1', actorRole: 'owner',
+    });
+    if (!third.ok) throw new Error('rotation failed');
+
+    const rows = await db.apiKey.findMany({ where: { projectId } });
+    const groups = new Set(rows.map((r) => r.quotaGroupId));
+    // Three generations, one budget between them.
+    expect(rows).toHaveLength(3);
+    expect(groups).toEqual(new Set([first.id]));
+  });
+});
+
 describe('the registry and the truth audit describe keys accurately', () => {
   const capabilities = () =>
     readFileSync(resolve(__dirname, '../src/lib/capabilities.ts'), 'utf8');
