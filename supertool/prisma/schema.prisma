@@ -405,10 +405,57 @@ model ApiKey {
   /// The UTC day `usageCount` belongs to, as YYYY-MM-DD.
   usageDay   String @default("")
 
+  /// Set on the predecessor when the key is rotated. A key that carries this
+  /// can never be rotated again, which is what makes two concurrent rotations
+  /// resolve to exactly one successor.
+  rotatedAt        DateTime?
+  /// Set on the predecessor: the instant the overlap window closes and the old
+  /// key stops authenticating. Enforced when a key is presented, so the old key
+  /// dies on its own without any worker running.
+  overlapExpiresAt DateTime?
+  /// Set on the successor: the key it replaced. Unique, so the database itself
+  /// refuses a second successor for one predecessor even if application logic
+  /// were bypassed.
+  rotatedFromId    String?   @unique
+  /// Keys that share one daily budget. A rotation pair must not receive two
+  /// budgets for the 24 hours they overlap. Empty means the key is its own
+  /// group; `quotaGroupId || id` is the effective group.
+  quotaGroupId     String    @default("")
+
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
   @@index([prefix])
+  @@index([quotaGroupId])
+}
+
+/// An append-only record of API key lifecycle actions.
+///
+/// It stores identifiers and never key material. A plaintext key or its digest
+/// in an audit row would undo the reason only a hash is persisted in the first
+/// place, so neither has a column here to be written to.
+///
+/// Deliberately carries no foreign key to Project: the point of an audit trail
+/// is that it outlives the thing it describes.
+model ApiKeyEvent {
+  id               String    @id @default(cuid())
+  projectId        String
+  /// `rotated` today. Named rather than enumerated so a later action does not
+  /// need a migration to be recorded.
+  action           String
+  /// The key the action was performed on.
+  keyId            String
+  /// The replacement, when the action produced one.
+  successorKeyId   String?
+  /// Who did it. Null only if a future non-interactive path records an event.
+  actorUserId      String?
+  actorRole        String
+  /// When the predecessor stops authenticating, for a rotation.
+  overlapExpiresAt DateTime?
+  createdAt        DateTime  @default(now())
+
+  @@index([projectId, createdAt])
+  @@index([keyId])
 }
 
 /// A marketing-site enquiry.

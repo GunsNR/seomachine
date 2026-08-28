@@ -149,6 +149,7 @@ export default async function SettingsPage() {
             prefix: k.prefix,
             createdAt: k.createdAt.toISOString(),
             lastUsedAt: k.lastUsedAt?.toISOString() ?? null,
+            overlapExpiresAt: k.overlapExpiresAt?.toISOString() ?? null,
           }))}
         />
       </div>

@@ -223,11 +223,19 @@ regression test; none was closed by relaxing an expectation.
 | Password changes did not revoke other sessions | Server-side `Session` rows; logout, password change and reset all revoke | `tests/sessions.test.ts` |
 | Membership roles not enforced | Four roles enforced per route, with a structural test that no mutating route is unguarded | `tests/rbac.test.ts` |
 | API keys had no scopes or quotas | Scoped, revocable, expiring, daily-quota'd | `tests/apikey-scopes.test.ts` |
+| API keys had no rotation flow, so a leaked key could only be revoked — breaking the integration at the moment the leak was found | Rotation issues a replacement immediately and puts the predecessor on a 24-hour overlap it cannot outlive; the pair shares one daily budget, and concurrent rotations resolve to exactly one successor | `tests/apikey-rotation.test.ts` |
 | `/api/v1` had wildcard CORS | Explicit allowlist from connected sites plus configuration; `Vary: Origin` | `tests/api-auth.test.ts` |
 | `past_due` fully entitled indefinitely | Bounded grace window, stamped from the Stripe transition | `tests/billing.test.ts` |
 | Health endpoint exposed configuration detail publicly | Minimal public shape; detail behind a token | `tests/health.test.ts` |
 | Referral endpoint accepted a caller-supplied engine | Engine always derived; evidence provenance recorded; unverified attribution never counted as measured | `tests/lead-attribution.test.ts` |
 | Provider errors could carry a credential into logs | Redaction at the logging boundary and on job error text | `tests/observability.test.ts` |
+
+**A registry correction went with this.** `capabilities.ts` still described
+`public_api` as having *"no scopes, no per-key quota and no rotation flow"* and
+cited only `tests/crypto.test.ts`, long after scopes and quotas had shipped.
+Two-thirds of that sentence was false and the evidence pointer was incomplete.
+Both are corrected; `public_api` stays `beta`, because a rotation flow proven in
+tests is not the same as one a third-party integrator has used.
 
 **No capability status changed as a result.** These are security and durability
 fixes, not new customer-facing capabilities. In particular:

@@ -164,9 +164,11 @@ const REGISTRY = {
   public_api: {
     label: 'Project API keys',
     status: 'beta',
-    source: 'Hashed per-project keys authenticating the /api/v1 endpoints the WordPress plugin uses.',
-    evidence: 'tests/crypto.test.ts',
-    externalValidation: 'Keys have no scopes, no per-key quota and no rotation flow.',
+    source:
+      'Hashed per-project keys authenticating the /api/v1 endpoints the WordPress plugin uses. Scoped, revocable, expiring, daily-quota’d, and rotatable with a 24-hour overlap during which the pair shares one budget.',
+    evidence: 'tests/crypto.test.ts, tests/apikey-scopes.test.ts, tests/apikey-rotation.test.ts',
+    externalValidation:
+      'Never exercised by a third-party integrator against a real deployment. The rotation overlap has been proven in tests, not in production use.',
     marketingLanguage: 'Issue a per-project API key so the WordPress plugin — or your own scripts — can read your data.',
   },
   billing: {
