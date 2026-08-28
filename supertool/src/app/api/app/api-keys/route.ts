@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
-import { generateKey, rotateApiKey, type RotationRejection } from '@/lib/apikey';
+import { generateKey, newQuotaGroupId, rotateApiKey, type RotationRejection } from '@/lib/apikey';
 import { getSession } from '@/lib/auth';
 import { can } from '@/lib/rbac';
 import { db } from '@/lib/db';
@@ -48,7 +48,16 @@ export async function POST(req: Request) {
 
   const { plaintext, prefix, hashed } = generateKey();
   await db.apiKey.create({
-    data: { projectId: project.id, label: input.label, prefix, hashedKey: hashed },
+    data: {
+      projectId: project.id,
+      orgId: project.orgId,
+      label: input.label,
+      prefix,
+      hashedKey: hashed,
+      // A standalone key starts in a group of its own, so it is never a row
+      // whose group has to be inferred later.
+      quotaGroupId: newQuotaGroupId(),
+    },
   });
 
   // The plaintext is returned exactly once and never persisted.

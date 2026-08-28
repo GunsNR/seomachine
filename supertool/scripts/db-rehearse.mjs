@@ -178,10 +178,12 @@ async function loadRepresentativeData(url) {
         await db.apiKey.create({
           data: {
             projectId: project.id,
+            orgId: project.orgId,
             prefix: `rlst_${randomBytes(4).toString('hex')}`,
             hashedKey: randomBytes(32).toString('hex'),
             scopes: 'visibility:read,citations:read',
             dailyQuota: 1000,
+            quotaGroupId: `grp_${randomBytes(16).toString('base64url')}`,
           },
         });
         counts.keys++;

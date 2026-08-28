@@ -63,6 +63,8 @@ async function issue(over: Record<string, unknown> = {}, target = projectId) {
   const row = await db.apiKey.create({
     data: {
       projectId: target,
+      orgId: target === projectId ? orgId : otherOrgId,
+      quotaGroupId: keys.newQuotaGroupId(),
       prefix: generated.prefix,
       hashedKey: generated.hashed,
       scopes: keys.serializeScopes(['visibility:read', 'lead:write']),
@@ -387,6 +389,20 @@ describe('the response carrying a secret is never cacheable', () => {
     expect(source.match(/return json\(/g)?.length ?? 0).toBeGreaterThanOrEqual(10);
   });
 
+  it('sends it on the successful create response, which carries a key', () => {
+    // The success paths are the ones that matter: a 401 with no-store protects
+    // nothing. Both secret-bearing returns must go through the helper.
+    const source = route();
+    expect(source).toMatch(/return json\(\{ ok: true, key: plaintext, prefix \}\)/);
+  });
+
+  it('sends it on the successful rotate response, which carries a key', () => {
+    const source = route();
+    const rotateReturn = source.slice(source.indexOf('previousKeyId: result.previousKeyId') - 200);
+    expect(rotateReturn).toMatch(/return json\(\{/);
+    expect(rotateReturn).toContain('key: result.plaintext');
+  });
+
   it('never puts key material in a URL, a log or browser storage', () => {
     const source = route();
     const ui = readFileSync(
@@ -403,42 +419,48 @@ describe('the response carrying a secret is never cacheable', () => {
   });
 });
 
-describe('keys that predate rotation are each their own quota group', () => {
-  it('does not let backfilled keys share a budget across tenants', async () => {
-    // The migration backfills `quotaGroupId` to the empty string. If that were
-    // ever treated as a real group id, every key in the database — across every
-    // tenant — would share one budget and one tenant could exhaust another's.
-    const mine = await issue({ dailyQuota: 2, quotaGroupId: '' });
-    const theirs = await issue({ dailyQuota: 2, quotaGroupId: '' }, otherProjectId);
-
-    // Exhaust one tenant's key completely.
-    expect((await keys.authenticateApiKey(mine.plaintext)).ok).toBe(true);
-    expect((await keys.authenticateApiKey(mine.plaintext)).ok).toBe(true);
-    const exhausted = await keys.authenticateApiKey(mine.plaintext);
-    expect(exhausted.ok).toBe(false);
-
-    // The other tenant's key is untouched by that.
-    expect((await keys.authenticateApiKey(theirs.plaintext)).ok).toBe(true);
-    expect((await keys.authenticateApiKey(theirs.plaintext)).ok).toBe(true);
+describe('every key has a real quota group, enforced by the database', () => {
+  it('refuses to store an empty group', async () => {
+    // The column is NOT NULL and CHECK <> '', so there is no falsy value left
+    // for application code to interpret as "just this key".
+    await expect(
+      db.apiKey.create({
+        data: {
+          projectId, orgId,
+          prefix: 'rlst_empty00', hashedKey: 'h', quotaGroupId: '',
+        },
+      }),
+    ).rejects.toThrow();
   });
 
-  it('gives a backfilled key a group scoped to itself when it is rotated', async () => {
-    const backfilled = await issue({ quotaGroupId: '' });
-    const result = await rotate(backfilled.id);
+  it('gives independently created keys distinct groups', async () => {
+    const a = await issue();
+    const b = await issue();
+    const rows = await db.apiKey.findMany({ where: { id: { in: [a.id, b.id] } } });
+    const groups = rows.map((r) => r.quotaGroupId);
+
+    expect(new Set(groups).size).toBe(2);
+    for (const g of groups) expect(g).not.toBe('');
+  });
+
+  it('keeps a successor on the predecessor\'s exact group', async () => {
+    const old = await issue();
+    const before = await db.apiKey.findUniqueOrThrow({ where: { id: old.id } });
+    const result = await rotate(old.id);
     if (!result.ok) throw new Error('rotation failed');
 
-    const predecessor = await db.apiKey.findUniqueOrThrow({ where: { id: backfilled.id } });
+    const predecessor = await db.apiKey.findUniqueOrThrow({ where: { id: old.id } });
     const successor = await db.apiKey.findUniqueOrThrow({ where: { id: result.newKeyId } });
 
-    // The group is the predecessor's own id — never the empty string, and
-    // never a value another tenant's key could also land on.
-    expect(predecessor.quotaGroupId).toBe(backfilled.id);
-    expect(successor.quotaGroupId).toBe(backfilled.id);
-    expect(successor.quotaGroupId).not.toBe('');
+    // Inherited verbatim — not recomputed, not reset.
+    expect(predecessor.quotaGroupId).toBe(before.quotaGroupId);
+    expect(successor.quotaGroupId).toBe(before.quotaGroupId);
   });
 
   it('keeps one group across a chain of rotations', async () => {
-    const first = await issue({ quotaGroupId: '' });
+    const first = await issue();
+    const original = (await db.apiKey.findUniqueOrThrow({ where: { id: first.id } })).quotaGroupId;
+
     const second = await rotate(first.id);
     if (!second.ok) throw new Error('rotation failed');
     const third = await keys.rotateApiKey({
@@ -447,10 +469,63 @@ describe('keys that predate rotation are each their own quota group', () => {
     if (!third.ok) throw new Error('rotation failed');
 
     const rows = await db.apiKey.findMany({ where: { projectId } });
-    const groups = new Set(rows.map((r) => r.quotaGroupId));
-    // Three generations, one budget between them.
     expect(rows).toHaveLength(3);
-    expect(groups).toEqual(new Set([first.id]));
+    expect(new Set(rows.map((r) => r.quotaGroupId))).toEqual(new Set([original]));
+  });
+
+  it('cannot combine usage across tenants even when group ids collide', async () => {
+    // The strongest form of the guarantee: force two tenants onto a literally
+    // identical group id — which the application would never produce — and the
+    // tenant constraint must still keep their budgets apart.
+    const shared = 'grp_collision';
+    const mine = await issue({ dailyQuota: 2, quotaGroupId: shared });
+    const theirs = await issue({ dailyQuota: 2, quotaGroupId: shared }, otherProjectId);
+
+    expect((await keys.authenticateApiKey(mine.plaintext)).ok).toBe(true);
+    expect((await keys.authenticateApiKey(mine.plaintext)).ok).toBe(true);
+    const exhausted = await keys.authenticateApiKey(mine.plaintext);
+    expect(exhausted.ok).toBe(false);
+    if (!exhausted.ok) expect(exhausted.reason).toBe('quota');
+
+    // The other tenant has spent nothing, despite sharing the group string.
+    expect((await keys.authenticateApiKey(theirs.plaintext)).ok).toBe(true);
+    expect((await keys.authenticateApiKey(theirs.plaintext)).ok).toBe(true);
+  });
+});
+
+describe('the migration establishes the invariant rather than assuming it', () => {
+  const sql = () =>
+    readFileSync(
+      resolve(__dirname, '../prisma/migrations/20260828224249_apikey_rotation_overlap/migration.sql'),
+      'utf8',
+    );
+
+  it('backfills every pre-existing key to its own group, then locks the column', () => {
+    const migration = sql();
+    // Own id: unique by construction, stable, and never another tenant's.
+    expect(migration).toMatch(/UPDATE "public"\."ApiKey" SET "quotaGroupId" = "id"/);
+    expect(migration).toMatch(/ALTER COLUMN "quotaGroupId" SET NOT NULL/);
+    expect(migration).toMatch(/CHECK \("quotaGroupId" <> ''\)/);
+  });
+
+  it('backfills the tenant column from Project and makes it required', () => {
+    const migration = sql();
+    expect(migration).toMatch(/SET "orgId" = p\."orgId"/);
+    expect(migration).toMatch(/ALTER COLUMN "orgId" SET NOT NULL/);
+  });
+
+  it('indexes the authentication-path lookup on tenant and group together', () => {
+    expect(sql()).toMatch(/CREATE INDEX "ApiKey_orgId_quotaGroupId_idx"/);
+    const schema = readFileSync(resolve(__dirname, '../prisma/schema.prisma'), 'utf8');
+    expect(schema).toContain('@@index([orgId, quotaGroupId])');
+  });
+
+  it('leaves no falsy-group special case in the authentication path', () => {
+    const source = readFileSync(resolve(__dirname, '../src/lib/apikey.ts'), 'utf8');
+    expect(source).not.toMatch(/quotaGroupId \|\|/);
+    expect(source).not.toMatch(/if \(match\.quotaGroupId\)/);
+    // And the group lookup always carries the tenant.
+    expect(source).toMatch(/orgId: match\.orgId,\s*\n\s*quotaGroupId: match\.quotaGroupId,/);
   });
 });
 

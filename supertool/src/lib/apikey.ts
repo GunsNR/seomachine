@@ -62,6 +62,16 @@ export function generateKey(): { plaintext: string; prefix: string; hashed: stri
   return { plaintext, prefix: plaintext.slice(0, 12), hashed: hashKey(plaintext) };
 }
 
+/**
+ * A fresh quota group for a standalone key.
+ *
+ * Generated rather than derived from the row id, because the id does not exist
+ * until the row is written and a key must never be inserted without a group.
+ */
+export function newQuotaGroupId(): string {
+  return `grp_${randomBytes(16).toString('base64url')}`;
+}
+
 /** The UTC day a quota window belongs to. */
 export function utcDay(now = new Date()): string {
   return now.toISOString().slice(0, 10);
@@ -153,14 +163,22 @@ export async function authenticateApiKey(
   // During an overlap two keys are live at once. They must spend one budget
   // between them: a rotation that doubled the allowance for 24 hours would be
   // a quota bypass anyone could trigger at will.
-  let groupUsed = ownUsed;
-  if (match.quotaGroupId) {
-    const siblings = await db.apiKey.findMany({
-      where: { quotaGroupId: match.quotaGroupId, usageDay: today, id: { not: match.id } },
-      select: { usageCount: true },
-    });
-    groupUsed += siblings.reduce((total, row) => total + row.usageCount, 0);
-  }
+  //
+  // The lookup is constrained by tenant as well as by group. Group ids are
+  // unique by construction, but that is an application promise; adding the
+  // tenant makes one tenant's usage arithmetically unable to reach another's,
+  // whatever a group id turns out to hold. `@@index([orgId, quotaGroupId])`
+  // serves exactly this query.
+  const siblings = await db.apiKey.findMany({
+    where: {
+      orgId: match.orgId,
+      quotaGroupId: match.quotaGroupId,
+      usageDay: today,
+      id: { not: match.id },
+    },
+    select: { usageCount: true },
+  });
+  const groupUsed = ownUsed + siblings.reduce((total, row) => total + row.usageCount, 0);
 
   const nextCount = ownUsed + 1;
   if (match.dailyQuota > 0 && groupUsed + 1 > match.dailyQuota) {
@@ -266,9 +284,10 @@ export async function rotateApiKey(params: {
   }
   if (existing.rotatedAt) return { ok: false, reason: 'already_rotated' };
 
-  // The pair shares one budget. A key rotated twice keeps the group it already
-  // belonged to rather than starting a fresh allowance.
-  const quotaGroupId = existing.quotaGroupId || existing.id;
+  // The pair shares one budget. The successor inherits the predecessor's group
+  // exactly — there is nothing to derive or fall back to, so a chain of
+  // rotations keeps one allowance however long it runs.
+  const quotaGroupId = existing.quotaGroupId;
   const generated = generateKey();
 
   try {
@@ -285,13 +304,14 @@ export async function rotateApiKey(params: {
           revokedAt: null,
           project: { orgId: params.orgId },
         },
-        data: { rotatedAt: now, overlapExpiresAt, quotaGroupId },
+        data: { rotatedAt: now, overlapExpiresAt },
       });
       if (claimed.count !== 1) throw new RotationConflict();
 
       const successor = await tx.apiKey.create({
         data: {
           projectId: existing.projectId,
+          orgId: existing.orgId,
           label: existing.label,
           prefix: generated.prefix,
           hashedKey: generated.hashed,

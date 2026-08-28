@@ -418,15 +418,29 @@ model ApiKey {
   /// were bypassed.
   rotatedFromId    String?   @unique
   /// Keys that share one daily budget. A rotation pair must not receive two
-  /// budgets for the 24 hours they overlap. Empty means the key is its own
-  /// group; `quotaGroupId || id` is the effective group.
-  quotaGroupId     String    @default("")
+  /// budgets for the 24 hours they overlap.
+  ///
+  /// Required and never empty — the database enforces both, so there is no
+  /// falsy value the application has to interpret. A standalone key is issued
+  /// with a group of its own; a successor inherits its predecessor's exactly.
+  quotaGroupId     String
+
+  /// The owning tenant, denormalised from `Project`.
+  ///
+  /// Every quota-group lookup constrains on this as well as the group id. Group
+  /// ids are unique by construction, but "unique by construction" is an
+  /// application promise; a tenant column makes cross-tenant aggregation
+  /// impossible rather than merely unlikely, and lets one index serve the
+  /// authentication path. A project never moves between organizations, so the
+  /// copy cannot drift.
+  orgId String
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@index([projectId])
   @@index([prefix])
-  @@index([quotaGroupId])
+  /// The authentication-path lookup: sum this group's usage inside this tenant.
+  @@index([orgId, quotaGroupId])
 }
 
 /// An append-only record of API key lifecycle actions.
