@@ -114,6 +114,30 @@ On Vercel, add to `vercel.json`:
 { "crons": [{ "path": "/api/cron/run-checks", "schedule": "0 * * * *" }] }
 ```
 
+The endpoint does not measure anything itself. It works out what is due and
+enqueues a job; a worker does the work. **Without a worker running, scheduled
+and manual runs alike stay queued.**
+
+### The worker
+
+```bash
+npm run worker
+```
+
+A plain Node loop that claims jobs, renews its lease while it works, retries
+what is worth retrying, and stops cleanly on SIGTERM — finishing the job in hand
+and handing it back to the queue rather than abandoning it. Run it as a second
+process alongside the web server. Several may run at once; claiming is atomic,
+so two workers cannot take the same job.
+
+It needs the same `DATABASE_URL` and `DIRECT_URL` as the web process. It reads
+provider credentials from the environment, never from a job payload. Tuning
+variables and the operator's guide to reading the queue are in
+`docs/operations-runbook.md` §3.
+
+Send SIGTERM to the worker process itself — `npm run` may not forward the signal,
+in which case the process is killed rather than drained.
+
 ---
 
 ## Deploying
@@ -208,7 +232,8 @@ no front-end CSS and takes over none of your existing metadata. Setup guide at
 
 ```bash
 npm run dev          # dev server
-npm test             # 241 tests
+npm run worker       # job worker (see "The worker" above)
+npm test
 npm run typecheck
 npm run lint
 npm run build

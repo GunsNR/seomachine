@@ -25,8 +25,13 @@ import { METHODOLOGY_VERSION, PARSER_VERSION, coverageOf, costTotals } from './s
  *      uniqueness constraint means a retry fills gaps and cannot double-count
  *      an observation that already landed.
  *
- * No paid queue infrastructure: Gate 1 deliberately keeps this in-process.
- * Gate 2 owns durable queueing.
+ * Phase 2 moved the *invocation* of this orchestrator behind a durable job
+ * queue, but deliberately did not move the orchestration into the worker. The
+ * two properties above are precisely what make a queued retry safe, so they
+ * stay here rather than being reimplemented alongside a lease. What the queue
+ * needs from this module is one thing: a checkpoint it can answer, so a long
+ * run can renew its lease and notice a cancellation request without this file
+ * knowing what a lease or a job is.
  */
 
 /** The run state machine. See docs/measurement-spec.md section 6. */
@@ -197,6 +202,28 @@ function buildObservation(args: {
   };
 }
 
+/**
+ * What a checkpoint tells the run to do next.
+ *
+ * Three outcomes rather than a boolean, because "stop" is two different events
+ * that must finalise differently. A user cancelling wants the run closed and
+ * labelled `cancelled`. A worker shutting down or losing its lease wants the
+ * run left exactly as it is, because something else is going to resume it — and
+ * writing a terminal status there would turn a deploy into a lie.
+ */
+export type CheckpointDirective = 'continue' | 'cancel' | 'stop';
+
+export interface ExecuteRunOptions {
+  /**
+   * Called before each fan-out, which is the last moment before new provider
+   * spend and the first moment after a batch of observations became durable.
+   *
+   * Anything thrown here propagates: a checkpoint that cannot answer is not
+   * treated as consent to keep running.
+   */
+  onCheckpoint?: () => Promise<CheckpointDirective>;
+}
+
 export interface ExecuteResult {
   runId: string;
   status: RunStatus;
@@ -207,6 +234,13 @@ export interface ExecuteResult {
   coverage: number;
   /** Observations skipped because a prior attempt already recorded them. */
   skippedExisting: number;
+  /**
+   * True when a checkpoint stopped the run before it fanned out everything and
+   * the run was deliberately left resumable rather than finalised.
+   *
+   * The caller must not read `status` as terminal when this is set.
+   */
+  suspended: boolean;
 }
 
 /**
@@ -215,7 +249,11 @@ export interface ExecuteResult {
  * Safe to call more than once for the same run id: observations that already
  * exist are skipped rather than duplicated, so this doubles as the retry path.
  */
-export async function executeRun(runId: string, input: StartRunInput): Promise<ExecuteResult> {
+export async function executeRun(
+  runId: string,
+  input: StartRunInput,
+  options: ExecuteRunOptions = {},
+): Promise<ExecuteResult> {
   const engines = enginesForMode(input.dataMode, input.engines);
   const samples = Math.max(1, input.samplesPerPair ?? 1);
   const localeTag = input.localeTag ?? 'en-US';
@@ -232,10 +270,19 @@ export async function executeRun(runId: string, input: StartRunInput): Promise<E
   });
   const done = new Set(existing.map((o) => `${o.promptId}|${o.engine}|${o.sampleIndex}`));
   let skippedExisting = 0;
+  let directive: CheckpointDirective = 'continue';
 
   try {
-    for (const prompt of input.prompts) {
+    outer: for (const prompt of input.prompts) {
       for (let sampleIndex = 0; sampleIndex < samples; sampleIndex++) {
+        // The checkpoint sits here on purpose: everything before it is durable,
+        // and everything after it costs money. Stopping anywhere else either
+        // discards work or pays for work nobody wanted.
+        if (options.onCheckpoint) {
+          directive = await options.onCheckpoint();
+          if (directive !== 'continue') break outer;
+        }
+
         // Engines run in parallel; prompts and samples run in sequence. That
         // bounds concurrency without a queue while keeping a run finishable.
         const results = await Promise.all(
@@ -287,13 +334,38 @@ export async function executeRun(runId: string, input: StartRunInput): Promise<E
       }
     }
   } catch (err) {
+    // A throw from the checkpoint itself is not finalised here: the caller that
+    // supplied the checkpoint knows whether the run is resumable, and this
+    // module must not guess. Everything else is a genuine run failure.
+    if (err instanceof RunSuspended) {
+      return { ...(await tally(runId)), status: 'running', skippedExisting, suspended: true };
+    }
     const message = err instanceof Error ? err.message : 'Unknown run error';
     const partial = await finalizeRun(runId, message);
-    return { ...partial, skippedExisting };
+    return { ...partial, skippedExisting, suspended: false };
   }
 
-  const finished = await finalizeRun(runId);
-  return { ...finished, skippedExisting };
+  // Left mid-flight by a worker that is shutting down or lost its lease. The
+  // run stays `running` and stays resumable — writing a terminal status here
+  // would report a deploy as a finished measurement.
+  if (directive === 'stop') {
+    return { ...(await tally(runId)), status: 'running', skippedExisting, suspended: true };
+  }
+
+  const finished = await finalizeRun(runId, '', directive === 'cancel' ? 'cancelled' : undefined);
+  return { ...finished, skippedExisting, suspended: false };
+}
+
+/**
+ * Thrown by a checkpoint that cannot let the run continue and does not want it
+ * finalised — a lost lease, most often. Distinct from returning `'stop'` so a
+ * checkpoint can bail out of a call it is already inside.
+ */
+export class RunSuspended extends Error {
+  constructor(message = 'Run suspended before completion.') {
+    super(message);
+    this.name = 'RunSuspended';
+  }
 }
 
 /**
@@ -305,32 +377,21 @@ export async function executeRun(runId: string, input: StartRunInput): Promise<E
 export async function finalizeRun(
   runId: string,
   error = '',
-): Promise<Omit<ExecuteResult, 'skippedExisting'>> {
-  const rows = await db.observation.findMany({
-    where: { runId },
-    select: {
-      status: true,
-      inputTokens: true,
-      outputTokens: true,
-      estimatedCostUsd: true,
-      latencyMs: true,
-    },
-  });
-
-  const run = await db.measurementRun.findUnique({
-    where: { id: runId },
-    select: { expectedObservations: true },
-  });
-
-  const cover = coverageOf(rows);
-  const cost = costTotals(rows);
-  const expected = run?.expectedObservations ?? cover.attempted;
+  /**
+   * Forces the terminal status. Only `cancelled` uses this: a deliberate stop
+   * is indistinguishable from an incomplete run by counting alone, and calling
+   * it `partial` would hide that a human stopped it.
+   */
+  outcome?: 'cancelled',
+): Promise<Omit<ExecuteResult, 'skippedExisting' | 'suspended'>> {
+  const { cover, cost, expected } = await readRun(runId);
 
   // A run that produced nothing is `failed`, not `completed` with a zero score.
   // A run that produced something but not everything is `partial` — a
   // first-class result, not an error.
   let status: RunStatus;
-  if (cover.observed === 0) status = 'failed';
+  if (outcome === 'cancelled') status = 'cancelled';
+  else if (cover.observed === 0) status = 'failed';
   else if (cover.attempted < expected || !cover.complete) status = 'partial';
   else status = 'completed';
 
@@ -361,10 +422,53 @@ export async function finalizeRun(
   };
 }
 
+/**
+ * Read a run's persisted totals without writing anything.
+ *
+ * Shared by finalisation and by the suspended path, so a run that is stopped
+ * mid-flight reports the same numbers it would report if it had finished there.
+ */
+async function readRun(runId: string) {
+  const rows = await db.observation.findMany({
+    where: { runId },
+    select: {
+      status: true,
+      inputTokens: true,
+      outputTokens: true,
+      estimatedCostUsd: true,
+      latencyMs: true,
+    },
+  });
+
+  const run = await db.measurementRun.findUnique({
+    where: { id: runId },
+    select: { expectedObservations: true },
+  });
+
+  const cover = coverageOf(rows);
+  return { rows, cover, cost: costTotals(rows), expected: run?.expectedObservations ?? cover.attempted };
+}
+
+/** Current counts for a run that is deliberately being left unfinished. */
+async function tally(runId: string): Promise<Omit<ExecuteResult, 'skippedExisting' | 'suspended' | 'status'>> {
+  const { cover } = await readRun(runId);
+  return {
+    runId,
+    attempted: cover.attempted,
+    observed: cover.observed,
+    failed: cover.failed,
+    unavailable: cover.unavailable,
+    coverage: cover.coverage,
+  };
+}
+
 /** Create and execute in one call. */
-export async function startRun(input: StartRunInput): Promise<ExecuteResult> {
+export async function startRun(
+  input: StartRunInput,
+  options: ExecuteRunOptions = {},
+): Promise<ExecuteResult> {
   const runId = await createRun(input);
-  return executeRun(runId, input);
+  return executeRun(runId, input, options);
 }
 
 /** True when a run has been sitting in `running` long enough to be suspect. */

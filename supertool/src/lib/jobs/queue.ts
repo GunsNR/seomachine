@@ -287,6 +287,67 @@ export async function requestCancel(jobId: string, orgId: string): Promise<'canc
   return 'not-found';
 }
 
+/**
+ * Hand a job back to the queue without recording a failure against it.
+ *
+ * Used when a worker is asked to stop while holding a job. The alternative
+ * designs are both wrong: dropping the job silently makes the work vanish until
+ * the lease lapses minutes later, and calling it a failure spends one of the
+ * job's attempts on an event that was not the job's fault.
+ *
+ * The attempt counter is deliberately NOT rolled back. A worker that crash-loops
+ * during a bad deploy would otherwise hand the same job back forever, and a job
+ * that can never exhaust its attempts is a job no operator ever sees. Paying one
+ * attempt per shutdown keeps the ceiling real.
+ *
+ * Scoped to `lockedBy` like every other transition, so a worker whose lease was
+ * already taken over cannot disturb the job that is now someone else's.
+ */
+export async function releaseForShutdown(jobId: string, workerId: string): Promise<boolean> {
+  const result = await db.job.updateMany({
+    where: { id: jobId, lockedBy: workerId, status: 'running' },
+    data: {
+      status: 'queued',
+      lockedBy: null,
+      lockedAt: null,
+      leaseExpiresAt: null,
+      runAfter: new Date(),
+      lastError: 'Worker shut down mid-job; returned to the queue to resume.',
+      errorCategory: 'transient',
+    },
+  });
+  return result.count === 1;
+}
+
+/**
+ * The job currently doing, or about to do, this kind of work for a project.
+ *
+ * Producers use this so a second click reports the run already in flight rather
+ * than starting another. It is advisory, not a lock: two simultaneous clicks
+ * can both read "nothing in flight". The idempotency key is what actually
+ * closes that window, and this exists so the common case gives a useful answer
+ * instead of relying on a hash collision of intent.
+ */
+export async function findActiveJob(
+  kind: string,
+  orgId: string,
+  projectId: string,
+): Promise<{ id: string; status: JobStatus; payload: Record<string, unknown> } | null> {
+  const job = await db.job.findFirst({
+    where: {
+      kind,
+      orgId,
+      projectId,
+      status: { in: ['queued', 'running'] },
+      cancelRequestedAt: null,
+    },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true, status: true, payload: true },
+  });
+
+  return job ? { id: job.id, status: job.status as JobStatus, payload: safeParse(job.payload) } : null;
+}
+
 export async function markSucceeded(jobId: string, workerId: string): Promise<void> {
   await db.job.updateMany({
     where: { id: jobId, lockedBy: workerId },

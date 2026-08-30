@@ -1,4 +1,7 @@
-import 'server-only';
+// Deliberately NOT `server-only`: reached from the job worker through
+// `plan.ts`, which runs outside a request. Like that module, this one imports
+// the Prisma client and the Stripe SDK, so a client import fails at build time
+// regardless of the marker.
 import Stripe from 'stripe';
 import { db } from './db';
 import { PLANS, type PlanId } from './plan';

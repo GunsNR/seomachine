@@ -136,10 +136,11 @@ const REGISTRY = {
     label: 'Scheduled runs',
     status: 'beta',
     source:
-      'A cron endpoint that works out which projects are due from the last measurement run and starts a new one through the same orchestrator as a manual run.',
-    evidence: 'tests/measurement-run.test.ts, CI boot check in .github/workflows/supertool.yml',
+      'A cron endpoint that works out which projects are due from the last measurement run and enqueues a durable job, executed by a worker through the same orchestrator as a manual run.',
+    evidence:
+      'tests/measurement-run.test.ts, tests/measurement-job.test.ts, tests/run-check-api.test.ts, tests/jobs.test.ts, CI boot check in .github/workflows/supertool.yml',
     externalValidation:
-      'Gate 1 made runs durable and retries idempotent: the run row is written before any provider call, each observation is persisted as it completes, and a uniqueness constraint means a retry fills gaps rather than duplicating. There is still no distributed queue or lock, so two schedulers running concurrently is untested. Gate 2 owns durable queueing.',
+      'Gate 1 made runs durable and retries idempotent: the run row is written before any provider call, each observation is persisted as it completes, and a uniqueness constraint means a retry fills gaps rather than duplicating. Phase 2 put both producers behind the durable queue, added a named lock so two overlapping cron deliveries cannot both sweep, and added a worker that claims, renews leases, retries with classified backoff, honours cancellation and drains on SIGTERM. It stays beta because no worker is deployed anywhere: the flow is complete in code and exercised against real PostgreSQL, and enqueued jobs sit until something runs them.',
     marketingLanguage: 'Re-runs your prompt set on a schedule so you have a trend rather than a snapshot.',
   },
   wordpress_publishing: {

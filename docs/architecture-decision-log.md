@@ -446,6 +446,88 @@ itself (`dns.lookup` offers no cancellation).
 
 ---
 
+## ADR-018 — Measurement runs are queued work, not request work
+
+**Accepted, 2026-08-30.**
+
+`POST /api/app/run-check` and the cron sweep both executed a measurement inside
+the HTTP request, with `maxDuration = 300`. That was the honest thing to do with
+no worker, and it had three costs the customer paid. A run longer than the
+platform's request ceiling was killed halfway, leaving a `partial` run and a
+network error the browser rendered as "it broke". The browser tab was the only
+thing that would ever report the outcome, so closing it lost the result even
+though the work continued. And the cron endpoint could only ever process a
+handful of projects per delivery before the platform cut it off — the batch
+limit was a timeout workaround dressed up as fairness.
+
+**Decision.** Both producers write the `MeasurementRun` row and enqueue a
+`measurement.run` job. A worker process claims it, executes the same
+orchestrator, and reports through the run row. The orchestration itself did not
+move: `executeRun` already wrote the run before the first provider call, already
+persisted each observation as it landed, and already had a uniqueness constraint
+that made a retry fill gaps rather than duplicate. Those are exactly the
+properties a queued retry needs, so reimplementing them alongside a lease would
+have been the expensive mistake. What the orchestrator gained is one thing: a
+checkpoint it can ask, placed between fan-outs, so a long run can renew a lease
+and notice a cancellation without knowing what either is.
+
+**The producer, not the handler, creates the run row.** So the customer sees a
+`queued` run the moment they click, and so a job that no worker ever reaches
+still leaves durable evidence that they asked. It costs one thing: a request
+that loses the idempotency-key race by microseconds has already written a run
+row, which is then deleted — guarded on the row being `queued` with no
+observations, so it can never take a real run with it.
+
+**Deduplication is two layers, because one would not do.** An active-job lookup
+answers "is a run already happening for this project?", which is what a user
+clicking twice thirty seconds apart actually means; a read cannot close the
+millisecond window, so a per-intent idempotency key backs it with the database's
+uniqueness constraint. Manual runs bucket by a coarse clock so a deliberate
+re-run a minute later still works; scheduled runs bucket by the plan's period so
+a cron retry maps to the same job. The sweep additionally holds a named lock,
+which `lib/jobs/lock.ts` was written for and nothing had ever used.
+
+**The response contract changed, and the frontend changed with it.** POST now
+answers 202 with the identifiers and nothing else — no coverage, no observation
+count, no cost, because none of them exist yet and a zero would be
+indistinguishable from a run that measured nothing. GET on the same route
+reports the job and the run separately, neither inferred from the other, and
+computes whether polling should stop so that rule lives in one place. The run
+button renders queued, running, retrying, completed, partial, failed and
+cancelled as themselves rather than collapsing them into one spinner: a run
+waiting for a worker and a run halfway through six engines are different facts
+about the customer's money.
+
+**Consequences.**
+
+- A worker must be deployed for anything to run. Until one is, a queued run
+  stays `queued`, which the dashboard states plainly. This is the one genuine
+  regression against the previous design, and it is why `scheduled_runs` stays
+  `beta`.
+- Job kinds are an allowlist in code, not a string a producer can invent. An
+  unrecognised kind goes straight to `dead` where an operator sees it.
+- `plan.ts` and `billing.ts` lost their `server-only` marker. The worker
+  re-checks entitlement at execution time — a subscription can lapse between the
+  click and the run — and that marker throws outside a request. Nothing is
+  actually lost: both modules import the Prisma client, so Next's bundler
+  already fails loudly on any client import, which is the same reasoning already
+  recorded on `measurement/run.ts` and `jobs/queue.ts`.
+- A worker that stops for its own reasons leaves the run `running` rather than
+  finalising it. The alternative reports a deploy as a finished measurement.
+
+**Rejected.** Having the handler create the run row (the customer sees nothing
+between clicking and a worker picking the job up, and a job that is never
+claimed leaves no trace); refunding the attempt counter on a graceful shutdown
+(a crash-looping deploy would hand the same job back forever, and a job that can
+never exhaust its attempts is one no operator ever sees); retrying a run whose
+observations all recorded as failures (resumption skips rows that exist
+regardless of status, so the retry is a guaranteed no-op that burns an attempt);
+a real queue — Redis, SQS (one table and a poll loop is the right amount of
+machinery for this load, and the interface here is what gets reimplemented if
+throughput ever justifies more).
+
+---
+
 ## How to add an ADR
 
 Append. Never edit an accepted decision in place — supersede it with a new entry
