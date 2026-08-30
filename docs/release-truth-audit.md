@@ -224,6 +224,7 @@ regression test; none was closed by relaxing an expectation.
 | Membership roles not enforced | Four roles enforced per route, with a structural test that no mutating route is unguarded | `tests/rbac.test.ts` |
 | API keys had no scopes or quotas | Scoped, revocable, expiring, daily-quota'd | `tests/apikey-scopes.test.ts` |
 | API keys had no rotation flow, so a leaked key could only be revoked — breaking the integration at the moment the leak was found | Rotation issues a replacement immediately and puts the predecessor on a 24-hour overlap it cannot outlive; the pair shares one daily budget, and concurrent rotations resolve to exactly one successor | `tests/apikey-rotation.test.ts` |
+| Quota admission read the counter, decided, then wrote it back, so simultaneous requests were each admitted against the same count | One row per tenant-scoped group per UTC day, incremented by a single statement that enforces the limit inside itself; a refused request spends nothing and a new day is a new row | `tests/apikey-quota.test.ts` |
 | Quota groups were inferred from an empty-string sentinel, so a misread would have pooled every key in the database into one budget | Every key carries a required, non-empty group and a tenant column; the migration backfills each pre-existing key to its own id, and the lookup constrains on tenant as well as group | `tests/apikey-rotation.test.ts` |
 | `/api/v1` had wildcard CORS | Explicit allowlist from connected sites plus configuration; `Vary: Origin` | `tests/api-auth.test.ts` |
 | `past_due` fully entitled indefinitely | Bounded grace window, stamped from the Stripe transition | `tests/billing.test.ts` |
@@ -231,17 +232,20 @@ regression test; none was closed by relaxing an expectation.
 | Referral endpoint accepted a caller-supplied engine | Engine always derived; evidence provenance recorded; unverified attribution never counted as measured | `tests/lead-attribution.test.ts` |
 | Provider errors could carry a credential into logs | Redaction at the logging boundary and on job error text | `tests/observability.test.ts` |
 
-**Quotas are enforced, but admission is not atomic.** The daily counter is read
-and then written, with no atomic increment and no row lock, so simultaneous
-requests can each read the same count and each be admitted. The limit holds for
-sequential traffic and is not a hard guarantee under concurrency. This predates
-rotation and is unchanged by it — rotation reuses the same counter across a key
-group rather than introducing the race. It is recorded here rather than implied
-to be closed, and `public_api` says the same thing in its own words. Closing it
-needs an atomic per-group, per-day counter, which is a change to the quota
-mechanism and not to rotation. **Phase 2 criterion 7 is therefore partial: keys
-carry scopes, quotas and a rotation flow, but the quota is not yet enforced
-atomically.**
+**Quota admission is atomic.** The daily counter was read and then written in
+separate statements, with no atomic increment and no row lock, so simultaneous
+requests could each read the same count and each be admitted. It now lives in
+`ApiQuotaCounter`, one row per tenant-scoped key group per UTC day, and
+admission is a single `INSERT … ON CONFLICT DO UPDATE` whose `WHERE` clause
+carries the limit: at the limit the update is skipped, the statement returns no
+rows, and the refusal *is* the fact that nothing was spent. Concurrent callers
+serialize on the unique index. Measured against the previous implementation,
+twelve simultaneous requests against a limit of three were all admitted; the
+same test now admits exactly three. **Phase 2 criterion 7 is satisfied: keys
+carry scopes, quotas and a rotation flow, and the quota is enforced
+atomically.** Phase 2 as a whole remains in progress — criteria for
+representative-data migration, rollback rehearsal and a deployed worker are
+still open.
 
 **A registry correction went with this.** `capabilities.ts` still described
 `public_api` as having *"no scopes, no per-key quota and no rotation flow"* and

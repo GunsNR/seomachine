@@ -443,6 +443,35 @@ model ApiKey {
   @@index([orgId, quotaGroupId])
 }
 
+/// The authority on how much of a daily budget a key group has spent.
+///
+/// Usage used to live on each `ApiKey` row and be summed across the group at
+/// read time. That made the enforced quantity a derived sum nobody could lock:
+/// admission read it, decided, and wrote back in three separate statements, so
+/// simultaneous requests each read the same total and were each admitted.
+///
+/// One row per group per UTC day, incremented by a single statement that also
+/// enforces the limit, makes the decision and the write the same event. The
+/// unique constraint is what concurrent requests serialize on.
+///
+/// `ApiKey.usageCount` still exists and is still written, but only as per-key
+/// bookkeeping for display. It is no longer consulted to admit anything.
+model ApiQuotaCounter {
+  id           String   @id @default(cuid())
+  /// Tenant, so one organization's usage can never reach another's even if a
+  /// group id were somehow duplicated.
+  orgId        String
+  quotaGroupId String
+  /// The UTC day this counter belongs to, as YYYY-MM-DD. A new day is a new
+  /// row, so the budget resets without any job having to run.
+  usageDay     String
+  used         Int      @default(0)
+  updatedAt    DateTime @updatedAt
+
+  /// The lock. Concurrent admissions for one group and day contend here.
+  @@unique([orgId, quotaGroupId, usageDay])
+}
+
 /// An append-only record of API key lifecycle actions.
 ///
 /// It stores identifiers and never key material. A plaintext key or its digest
