@@ -19,6 +19,7 @@ type DbMod = typeof import('@/lib/db');
 let keys: KeyMod;
 let db: DbMod['db'];
 let projectId = '';
+let orgId = '';
 
 beforeAll(async () => {
   database = await createTestDatabase('apikey');
@@ -42,6 +43,7 @@ beforeEach(async () => {
     data: { orgId: org.id, name: 'Test', domain: 'test.example' },
   });
   projectId = project.id;
+  orgId = org.id;
 });
 
 async function issue(over: Record<string, unknown> = {}) {
@@ -49,6 +51,8 @@ async function issue(over: Record<string, unknown> = {}) {
   const row = await db.apiKey.create({
     data: {
       projectId,
+      orgId,
+      quotaGroupId: keys.newQuotaGroupId(),
       prefix: generated.prefix,
       hashedKey: generated.hashed,
       scopes: keys.serializeScopes(['visibility:read']),

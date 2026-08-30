@@ -2,11 +2,20 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { Check, Copy, KeyRound, Loader2, Trash2 } from 'lucide-react';
+import { Check, Copy, KeyRound, Loader2, RefreshCw, Trash2 } from 'lucide-react';
 
 interface KeyRow {
   id: string; label: string; prefix: string;
   createdAt: string; lastUsedAt: string | null;
+  /** Set once the key has been rotated: when it stops working. */
+  overlapExpiresAt?: string | null;
+}
+
+/** What a completed rotation leaves on screen, until the page is refreshed. */
+interface Rotated {
+  key: string;
+  previousKeyId: string;
+  overlapExpiresAt: string;
 }
 
 /** Create and revoke the project keys the WordPress plugin authenticates with. */
@@ -16,6 +25,8 @@ export function ApiKeyManager({ projectId, keys }: { projectId: string; keys: Ke
   const [error, setError] = useState('');
   const [fresh, setFresh] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [rotated, setRotated] = useState<Rotated | null>(null);
+  const [rotating, setRotating] = useState<string | null>(null);
 
   async function create(label: string) {
     setCreating(true);
@@ -37,6 +48,48 @@ export function ApiKeyManager({ projectId, keys }: { projectId: string; keys: Ke
     }
   }
 
+  async function rotate(id: string, label: string) {
+    // Rotation issues a second working key. Saying so plainly is the point:
+    // somebody who thinks this breaks their site immediately will not do it,
+    // and an un-rotated leaked key is the outcome that actually costs them.
+    const confirmed = window.confirm(
+      `Rotate the key "${label}"?\n\n` +
+        'A new key is issued and shown once. The current key keeps working for ' +
+        '24 hours so you can update your integration, then stops automatically. ' +
+        'You can revoke it sooner once the new key is in place.',
+    );
+    if (!confirmed) return;
+
+    setRotating(id);
+    setError('');
+    try {
+      const res = await fetch('/api/app/api-keys', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'Could not rotate that key.');
+      setFresh(null);
+      setRotated({
+        key: json.key,
+        previousKeyId: json.previousKeyId,
+        overlapExpiresAt: json.overlapExpiresAt,
+      });
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not rotate that key.');
+    } finally {
+      setRotating(null);
+    }
+  }
+
+  async function revokeOld() {
+    if (!rotated) return;
+    await revoke(rotated.previousKeyId);
+    setRotated((current) => (current ? { ...current, previousKeyId: '' } : current));
+  }
+
   async function revoke(id: string) {
     setError('');
     try {
@@ -52,9 +105,10 @@ export function ApiKeyManager({ projectId, keys }: { projectId: string; keys: Ke
   }
 
   async function copy() {
-    if (!fresh) return;
+    const value = fresh ?? rotated?.key;
+    if (!value) return;
     try {
-      await navigator.clipboard.writeText(fresh);
+      await navigator.clipboard.writeText(value);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch {
@@ -107,6 +161,50 @@ export function ApiKeyManager({ projectId, keys }: { projectId: string; keys: Ke
         </div>
       )}
 
+      {rotated && (
+        <div className="border-b border-line bg-ok/[0.06] px-5 py-4">
+          <p className="text-[0.8rem] font-semibold text-ink">
+            Copy this now — it is shown once and never stored in full.
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <code className="min-w-0 flex-1 truncate rounded-lg bg-white px-3 py-2 font-mono text-[0.82rem] text-ink ring-1 ring-line">
+              {rotated.key}
+            </code>
+            <button type="button" onClick={copy} className="btn btn-sm btn-ghost shrink-0">
+              {copied ? <Check className="h-4 w-4 text-ok" aria-hidden="true" /> : <Copy className="h-4 w-4" aria-hidden="true" />}
+              {copied ? 'Copied' : 'Copy'}
+            </button>
+          </div>
+          <p className="mt-3 text-[0.78rem] text-body">
+            {rotated.previousKeyId ? (
+              <>
+                The previous key keeps working until{' '}
+                <strong className="font-semibold text-ink">
+                  {new Date(rotated.overlapExpiresAt).toLocaleString('en-US', {
+                    dateStyle: 'medium',
+                    timeStyle: 'short',
+                    timeZoneName: 'short',
+                  })}
+                </strong>
+                , then stops on its own.
+              </>
+            ) : (
+              'The previous key has been revoked.'
+            )}
+          </p>
+          {rotated.previousKeyId && (
+            <button
+              type="button"
+              onClick={() => void revokeOld()}
+              className="btn btn-sm btn-ghost mt-2 hover:!text-bad hover:!ring-bad"
+            >
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
+              Revoke old key now
+            </button>
+          )}
+        </div>
+      )}
+
       {error && (
         <p role="alert" className="border-b border-line bg-bad/[0.06] px-5 py-3 text-[0.85rem] text-ink">
           {error}
@@ -125,14 +223,29 @@ export function ApiKeyManager({ projectId, keys }: { projectId: string; keys: Ke
                   {k.lastUsedAt ? ` · last used ${new Date(k.lastUsedAt).toLocaleDateString('en-US')}` : ' · never used'}
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => revoke(k.id)}
-                className="btn btn-sm btn-ghost shrink-0 hover:!text-bad hover:!ring-bad"
-              >
-                <Trash2 className="h-4 w-4" aria-hidden="true" />
-                Revoke
-              </button>
+              <div className="flex shrink-0 gap-2">
+                <button
+                  type="button"
+                  onClick={() => void rotate(k.id, k.label)}
+                  disabled={rotating === k.id || Boolean(k.overlapExpiresAt)}
+                  className="btn btn-sm btn-ghost"
+                >
+                  {rotating === k.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                  )}
+                  Rotate
+                </button>
+                <button
+                  type="button"
+                  onClick={() => revoke(k.id)}
+                  className="btn btn-sm btn-ghost hover:!text-bad hover:!ring-bad"
+                >
+                  <Trash2 className="h-4 w-4" aria-hidden="true" />
+                  Revoke
+                </button>
+              </div>
             </li>
           ))}
         </ul>
