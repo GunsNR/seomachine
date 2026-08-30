@@ -77,6 +77,44 @@ export function utcDay(now = new Date()): string {
   return now.toISOString().slice(0, 10);
 }
 
+/**
+ * Spend one request against a key group's daily budget.
+ *
+ * Admission and increment are one statement. The old code read the group's
+ * usage, decided, and wrote back separately, so two requests arriving together
+ * both read the same total and were both admitted — and because they then wrote
+ * the same value, the overage left no trace.
+ *
+ * `ON CONFLICT DO UPDATE` takes a row lock, so concurrent callers serialize on
+ * the unique index. The limit lives in the `WHERE` of that update: when the row
+ * is already at the limit the update is skipped, the statement returns no rows,
+ * and the refusal *is* the fact that nothing was incremented. There is no path
+ * that spends the budget and then rejects.
+ *
+ * A `limit` of 0 means unlimited, matching `dailyQuota`. A new UTC day is a new
+ * unique key, so the budget resets by insertion rather than by a reset job.
+ */
+export async function admitQuota(
+  orgId: string,
+  quotaGroupId: string,
+  usageDay: string,
+  limit: number,
+): Promise<{ admitted: boolean; used: number }> {
+  const rows = await db.$queryRaw<Array<{ used: number }>>`
+    INSERT INTO "ApiQuotaCounter" ("id", "orgId", "quotaGroupId", "usageDay", "used", "updatedAt")
+    VALUES (gen_random_uuid()::text, ${orgId}, ${quotaGroupId}, ${usageDay}, 1, NOW())
+    ON CONFLICT ("orgId", "quotaGroupId", "usageDay")
+    DO UPDATE SET "used" = "ApiQuotaCounter"."used" + 1, "updatedAt" = NOW()
+      WHERE ${limit} = 0 OR "ApiQuotaCounter"."used" < ${limit}
+    RETURNING "used"
+  `;
+
+  // No row means the guard refused the update: the group is at its limit and
+  // nothing was spent.
+  if (rows.length === 0) return { admitted: false, used: limit };
+  return { admitted: true, used: Number(rows[0].used) };
+}
+
 /** Why a presented key was refused. Never returned to the caller verbatim. */
 export type KeyRejection =
   | 'malformed'
@@ -154,40 +192,27 @@ export async function authenticateApiKey(
   const scopes = parseScopes(match.scopes);
   if (required && !scopes.includes(required)) return { ok: false, reason: 'scope' };
 
-  // Rolling daily budget. A new UTC day resets the counter in the same write
-  // that increments it, so there is no separate reset job to fall behind.
-  const today = utcDay(now);
-  const sameDay = match.usageDay === today;
-  const ownUsed = sameDay ? match.usageCount : 0;
-
-  // During an overlap two keys are live at once. They must spend one budget
-  // between them: a rotation that doubled the allowance for 24 hours would be
-  // a quota bypass anyone could trigger at will.
+  // The daily budget. One statement decides and spends, so two requests
+  // arriving together cannot both be admitted against the same count.
   //
-  // The lookup is constrained by tenant as well as by group. Group ids are
-  // unique by construction, but that is an application promise; adding the
-  // tenant makes one tenant's usage arithmetically unable to reach another's,
-  // whatever a group id turns out to hold. `@@index([orgId, quotaGroupId])`
-  // serves exactly this query.
-  const siblings = await db.apiKey.findMany({
-    where: {
-      orgId: match.orgId,
-      quotaGroupId: match.quotaGroupId,
-      usageDay: today,
-      id: { not: match.id },
-    },
-    select: { usageCount: true },
-  });
-  const groupUsed = ownUsed + siblings.reduce((total, row) => total + row.usageCount, 0);
+  // The counter is keyed by tenant as well as by group. Group ids are unique by
+  // construction, but that is an application promise; the tenant makes one
+  // organization's usage arithmetically unable to reach another's, whatever a
+  // group id turns out to hold.
+  //
+  // During a rotation overlap two keys are live at once and share this row, so
+  // rotating cannot hand out a second allowance.
+  const today = utcDay(now);
+  const admission = await admitQuota(match.orgId, match.quotaGroupId, today, match.dailyQuota);
+  if (!admission.admitted) return { ok: false, reason: 'quota' };
 
-  const nextCount = ownUsed + 1;
-  if (match.dailyQuota > 0 && groupUsed + 1 > match.dailyQuota) {
-    return { ok: false, reason: 'quota' };
-  }
-
+  // Per-key bookkeeping, written after the budget is already spent. This is
+  // what the settings screen shows; it is no longer what admits anything, so a
+  // failure here cannot let a request through that the counter refused.
+  const sameDay = match.usageDay === today;
   await db.apiKey.update({
     where: { id: match.id },
-    data: { lastUsedAt: now, usageDay: today, usageCount: nextCount },
+    data: { lastUsedAt: now, usageDay: today, usageCount: sameDay ? match.usageCount + 1 : 1 },
   });
 
   return {

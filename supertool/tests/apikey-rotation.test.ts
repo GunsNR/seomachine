@@ -524,8 +524,9 @@ describe('the migration establishes the invariant rather than assuming it', () =
     const source = readFileSync(resolve(__dirname, '../src/lib/apikey.ts'), 'utf8');
     expect(source).not.toMatch(/quotaGroupId \|\|/);
     expect(source).not.toMatch(/if \(match\.quotaGroupId\)/);
-    // And the group lookup always carries the tenant.
-    expect(source).toMatch(/orgId: match\.orgId,\s*\n\s*quotaGroupId: match\.quotaGroupId,/);
+    // And the group lookup always carries the tenant. The shape changed when
+    // admission moved into one atomic statement; the requirement did not.
+    expect(source).toMatch(/admitQuota\(match\.orgId, match\.quotaGroupId,/);
   });
 });
 
