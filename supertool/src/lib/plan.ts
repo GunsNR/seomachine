@@ -1,4 +1,9 @@
-import 'server-only';
+// Deliberately NOT `server-only`: entitlement is re-checked inside the job
+// worker, which runs as a plain Node process rather than a request. The marker
+// throws there, and a worker that cannot ask "is this org still entitled?"
+// would perform unpaid work. Nothing is lost by dropping it: this module
+// imports the Prisma client, so Next's bundler already fails loudly on any
+// client import of it.
 import { getSubscription } from './billing';
 import { db } from './db';
 

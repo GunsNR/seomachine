@@ -294,7 +294,13 @@ criteria exactly as they were.
   that the hosted server **offers TLS without enforcing it** and presents a
   self-signed certificate. See
   `evidence/2026-08-25-hosted-postgres-validation-railway.md`.
-- **No worker is deployed.** Enqueued jobs sit until something runs them.
+- **No worker is deployed.** The `measurement.run` flow is now complete in code
+  — both producers enqueue, an allowlisted handler executes, and a worker
+  entrypoint claims, renews, retries, cancels and drains on SIGTERM — and it has
+  been exercised end to end against PostgreSQL locally and in CI. What does not
+  exist is a *running* worker in a hosted environment. Until one is deployed,
+  enqueued jobs sit, and the dashboard reports them as `queued` rather than
+  implying progress. `scheduled_runs` therefore stays `beta`.
 - **The shared rate limiter fails open** on a database error — a deliberate
   trade, documented in `docs/operations-runbook.md`.
 - **Backups are a documented procedure, not automation.**

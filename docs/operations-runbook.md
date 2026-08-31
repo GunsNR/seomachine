@@ -125,6 +125,45 @@ schema.
 One table, `Job`, plus `JobLock` for recurring activities. No Redis, no SQS —
 the load does not justify the operational dependency.
 
+### Running a worker
+
+```bash
+npm run worker          # from supertool/
+```
+
+It claims jobs, renews its lease while it works, reaps lapsed leases on a
+schedule, and backs off when the queue is empty. Several may run at once:
+claiming is a conditional update, so two workers cannot take the same job.
+
+Environment: the same `DATABASE_URL` and `DIRECT_URL` as the web process, plus
+whatever provider credentials the work needs. The worker reads credentials from
+the environment and never from a job payload.
+
+| Variable | Default | What it changes |
+| --- | --- | --- |
+| `WORKER_IDLE_MIN_MS` | `1000` | First delay after an empty poll |
+| `WORKER_IDLE_MAX_MS` | `15000` | Ceiling that backoff climbs to |
+| `WORKER_REAP_INTERVAL_MS` | `60000` | How often lapsed leases are swept |
+| `WORKER_SHUTDOWN_GRACE_MS` | `30000` | How long SIGTERM waits before exiting non-zero |
+
+**Stopping it.** SIGTERM stops new claims and lets the job in hand reach its
+next checkpoint, then hands that job back to the queue as `queued` with
+`errorCategory = 'transient'`. Nothing is abandoned silently. A second SIGTERM
+exits immediately and says so in the log. Send the signal to the worker process
+itself — a `npm run` or `npx` wrapper in between may not forward it, in which
+case the process is killed rather than drained.
+
+**Job kinds are an allowlist.** `src/lib/jobs/handlers/index.ts` names every
+kind a worker will execute. A row with any other `kind` goes straight to `dead`
+rather than being attempted, so a typo or a half-rolled-back deploy is visible
+in the table instead of being run.
+
+### Kinds
+
+| Kind | What it does | Producers |
+| --- | --- | --- |
+| `measurement.run` | Executes one `MeasurementRun` over the project's prompt set | `POST /api/app/run-check`, `GET/POST /api/cron/run-checks` |
+
 ### Reading the queue
 
 ```sql
@@ -216,9 +255,12 @@ redirects to `https://` now arrives as a GET and does not publish — store the
    request. A limiter that fails closed converts a database blip into a total
    sign-in outage. The exposure is the length of the outage.
 
-2. **No worker process is deployed.** The queue, leases and retries are
-   implemented and tested, but nothing runs them on a schedule yet. Enqueued
-   jobs will sit until a worker exists.
+2. **No worker process is deployed.** The entrypoint exists and runs
+   (`npm run worker`), and `measurement.run` is wired end to end from producer
+   to completion, but nothing runs it in a hosted environment yet. Enqueued
+   jobs will sit until a worker process is deployed alongside the web process.
+   Until then a measurement queued from the dashboard stays `queued`, which the
+   UI reports truthfully rather than as progress.
 
 3. **No production migration rehearsal.** See §2.
 

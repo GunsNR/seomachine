@@ -253,6 +253,12 @@ queued ──▶ running ──┬──▶ completed    all attempted, at least
                      └──▶ cancelled    stopped deliberately
 ```
 
+`queued` is now a real waiting state rather than a moment. Both producers — the
+dashboard's run button and the scheduled sweep — write the run row and enqueue a
+`measurement.run` job; a worker executes it. The run therefore sits in `queued`
+until a worker claims it, which is what the dashboard reports, and a run that no
+worker ever reaches stays `queued` rather than pretending to progress.
+
 - The run row is written **before** the first provider call.
 - Each observation is written **as it completes**, not batched at the end.
 - Therefore an interrupted process leaves a run stuck in `running` with a
@@ -262,7 +268,16 @@ queued ──▶ running ──┬──▶ completed    all attempted, at least
   in the UI. It is not auto-promoted to `completed`.
 - Re-running a run is idempotent: the `(runId, promptId, engine, sampleIndex)`
   uniqueness constraint means a retry fills only the gaps and cannot duplicate
-  an observation that already succeeded.
+  an observation that already succeeded. This is what makes a queued retry safe
+  after a worker dies mid-run.
+- A run is checkpointed between fan-outs — the last moment before new provider
+  spend and the first after a batch of observations became durable. Cancellation
+  is honoured there, and only there, so nothing already written is torn up.
+- A worker stopping for its own reasons — a deploy, a lost lease — leaves the run
+  in `running` deliberately. A terminal status would report a deploy as a
+  finished measurement. When the queue finally gives up on the job, the run is
+  finalised from what actually landed, so it becomes `partial` or `failed`
+  rather than sitting in `running` until the staleness window relabels it.
 
 A `partial` run is a first-class result, not an error. It reports what it saw,
 with coverage stated.
@@ -328,6 +343,14 @@ Stated here so they are not discovered as surprises.
   hand-chosen weights that have never been validated against any outcome. It is
   labelled as such and is not a primary metric. Primary metrics are inclusion
   rate, citation rate, coverage, sample size, interval, engine and timestamp.
+- **A retry cannot heal a failed observation.** Resumption skips every
+  `(promptId, engine, sampleIndex)` that already has a row, whatever that row's
+  status. A provider that was unreachable therefore stays recorded as `failed`
+  for that run; re-running the job would skip it rather than re-ask it. This is
+  the deliberate cost of the uniqueness constraint that makes retries safe: the
+  alternative — overwriting an observation on retry — would make a run's
+  contents depend on how many times it was attempted. A new run is the way to
+  re-measure, and the coverage figure states what the previous one missed.
 - **SQLite with `prisma db push` and no migration history.** Gate 2 owns the
   first reviewed Postgres migration. Nothing here should be deployed until then.
 
