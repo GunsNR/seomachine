@@ -101,6 +101,21 @@ jobs:
         # every push instead of only being written down.
         run: npm run db:rehearse
 
+      - name: Rehearse recovering from a failed migration
+        # The backup rehearsal above proves the data can come back. This proves
+        # the *deployment* can. It stages a real incident against a disposable
+        # database — a migration that asserts one measurement run per project
+        # per day, which legitimate same-day runs violate — then executes the
+        # documented recovery: undo any partial DDL, `migrate resolve
+        # --rolled-back`, redeploy, forward-fix. It fails the build if the
+        # incident does not occur, if recovery does not restore a zero-drift
+        # deployable schema, or if any tenant row changes along the way.
+        #
+        # The rehearsal migrations live in scripts/rehearsal-migrations/ and are
+        # never added to prisma/migrations/, so nothing here can reach a real
+        # database. See docs/operations-runbook.md §2.
+        run: npm run db:recovery-drill
+
       - name: Smoke-test the running server
         run: |
           npm start &

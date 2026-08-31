@@ -528,6 +528,70 @@ throughput ever justifies more).
 
 ---
 
+## ADR-019 — Migration recovery is rehearsed with fixtures held outside the history
+
+**Accepted, 2026-08-31.**
+
+Phase 2 criterion 3 asks that restoration *and* rollback or forward-fix be
+rehearsed. Restoration had been rehearsed since 2026-08-25 and runs in CI. The
+recovery half existed only as prose in `operations-runbook.md`, and prose is not
+a rehearsal: the value of a recovery procedure is entirely in whether it works
+when someone follows it under pressure.
+
+Rehearsing it needs a migration that genuinely fails. That creates a problem
+with an obvious wrong answer: add the failing migration to `prisma/migrations/`
+so the drill can apply it. That would ship an unreviewed schema change to every
+environment — including production — in order to prove something about a
+database nobody has. The migration would also have to *succeed* everywhere it
+ran except in the drill, which is a contradiction.
+
+**Decision, in three parts.**
+
+*Forward-fix is the recovery strategy; restore is the escape hatch.* Not a
+preference. `prisma migrate resolve --rolled-back` is valid only for a migration
+Prisma recorded as **failed**; it errors on one that succeeded. Undoing a
+successful migration therefore requires a hand-written down script plus a
+hand-edit of `_prisma_migrations` — two unsupported operations that manufacture
+exactly the drift `db:drift` exists to catch — and a down script cannot recover
+data, since re-adding a dropped column yields a column of nulls. Restore is the
+only remedy when a migration destroyed or transformed data, and that is the sole
+case where it beats forward-fixing.
+
+*Rehearsal migrations live in `supertool/scripts/rehearsal-migrations/`, never in
+`prisma/migrations/`.* The drill copies the real history into a temporary
+directory, appends the rehearsal migrations there, and points the Prisma CLI at
+a schema file beside them. The product's history is read and never written.
+`tests/migration-recovery-drill.test.ts` fails the build if a rehearsal fixture
+ever appears under `prisma/migrations/`, and the drill refuses to run in that
+state, because a guard that only exists in a test that needs a database is a
+guard that will one day not run.
+
+*The incident is a real product contradiction, not a contrivance.* The staged
+migration asserts one measurement run per project per UTC day. Gate 1 requires
+two runs on one day to remain two distinct runs, and the shared rehearsal
+fixture contains exactly that — the same fixture the restore rehearsal uses to
+prove run identity survives a dump. So the migration fails on the product's own
+semantics, with a real `23505`, and it fails for a reason a reviewer would
+recognise rather than one invented to make a test go red.
+
+**Consequence.** The drill measures the failure rather than assuming it, and
+that changed the documentation. On PostgreSQL, DDL is transactional and Prisma
+sends a migration as one implicit transaction, so a failed migration leaves the
+schema untouched and the *history* damaged: `_prisma_migrations` keeps a failed
+row and every subsequent `migrate deploy` refuses with P3009. The runbook had
+implied an operator should hunt for half-applied DDL. Usually there is none, and
+the incident is a wedged pipeline.
+
+**What this does not settle.** The drill runs against disposable PostgreSQL with
+synthetic, production-*shaped* data. It says nothing about a hosted provider's
+tooling, about lock duration or backfill time at production volume, about
+migrations whose DDL cannot run in a transaction (`CREATE INDEX CONCURRENTLY`),
+or about downtime. Those are listed in
+`docs/evidence/2026-08-31-migration-recovery-drill.md` §6 and remain open Phase 2
+work.
+
+---
+
 ## How to add an ADR
 
 Append. Never edit an accepted decision in place — supersede it with a new entry

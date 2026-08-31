@@ -155,7 +155,10 @@ After the automated rehearsal passes against the hosted target:
    you want the integrity portion only — run it against a copy, never against
    the live instance.)
 4. **Failure injection.** Kill the migration mid-run and confirm the recorded
-   state is coherent and re-runnable.
+   state is coherent and re-runnable. `npm run db:recovery-drill` covers the
+   constraint-failure case against a disposable instance; what a hosted run adds
+   is the process- and connection-death cases, which need a real network path to
+   interrupt.
 
 ---
 
@@ -203,6 +206,27 @@ Do not proceed if any of these is true:
 | Drift detected before applying | Stop. Reconcile the history first |
 | Drift detected after applying | Restore, then reconcile |
 | Rehearsal never run against this provider | Do not apply anything |
+| Migration failed, `migrate deploy` now refuses (P3009) | Resolve the history — see below |
+
+### Recovering a wedged pipeline
+
+Rehearsed on 2026-08-31 against disposable PostgreSQL 16, and re-executed by CI
+on every push: `npm run db:recovery-drill`. Full account in
+`evidence/2026-08-31-migration-recovery-drill.md`; the operator procedure is
+`operations-runbook.md` §2.
+
+The finding worth carrying into a hosted run: on PostgreSQL a migration that
+fails partway leaves **the schema untouched and the history damaged**. DDL is
+transactional and Prisma sends a migration as one implicit transaction, so there
+is usually no half-applied schema to clean up — but `_prisma_migrations` keeps a
+failed row and every later `migrate deploy` refuses with P3009 until
+`migrate resolve --rolled-back` clears it. Look at the history before you go
+looking for residual DDL.
+
+This does not hold for statements PostgreSQL cannot run inside a transaction —
+`CREATE INDEX CONCURRENTLY` foremost among them. A migration containing one of
+those can genuinely leave a half-applied schema, and that case is **not**
+rehearsed.
 
 ---
 

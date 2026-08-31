@@ -244,8 +244,7 @@ twelve simultaneous requests against a limit of three were all admitted; the
 same test now admits exactly three. **Phase 2 criterion 7 is satisfied: keys
 carry scopes, quotas and a rotation flow, and the quota is enforced
 atomically.** Phase 2 as a whole remains in progress — criteria for
-representative-data migration, rollback rehearsal and a deployed worker are
-still open.
+representative-data migration and a deployed worker are still open.
 
 **A registry correction went with this.** `capabilities.ts` still described
 `public_api` as having *"no scopes, no per-key quota and no rotation flow"* and
@@ -308,3 +307,37 @@ criteria exactly as they were.
   the intended self-hosted behaviour, not an oversight, but it is worth stating.
 - `ChatGPT` remains pinned to a retired model and no adapter enables grounded
   search — Phase 1 work, still externally blocked.
+
+
+**Recovering from a failed migration is now rehearsed, not just written down.**
+Criterion 3 asked for restoration *and* rollback or forward-fix. Restoration had
+been rehearsed since 2026-08-25 and runs in CI; the recovery half existed only as
+prose in the runbook. `npm run db:recovery-drill` now stages a real incident
+against disposable PostgreSQL — a migration asserting one measurement run per
+project per UTC day, which the product's own legitimate same-day runs violate —
+and executes the documented recovery against it, asserting 34 steps. It runs in
+CI on every push.
+
+Two things it corrected in the documentation. First, the strategy: Prisma's
+`migrate resolve --rolled-back` is valid **only for a migration recorded as
+failed**, so rolling back a *successful* migration is not a supported operation
+at all — forward-fix is the default by necessity, not preference, and restore is
+the sole remedy when a migration destroyed data. Second, the failure shape: on
+PostgreSQL, DDL is transactional and Prisma sends a migration as one implicit
+transaction, so a mid-migration failure leaves **the schema untouched and the
+deployment pipeline wedged** (P3009 on every subsequent deploy). The runbook had
+implied an operator should go looking for half-applied DDL; the drill measured
+that there usually is none.
+
+The rehearsal migrations are held outside `prisma/migrations/` and a test fails
+the build if one ever lands there — a fixture that shipped would be an unreviewed
+schema change applied to every environment to prove something about a database
+nobody has.
+
+**Criterion 3 is satisfied against disposable PostgreSQL and not against a
+hosted provider or production-sized data.** What remains unproven is written out
+in `docs/evidence/2026-08-31-migration-recovery-drill.md` §6: no hosted run, no
+production volume (so nothing about lock duration or backfill time), synthetic
+data only, one incident class only, no non-transactional DDL case, and no
+downtime measurement. **No capability status changed**, and `roadmap.ts` is
+untouched: this is durability evidence, not a new customer-facing capability.
