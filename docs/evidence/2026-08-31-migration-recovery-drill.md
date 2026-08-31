@@ -4,7 +4,23 @@ Phase 2 criterion 3 reads: *"Restoration and rollback or forward-fix have been
 rehearsed."* Restoration was rehearsed on 2026-08-25
 (`2026-08-25-hosted-postgres-validation-railway.md`). This is the other half.
 
-Machine-readable result: `2026-08-31-migration-recovery-drill.json`.
+Machine-readable result: `2026-08-31-migration-recovery-drill.json`, captured
+from a local run against PostgreSQL 16.13. Its `commitSha` names the parent
+commit, because the run predates the commit that introduced the drill.
+
+The authoritative run is CI's, against PostgreSQL 16.15 on the commit that
+added the drill —
+[run 33440628165](https://github.com/GunsNR/seomachine/actions/runs/33440628165),
+where the service log records the staged failure
+
+```
+ERROR:  could not create unique index "MeasurementRun_projectId_runDay_key"
+DETAIL:  Key ("projectId", "runDay")=(…, 2026-06-15) is duplicated.
+```
+
+and the job still concluded successfully, which is only possible if every
+recovery and integrity assertion below passed.
+
 Reproduce with `npm run db:recovery-drill` from `supertool/`; CI runs it on
 every push.
 
