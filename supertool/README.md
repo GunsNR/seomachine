@@ -184,6 +184,13 @@ Back up before applying anything to a database holding real data, and rehearse
 the restore — `docs/hosted-postgres-validation.md` has the full procedure and
 `npm run db:rehearse` automates it.
 
+If a migration fails against a real database, the schema is usually fine and the
+*history* is not: PostgreSQL rolls the DDL back, but Prisma records the failure
+and every later `npm run db:deploy` refuses with **P3009** until you clear it.
+The recovery — `migrate resolve --rolled-back`, then a corrected forward
+migration — is in `docs/operations-runbook.md` §2, and `npm run db:recovery-drill`
+rehearses the whole thing against disposable databases on every CI run.
+
 **Before going live:**
 
 1. Set `AUTH_SECRET` to a real random value, and `NEXT_PUBLIC_SITE_URL` to your

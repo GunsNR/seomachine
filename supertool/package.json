@@ -18,6 +18,7 @@
     "db:status": "prisma migrate status",
     "db:drift": "prisma migrate diff --from-schema-datasource prisma/schema.prisma --to-schema-datamodel prisma/schema.prisma --exit-code",
     "db:rehearse": "node scripts/db-rehearse.mjs",
+    "db:recovery-drill": "node scripts/db-recovery-drill.mjs",
     "db:seed": "tsx prisma/seed.ts",
     "setup": "prisma generate && prisma migrate deploy && npm run db:seed"
   },

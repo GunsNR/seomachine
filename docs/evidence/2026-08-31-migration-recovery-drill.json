@@ -1,0 +1,386 @@
+{
+  "drill": "migration-recovery",
+  "scenario": "A migration denormalises the UTC day onto MeasurementRun and asserts one run per project per day. It fails with SQLSTATE 23505 on legitimate same-day runs, leaving a failed migration recorded and every subsequent deploy blocked (P3009).",
+  "strategy": "forward-fix, with restore from backup rehearsed as the escape hatch",
+  "startedAt": "2026-08-31T21:12:29.448Z",
+  "finishedAt": "2026-08-31T21:12:52.618Z",
+  "totalMs": 23170,
+  "postgresVersion": "PostgreSQL 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1) on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0, 64-bit",
+  "prismaVersion": "6.16.2",
+  "commitSha": "49770ac5a1069f4f8a73bd8a622170cd892c62c3",
+  "productionMigrations": [
+    "20260824172219_phase2_production_foundation",
+    "20260824173435_phase2_lead_attribution_provenance",
+    "20260828224249_apikey_rotation_overlap",
+    "20260830022346_atomic_api_quota_counter"
+  ],
+  "rehearsalMigrations": [
+    "20260831000000_measurementrun_one_run_per_day",
+    "20260831000001_measurementrun_daily_index_corrected"
+  ],
+  "incidentDetail": "DETAIL: Key (\"projectId\", \"runDay\")=(cmthqifmo00077dtmhejhb5fc, 2026-06-15) is duplicated.",
+  "diagnosis": "schema unchanged (transactional DDL); only the migration history is damaged",
+  "findings": {
+    "partialDdlSurvived": false,
+    "residualColumn": false,
+    "residualIndex": false,
+    "appliedStepsCount": 0
+  },
+  "integrity": {
+    "preIncident": {
+      "organizations": 2,
+      "projects": 4,
+      "measurementRuns": 8,
+      "observations": 24,
+      "jobs": 4,
+      "sessions": 2,
+      "apiKeys": 4,
+      "orphanedProjects": 0,
+      "orphanedObservations": 0,
+      "observedCount": 8,
+      "failedCount": 8,
+      "unavailableCount": 8,
+      "daysWithMultipleRuns": 1,
+      "keysWithoutScopes": 0,
+      "keysWithQuota": 4,
+      "idempotencyConstraintEnforced": true
+    },
+    "postRecovery": {
+      "organizations": 2,
+      "projects": 4,
+      "measurementRuns": 8,
+      "observations": 24,
+      "jobs": 4,
+      "sessions": 2,
+      "apiKeys": 4,
+      "orphanedProjects": 0,
+      "orphanedObservations": 0,
+      "observedCount": 8,
+      "failedCount": 8,
+      "unavailableCount": 8,
+      "daysWithMultipleRuns": 1,
+      "keysWithoutScopes": 0,
+      "keysWithQuota": 4,
+      "idempotencyConstraintEnforced": true
+    },
+    "postForwardFix": {
+      "organizations": 2,
+      "projects": 4,
+      "measurementRuns": 8,
+      "observations": 24,
+      "jobs": 4,
+      "sessions": 2,
+      "apiKeys": 4,
+      "orphanedProjects": 0,
+      "orphanedObservations": 0,
+      "observedCount": 8,
+      "failedCount": 8,
+      "unavailableCount": 8,
+      "daysWithMultipleRuns": 1,
+      "keysWithoutScopes": 0,
+      "keysWithQuota": 4,
+      "idempotencyConstraintEnforced": true
+    },
+    "restored": {
+      "organizations": 2,
+      "projects": 4,
+      "measurementRuns": 8,
+      "observations": 24,
+      "jobs": 4,
+      "sessions": 2,
+      "apiKeys": 4,
+      "orphanedProjects": 0,
+      "orphanedObservations": 0,
+      "observedCount": 8,
+      "failedCount": 8,
+      "unavailableCount": 8,
+      "daysWithMultipleRuns": 1,
+      "keysWithoutScopes": 0,
+      "keysWithQuota": 4,
+      "idempotencyConstraintEnforced": true
+    }
+  },
+  "steps": [
+    {
+      "name": "Confirm rehearsal migrations are isolated from the real history",
+      "ok": true,
+      "ms": 0,
+      "detail": "4 production migrations, 2 rehearsal fixtures, no overlap"
+    },
+    {
+      "name": "Check pg_dump and pg_restore are present",
+      "ok": true,
+      "ms": 66,
+      "detail": "pg_dump (PostgreSQL) 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1)"
+    },
+    {
+      "name": "Read server version",
+      "ok": true,
+      "ms": 88,
+      "detail": "PostgreSQL 16.13 (Ubuntu 16.13-0ubuntu0.24.04.1) on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0, 64-bit"
+    },
+    {
+      "name": "Stage the incident migration history",
+      "ok": true,
+      "ms": 2,
+      "detail": "/tmp/rl-recovery-uBzVND/incident/prisma/schema.prisma"
+    },
+    {
+      "name": "Stage the corrected migration history",
+      "ok": true,
+      "ms": 1,
+      "detail": "/tmp/rl-recovery-uBzVND/fixed/prisma/schema.prisma"
+    },
+    {
+      "name": "Create the drill database (drill_incident_83ac968b)",
+      "ok": true,
+      "ms": 141,
+      "detail": "drill_incident_83ac968b"
+    },
+    {
+      "name": "Apply the real migration history with migrate deploy",
+      "ok": true,
+      "ms": 1599,
+      "detail": "All migrations have been successfully applied."
+    },
+    {
+      "name": "Confirm zero drift before the incident",
+      "ok": true,
+      "ms": 1498,
+      "detail": "no difference detected"
+    },
+    {
+      "name": "Load representative synthetic tenant data",
+      "ok": true,
+      "ms": 180,
+      "detail": {
+        "orgs": 2,
+        "projects": 4,
+        "runs": 8,
+        "observations": 24,
+        "jobs": 4,
+        "sessions": 2,
+        "keys": 4
+      }
+    },
+    {
+      "name": "Record integrity checks (pre-incident)",
+      "ok": true,
+      "ms": 91,
+      "detail": {
+        "organizations": 2,
+        "projects": 4,
+        "measurementRuns": 8,
+        "observations": 24,
+        "jobs": 4,
+        "sessions": 2,
+        "apiKeys": 4,
+        "orphanedProjects": 0,
+        "orphanedObservations": 0,
+        "observedCount": 8,
+        "failedCount": 8,
+        "unavailableCount": 8,
+        "daysWithMultipleRuns": 1,
+        "keysWithoutScopes": 0,
+        "keysWithQuota": 4,
+        "idempotencyConstraintEnforced": true
+      }
+    },
+    {
+      "name": "Assert the fixture actually represents the risk",
+      "ok": true,
+      "ms": 0,
+      "detail": "2 tenants, 8 runs, 1 day(s) with multiple runs"
+    },
+    {
+      "name": "Take the pre-migration backup with pg_dump",
+      "ok": true,
+      "ms": 117,
+      "detail": "/tmp/rl-recovery-uBzVND/pre-incident.dump"
+    },
+    {
+      "name": "Apply the migration — expected to FAIL",
+      "ok": true,
+      "ms": 1428,
+      "detail": "DETAIL: Key (\"projectId\", \"runDay\")=(cmthqifmo00077dtmhejhb5fc, 2026-06-15) is duplicated."
+    },
+    {
+      "name": "Diagnose what the failure actually left behind",
+      "ok": true,
+      "ms": 239,
+      "detail": "schema unchanged (transactional DDL); only the migration history is damaged"
+    },
+    {
+      "name": "Confirm the deployment pipeline is now wedged",
+      "ok": true,
+      "ms": 1389,
+      "detail": "P3009 — new migrations will not be applied"
+    },
+    {
+      "name": "Confirm migrate status names the recovery command",
+      "ok": true,
+      "ms": 1426,
+      "detail": "prisma migrate resolve --rolled-back \"20260831000000_measurementrun_one_run_per_day\""
+    },
+    {
+      "name": "Undo any partial schema change (prisma db execute)",
+      "ok": true,
+      "ms": 1285,
+      "detail": "no-op (nothing survived to undo)"
+    },
+    {
+      "name": "Mark the failed migration rolled back (migrate resolve)",
+      "ok": true,
+      "ms": 1385,
+      "detail": "20260831000000_measurementrun_one_run_per_day marked as rolled back"
+    },
+    {
+      "name": "Prove migrate deploy succeeds again with the real history",
+      "ok": true,
+      "ms": 1459,
+      "detail": "No pending migrations to apply."
+    },
+    {
+      "name": "Prove migrate status is clean",
+      "ok": true,
+      "ms": 1451,
+      "detail": "up to date"
+    },
+    {
+      "name": "Prove zero drift against the declared schema",
+      "ok": true,
+      "ms": 1318,
+      "detail": "no difference detected"
+    },
+    {
+      "name": "Re-check integrity after recovery",
+      "ok": true,
+      "ms": 92,
+      "detail": {
+        "organizations": 2,
+        "projects": 4,
+        "measurementRuns": 8,
+        "observations": 24,
+        "jobs": 4,
+        "sessions": 2,
+        "apiKeys": 4,
+        "orphanedProjects": 0,
+        "orphanedObservations": 0,
+        "observedCount": 8,
+        "failedCount": 8,
+        "unavailableCount": 8,
+        "daysWithMultipleRuns": 1,
+        "keysWithoutScopes": 0,
+        "keysWithQuota": 4,
+        "idempotencyConstraintEnforced": true
+      }
+    },
+    {
+      "name": "Prove tenant data and relationships are unchanged by the incident",
+      "ok": true,
+      "ms": 0,
+      "detail": "identical to pre-incident"
+    },
+    {
+      "name": "Apply the corrective forward-fix migration",
+      "ok": true,
+      "ms": 1409,
+      "detail": "20260831000001_measurementrun_daily_index_corrected applied"
+    },
+    {
+      "name": "Prove the forward-fix produced the intended shape",
+      "ok": true,
+      "ms": 295,
+      "detail": "nullable column, non-unique index, 4 project-day group(s) with multiple runs preserved"
+    },
+    {
+      "name": "Re-check integrity after the forward-fix",
+      "ok": true,
+      "ms": 90,
+      "detail": {
+        "organizations": 2,
+        "projects": 4,
+        "measurementRuns": 8,
+        "observations": 24,
+        "jobs": 4,
+        "sessions": 2,
+        "apiKeys": 4,
+        "orphanedProjects": 0,
+        "orphanedObservations": 0,
+        "observedCount": 8,
+        "failedCount": 8,
+        "unavailableCount": 8,
+        "daysWithMultipleRuns": 1,
+        "keysWithoutScopes": 0,
+        "keysWithQuota": 4,
+        "idempotencyConstraintEnforced": true
+      }
+    },
+    {
+      "name": "Prove the forward-fix preserved tenant data and integrity",
+      "ok": true,
+      "ms": 0,
+      "detail": "identical to pre-incident"
+    },
+    {
+      "name": "Prove the schema is usable by the application afterwards",
+      "ok": true,
+      "ms": 84,
+      "detail": "wrote and read back org/project/run/observation through the generated client"
+    },
+    {
+      "name": "Prove the forward-fix blast radius is exactly what it claims",
+      "ok": true,
+      "ms": 1382,
+      "detail": "2 statement(s), all confined to runDay"
+    },
+    {
+      "name": "Create the restore target (drill_restore_83ac968b)",
+      "ok": true,
+      "ms": 131,
+      "detail": "drill_restore_83ac968b"
+    },
+    {
+      "name": "Restore the pre-migration backup (the escape hatch)",
+      "ok": true,
+      "ms": 247,
+      "detail": "restored"
+    },
+    {
+      "name": "Prove migrate deploy succeeds on the restored copy with zero drift",
+      "ok": true,
+      "ms": 4181,
+      "detail": "deploy clean, status up to date, no drift"
+    },
+    {
+      "name": "Check integrity on the restored copy",
+      "ok": true,
+      "ms": 95,
+      "detail": {
+        "organizations": 2,
+        "projects": 4,
+        "measurementRuns": 8,
+        "observations": 24,
+        "jobs": 4,
+        "sessions": 2,
+        "apiKeys": 4,
+        "orphanedProjects": 0,
+        "orphanedObservations": 0,
+        "observedCount": 8,
+        "failedCount": 8,
+        "unavailableCount": 8,
+        "daysWithMultipleRuns": 1,
+        "keysWithoutScopes": 0,
+        "keysWithQuota": 4,
+        "idempotencyConstraintEnforced": true
+      }
+    },
+    {
+      "name": "Prove the restored copy matches the pre-migration state",
+      "ok": true,
+      "ms": 0,
+      "detail": "identical to pre-incident"
+    }
+  ],
+  "result": "passed"
+}

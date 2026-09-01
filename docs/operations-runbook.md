@@ -94,7 +94,7 @@ production-shaped dataset, dumps, restores into an isolated database, and
 compares integrity field by field. Runs in CI on every push. The full hosted
 procedure is `docs/hosted-postgres-validation.md`.
 
-### Rolling back
+### Recovering from a failed migration
 
 Prisma has no `migrate down`. The strategy is **forward-fix**, with restore as
 the escape hatch:
@@ -105,6 +105,99 @@ the escape hatch:
    in step 1. There is no cleverer option, which is why step 1 is not optional.
 3. Write a new forward migration that corrects the state. Never edit an applied
    migration file — it has already run somewhere.
+
+#### Why forward-fix rather than rollback
+
+Not a preference. Prisma's supported recovery surface is
+`migrate resolve --applied|--rolled-back`, and `--rolled-back` is **only valid
+for a migration Prisma recorded as failed** — it errors on one that succeeded.
+Undoing a *successful* migration therefore means hand-writing a down script
+(`migrate diff --to-migrations --script`, applied with `db execute`) and then
+hand-editing `_prisma_migrations`: two unsupported operations that manufacture
+exactly the drift `npm run db:drift` exists to catch. And a down script cannot
+bring back data — re-adding a dropped column gives you a column of nulls. So
+forward-fix is the default, and restore is the answer for the one case
+forward-fix cannot address.
+
+#### What a failed migration actually looks like
+
+Measured, not assumed — `npm run db:recovery-drill` observes this on every CI
+run rather than hard-coding it:
+
+PostgreSQL applies DDL transactionally and Prisma sends a migration as one
+implicit transaction, so **a migration whose statements can all run inside a
+transaction leaves the schema untouched when it fails**. What it damages is the
+*history*: `_prisma_migrations` keeps a row with `finished_at` null, and every
+subsequent `prisma migrate deploy` — including migrations that have nothing to do
+with the failure — refuses with **P3009**.
+
+For that class of migration the incident is a wedged deployment pipeline, not a
+corrupt schema, so check the history before hunting for half-applied DDL.
+
+**The exception, and it matters here.** Some statements cannot run inside a
+transaction — `CREATE INDEX CONCURRENTLY` above all, and several `ALTER TYPE`
+forms. A migration containing one of those *can* genuinely leave a half-applied
+schema, and the reassurance above does not apply to it. The drill rehearses the
+transactional case only, so if the failed migration contains a
+non-transactional statement, inspect the schema directly — do not assume it
+rolled back.
+
+#### The recovery, command by command
+
+```bash
+# 1. See it. Prisma names the failed migration and prints the fix.
+npm run db:status
+
+# 2. Undo any partial schema change. On PostgreSQL there is usually none, but
+#    run it anyway — write it idempotently (DROP ... IF EXISTS) and it costs
+#    nothing to be sure.
+npx prisma db execute --url "$DIRECT_URL" --file undo.sql
+
+# 3. Tell Prisma the migration is not applied.
+npx prisma migrate resolve --rolled-back "<migration_name>"
+
+# 4. Withdraw or correct the bad migration in the repository. A rolled-back
+#    migration that is still in prisma/migrations/ WILL BE RETRIED by the next
+#    deploy. Withdrawing it is safe precisely because it never applied.
+
+# 5. Redeploy and prove the pipeline is unwedged.
+npm run db:deploy
+npm run db:status
+npm run db:drift
+
+# 6. Ship the corrected migration as a NEW migration. Never edit the failed one:
+#    Prisma has recorded its checksum, and changing it turns one recoverable
+#    incident into permanent drift.
+npm run db:deploy
+```
+
+#### Restore instead, when
+
+Forward-fix is the default, but it cannot invent data. Restore from the
+pre-migration backup when **the migration destroyed or transformed data** — a
+dropped column, a narrowed type, a backfill that wrote wrong values, a `DELETE`
+that removed rows to satisfy a constraint. Also restore when drift is detected
+*after* applying, since the database no longer matches any reviewed history.
+Expect to lose everything written between the backup and the restore, and know
+that window before you start.
+
+#### The drill
+
+```bash
+npm run db:recovery-drill -- --report drill-$(date +%Y%m%d).json
+```
+
+Stages the incident above against disposable databases — a migration asserting
+one measurement run per project per UTC day, which legitimate same-day runs
+violate — and then executes the recovery, step by step, asserting each one. It
+runs in CI on every push and fails the build if the incident does not occur, if
+recovery does not produce a zero-drift deployable schema, or if any tenant row
+changes along the way. Its rehearsal migrations live in
+`supertool/scripts/rehearsal-migrations/` and are never added to the product's
+history; `tests/migration-recovery-drill.test.ts` fails the build if one is.
+
+See `docs/evidence/2026-08-31-migration-recovery-drill.md` for what the drill
+proves and, more importantly, what it does not.
 
 **Rehearsed, but never against a hosted provider.** `npm run db:rehearse` runs
 the whole migrate → dump → restore → verify cycle against a synthetic
