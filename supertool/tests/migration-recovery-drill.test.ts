@@ -192,4 +192,16 @@ describe('the runbook documents the rehearsed procedure', () => {
   it('still says when restoring beats forward-fixing', () => {
     expect(runbook).toMatch(/destroyed or transformed data/i);
   });
+
+  it('does not overstate the transactional-DDL finding', () => {
+    // The runbook is what an operator reads under pressure, so an unqualified
+    // "a failed migration leaves the schema untouched" is the most dangerous
+    // place for this claim to live. The drill only ever observed it for
+    // migrations whose statements can all run inside a transaction;
+    // CREATE INDEX CONCURRENTLY and several ALTER TYPE forms cannot, and can
+    // genuinely leave a half-applied schema.
+    expect(runbook, 'runbook must carry the non-transactional DDL caveat')
+      .toMatch(/CONCURRENTLY/);
+    expect(runbook).toMatch(/do not assume it\s+rolled back/i);
+  });
 });

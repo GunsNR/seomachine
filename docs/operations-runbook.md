@@ -125,13 +125,22 @@ Measured, not assumed — `npm run db:recovery-drill` observes this on every CI
 run rather than hard-coding it:
 
 PostgreSQL applies DDL transactionally and Prisma sends a migration as one
-implicit transaction, so **a migration that fails partway leaves the schema
-untouched**. What it damages is the *history*: `_prisma_migrations` keeps a row
-with `finished_at` null, and every subsequent `prisma migrate deploy` — including
-migrations that have nothing to do with the failure — refuses with **P3009**.
+implicit transaction, so **a migration whose statements can all run inside a
+transaction leaves the schema untouched when it fails**. What it damages is the
+*history*: `_prisma_migrations` keeps a row with `finished_at` null, and every
+subsequent `prisma migrate deploy` — including migrations that have nothing to do
+with the failure — refuses with **P3009**.
 
-The incident is a wedged deployment pipeline, not a corrupt schema. Do not go
-looking for half-applied DDL before checking that.
+For that class of migration the incident is a wedged deployment pipeline, not a
+corrupt schema, so check the history before hunting for half-applied DDL.
+
+**The exception, and it matters here.** Some statements cannot run inside a
+transaction — `CREATE INDEX CONCURRENTLY` above all, and several `ALTER TYPE`
+forms. A migration containing one of those *can* genuinely leave a half-applied
+schema, and the reassurance above does not apply to it. The drill rehearses the
+transactional case only, so if the failed migration contains a
+non-transactional statement, inspect the schema directly — do not assume it
+rolled back.
 
 #### The recovery, command by command
 
