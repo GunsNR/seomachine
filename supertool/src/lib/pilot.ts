@@ -1,4 +1,5 @@
 import 'server-only';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 
 /**
@@ -10,20 +11,30 @@ import { z } from 'zod';
  * user and a public URL — so the gate is opt-in, driven entirely by
  * environment, and enforced on the server.
  *
- * Three rules shape everything below.
+ * Four rules shape everything below.
  *
- * **Explicit, never inferred.** `PILOT_MODE` switches the gate on only when it
- * is literally `true`. A truthy-looking `1`, `yes` or `on` does not count. An
- * operator who mistypes the flag gets the open behaviour they can see rather
- * than a silent half-state, and `PILOT_ALLOWED_EMAILS` on its own never
- * activates anything — a list that looks like protection but is not would be
- * the worst outcome of the three.
+ * **Explicit, never inferred, and never approximately.** `PILOT_MODE` has three
+ * states, not two. Unset or `false` means open, which a deployment may
+ * legitimately want. `true` means invitation-only. **Anything else is a
+ * configuration error and blocks every signup** — `1`, `yes` and `on` included.
+ * An operator who writes one of those meant to close the door; treating the
+ * value as "not true, so open" would leave a public signup form on a
+ * deployment whose owner believes it is closed, which is the worst of the three
+ * possible readings.
  *
- * **Fail closed, not open.** Once the gate is on, a missing or malformed
- * allowlist refuses every signup. The alternative — treating an unreadable
- * allowlist as "no restriction" — turns a typo in an environment variable into
- * an open signup form on a public URL, which is the exact failure this module
- * exists to prevent.
+ * **Fail closed, not open.** Once the gate is engaged, a missing or malformed
+ * allowlist, or a missing or weak invitation code, refuses every signup. The
+ * alternative — treating unreadable configuration as "no restriction" — turns a
+ * typo in an environment variable into an open signup form on a public URL,
+ * which is the exact failure this module exists to prevent.
+ *
+ * **Knowing an address is not proof.** An allowlist alone authenticates
+ * nothing: an address is not a secret, and anyone who learns one before its
+ * owner signs up can claim that account. `PILOT_INVITE_CODE` is the second
+ * factor — a shared secret the operator hands to invitees out of band. It is
+ * not a per-person token and does not pretend to be one; it raises the bar from
+ * "guess who was invited" to "hold a 32-character secret", which is the right
+ * bar for a pilot and the wrong one for a public programme.
  *
  * **One malformed entry invalidates the list.** A stray character in a
  * comma-separated variable would otherwise silently drop one person's access,
@@ -35,10 +46,37 @@ import { z } from 'zod';
  * returns a decision. It performs no I/O, logs nothing, and knows nothing about
  * requests — so the route can be tested through it, and it can be tested
  * without a route.
+ *
+ * **The invitation code never leaves this module.** It is read from the
+ * environment, compared in constant time against a presented value, and never
+ * returned, logged, hashed into a log line, persisted, or included in any
+ * response. `PilotGate` carries it because the comparison happens here; nothing
+ * else may read that field.
  */
 
 export const PILOT_MODE_ENV = 'PILOT_MODE';
 export const PILOT_ALLOWLIST_ENV = 'PILOT_ALLOWED_EMAILS';
+export const PILOT_INVITE_CODE_ENV = 'PILOT_INVITE_CODE';
+
+/**
+ * Minimum invitation-code length.
+ *
+ * 32 characters is what `openssl rand -base64 24` produces and is far past
+ * anything an online attacker can reach through a rate-limited form.
+ */
+export const MIN_INVITE_CODE_LENGTH = 32;
+
+/**
+ * Minimum distinct characters in an invitation code.
+ *
+ * A length check alone accepts `aaaaaaaa…` and `12341234…`, which are 32
+ * characters of nothing. This is a padding-and-repetition guard, **not** an
+ * entropy estimator: it cannot tell a random string from a memorable one, and
+ * it is not trying to. Any output of `openssl rand -base64 24` clears 12
+ * distinct characters comfortably, and the real guarantee comes from
+ * generating the code that way rather than from this check passing.
+ */
+const MIN_DISTINCT_CHARACTERS = 12;
 
 /**
  * Just the shape these helpers read.
@@ -52,16 +90,17 @@ export type EnvLike = Record<string, string | undefined>;
  * The single refusal message.
  *
  * Every rejected signup gets this exact string, whatever the reason: the
- * address is not on the list, the list is unusable, or an account already
- * exists. Three different facts, one indistinguishable response — otherwise
- * the form becomes an oracle that answers "is this address invited?" and "is
- * this address registered?" to anyone who asks.
+ * address is not on the list, the code is wrong or absent, the configuration is
+ * unusable, or an account already exists. Four different facts, one
+ * indistinguishable response — otherwise the form becomes an oracle that
+ * answers "is this address invited?", "is this address registered?" and, worst,
+ * "was that code right?" to anyone who asks.
  *
  * It is also the message a legitimately invited person sees when they mistype
- * their address, so it says what to do next rather than only what went wrong.
+ * something, so it says what to do next rather than only what went wrong.
  */
 export const PILOT_REFUSAL_MESSAGE =
-  'This pilot is invitation-only. If you were invited, use the address the invitation was sent to. ' +
+  'This pilot is invitation-only. Check the email address and invitation code you were sent. ' +
   'If you already have an account, sign in instead.';
 
 /**
@@ -78,9 +117,21 @@ export function normalizeEmail(raw: string): string {
   return raw.trim().toLowerCase();
 }
 
-/** Whether the pilot gate is switched on. Exact match on `true`, by design. */
-export function pilotModeEnabled(env: EnvLike = process.env): boolean {
-  return (env[PILOT_MODE_ENV] ?? '').trim().toLowerCase() === 'true';
+/** What `PILOT_MODE` is set to, as a decision rather than a boolean. */
+export type PilotModeSetting =
+  /** Unset or an explicit `false`. Signup stays open. */
+  | 'off'
+  /** Exactly `true`. Invitation-only. */
+  | 'on'
+  /** Set to something else entirely. A configuration error. */
+  | 'invalid';
+
+export function pilotModeSetting(env: EnvLike = process.env): PilotModeSetting {
+  const raw = (env[PILOT_MODE_ENV] ?? '').trim().toLowerCase();
+  if (raw === '') return 'off';
+  if (raw === 'true') return 'on';
+  if (raw === 'false') return 'off';
+  return 'invalid';
 }
 
 const EmailEntry = z.string().email();
@@ -121,17 +172,64 @@ export function parseAllowlist(raw: string | undefined): ParsedAllowlist {
   return { allowed, invalid };
 }
 
+/** Why the gate is refusing everything. Reported only where a token is required. */
+export type PilotClosedReason =
+  | 'invalid-mode-flag'
+  | 'missing-allowlist'
+  | 'invalid-allowlist'
+  | 'missing-invite-code'
+  | 'weak-invite-code';
+
 export type PilotGate =
   /** The gate is off. Signup behaves as it always has. */
   | { mode: 'open' }
-  /** The gate is on and unusable. Every signup is refused. */
-  | { mode: 'closed'; reason: 'missing-allowlist' | 'invalid-allowlist'; invalidEntries: number }
-  /** The gate is on and working. Only these addresses may sign up. */
-  | { mode: 'gated'; allowed: ReadonlySet<string> };
+  /** The gate is engaged and unusable. Every signup is refused. */
+  | { mode: 'closed'; reason: PilotClosedReason; invalidEntries: number }
+  /**
+   * The gate is engaged and working. Only these addresses, presenting this
+   * code, may sign up.
+   *
+   * `inviteCode` is a secret. Read it only to pass it to
+   * `inviteCodeMatches`; never log, return, persist or otherwise surface it.
+   */
+  | { mode: 'gated'; allowed: ReadonlySet<string>; inviteCode: string };
+
+/** Whether a configured code is long and varied enough to be worth having. */
+export function inviteCodeIsStrong(code: string): boolean {
+  if (code.length < MIN_INVITE_CODE_LENGTH) return false;
+  return new Set(code).size >= MIN_DISTINCT_CHARACTERS;
+}
+
+/**
+ * Constant-time comparison of a presented code against the configured one.
+ *
+ * Both sides are digested first so the comparison is over two fixed-length
+ * buffers. Comparing the raw strings would mean either refusing a
+ * length mismatch up front — which leaks the configured length one probe at a
+ * time — or feeding `timingSafeEqual` buffers it throws on. Hashing removes the
+ * question: every comparison does identical work whatever was presented.
+ *
+ * The digests exist for the length of this call and are never returned or
+ * logged. Hashing a secret *into a log line* is exactly as forbidden as
+ * printing it.
+ */
+export function inviteCodeMatches(configured: string, presented: string): boolean {
+  const a = createHash('sha256').update(configured).digest();
+  const b = createHash('sha256').update(presented.trim()).digest();
+  return timingSafeEqual(a, b);
+}
 
 /** Read the environment and decide what signup should do. */
 export function pilotGate(env: EnvLike = process.env): PilotGate {
-  if (!pilotModeEnabled(env)) return { mode: 'open' };
+  const setting = pilotModeSetting(env);
+
+  if (setting === 'off') return { mode: 'open' };
+
+  // A value that is neither `true` nor `false` is an operator who meant
+  // something and did not get it. Refuse rather than guess which.
+  if (setting === 'invalid') {
+    return { mode: 'closed', reason: 'invalid-mode-flag', invalidEntries: 0 };
+  }
 
   const { allowed, invalid } = parseAllowlist(env[PILOT_ALLOWLIST_ENV]);
 
@@ -140,50 +238,84 @@ export function pilotGate(env: EnvLike = process.env): PilotGate {
     return { mode: 'closed', reason: 'missing-allowlist', invalidEntries: 0 };
   }
 
-  return { mode: 'gated', allowed: new Set(allowed) };
+  // Trimmed, because trailing whitespace in a pasted secret is a real hazard
+  // and an invisible one. The presented value is trimmed the same way.
+  const inviteCode = (env[PILOT_INVITE_CODE_ENV] ?? '').trim();
+
+  if (!inviteCode) return { mode: 'closed', reason: 'missing-invite-code', invalidEntries: 0 };
+  if (!inviteCodeIsStrong(inviteCode)) {
+    return { mode: 'closed', reason: 'weak-invite-code', invalidEntries: 0 };
+  }
+
+  return { mode: 'gated', allowed: new Set(allowed), inviteCode };
+}
+
+export interface SignupAttempt {
+  /** Already normalised — see `normalizeEmail`. */
+  email: string;
+  /** Whatever the caller supplied, or '' when they supplied nothing. */
+  inviteCode: string;
 }
 
 /**
- * Whether this address may create an account.
+ * Whether this attempt may create an account.
  *
- * Takes an already-normalised address. Normalising here instead would let a
- * caller forget to normalise the value it then writes to the database, which
- * is the mismatch `normalizeEmail`'s comment warns about.
+ * Both conditions are evaluated before either is consulted, so a wrong address
+ * and a wrong code cost the same work. Short-circuiting on the address would
+ * make "not invited" measurably cheaper than "wrong code", which is a
+ * distinction the single refusal message exists to deny.
  */
-export function isSignupAllowed(gate: PilotGate, normalizedEmail: string): boolean {
+export function isSignupAllowed(gate: PilotGate, attempt: SignupAttempt): boolean {
   switch (gate.mode) {
     case 'open':
       return true;
     case 'closed':
       return false;
-    case 'gated':
-      return gate.allowed.has(normalizedEmail);
+    case 'gated': {
+      const emailOk = gate.allowed.has(attempt.email);
+      const codeOk = inviteCodeMatches(gate.inviteCode, attempt.inviteCode);
+      return emailOk && codeOk;
+    }
   }
 }
 
+/** Whether signup accepts anyone, i.e. the gate is not engaged at all. */
+export function signupIsOpen(env: EnvLike = process.env): boolean {
+  return pilotGate(env).mode === 'open';
+}
+
+export type SignupPosture = 'open' | 'invitation-only' | `misconfigured:${PilotClosedReason}`;
+
 /**
- * One word for the deployment's signup posture, for the detailed health view.
+ * The deployment's signup posture, for the detailed health view.
  *
- * An operator whose allowlist is malformed sees an identical refusal to
+ * An operator whose configuration is broken sees an identical refusal to
  * everyone else — that is the point of the single message — so they need
- * somewhere else to find out. This is that somewhere. It reports the shape of
- * the configuration and never the addresses in it.
+ * somewhere else to find out, and a reason rather than just a flag. This is
+ * that somewhere. It names which variable is wrong and never its contents: no
+ * address, no code, no length, no digest.
+ *
+ * It is reported only behind `HEALTH_TOKEN`. The public probe says nothing
+ * about it, because "this deployment's invite configuration is broken" is a
+ * useful thing for an attacker to know and a useless thing for a load balancer.
  */
-export function signupPosture(
-  env: EnvLike = process.env,
-): 'open' | 'invitation-only' | 'misconfigured-allowlist' {
+export function signupPosture(env: EnvLike = process.env): SignupPosture {
   const gate = pilotGate(env);
   if (gate.mode === 'open') return 'open';
-  if (gate.mode === 'closed') return 'misconfigured-allowlist';
+  if (gate.mode === 'closed') return `misconfigured:${gate.reason}`;
   return 'invitation-only';
 }
 
 /**
- * Whether an allowlist is configured while the gate is off.
+ * Whether pilot configuration is present while the gate is off.
  *
  * A deployment in this state looks protected in its environment variables and
  * is not. Worth a warning line at the one place that can see both facts.
+ * Checks presence only — the code's value is never inspected here.
  */
-export function allowlistSetButPilotModeOff(env: EnvLike = process.env): boolean {
-  return !pilotModeEnabled(env) && normalizeEmail(env[PILOT_ALLOWLIST_ENV] ?? '').length > 0;
+export function pilotConfigSetButModeOff(env: EnvLike = process.env): boolean {
+  if (pilotModeSetting(env) !== 'off') return false;
+  const hasList = (env[PILOT_ALLOWLIST_ENV] ?? '').trim().length > 0;
+  const hasCode = (env[PILOT_INVITE_CODE_ENV] ?? '').trim().length > 0;
+  return hasList || hasCode;
 }

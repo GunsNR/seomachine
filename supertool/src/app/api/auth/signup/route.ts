@@ -6,7 +6,13 @@ import { TRIAL_DAYS } from '@/lib/billing';
 import { clientIp, clientKey } from '@/lib/client-ip';
 import { db } from '@/lib/db';
 import { sendEmail, welcomeEmail } from '@/lib/email';
-import { isSignupAllowed, normalizeEmail, PILOT_REFUSAL_MESSAGE, pilotGate } from '@/lib/pilot';
+import {
+  isSignupAllowed,
+  normalizeEmail,
+  PILOT_REFUSAL_MESSAGE,
+  pilotConfigSetButModeOff,
+  pilotGate,
+} from '@/lib/pilot';
 import { rateLimitHeaders, sharedRateLimit } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
@@ -22,6 +28,14 @@ const Body = z.object({
   password: z.string().min(10, 'Use at least 10 characters.').max(200),
   company: z.string().max(160).optional(),
   domain: z.string().max(255).optional(),
+  // Optional at the schema level on purpose. Making it required would answer a
+  // request with no code with a 400 "check the form", which is a different
+  // response from the gate's 403 — and a caller who can tell those apart has
+  // learned that this deployment wants a code. The gate decides, and refuses
+  // identically whether the code was absent, wrong, or right for the wrong
+  // address. Bounded generously: the value is never stored, so the only reason
+  // to cap it is to keep a caller from posting a novel.
+  inviteCode: z.string().max(500).optional(),
 });
 
 /**
@@ -54,9 +68,11 @@ function emailBucketKey(normalizedEmail: string): string {
 /**
  * The one refusal, used for every reason a gated signup can fail.
  *
- * Not on the allowlist, allowlist unusable, and account already exists all
- * return this. Status, body and headers are identical, so the response carries
- * no information about which case occurred.
+ * Not on the allowlist, wrong or absent invitation code, configuration
+ * unusable, and account already exists all return this. Status, body and
+ * headers are identical, so the response carries no information about which
+ * case occurred — and in particular never confirms that a code was close,
+ * correct-but-for-the-address, or expected at all.
  */
 function refuse(): NextResponse {
   return NextResponse.json({ error: PILOT_REFUSAL_MESSAGE }, { status: 403 });
@@ -108,18 +124,37 @@ export async function POST(req: Request) {
   // correct a mistyped allowlist by redeploying variables without a rebuild.
   const gate = pilotGate();
 
+  if (gate.mode === 'open' && pilotConfigSetButModeOff()) {
+    // A deployment with an allowlist or an invitation code but no PILOT_MODE
+    // looks protected in its environment variables and is not. Nobody would
+    // otherwise find out until a stranger had an account, so say it here —
+    // presence only, never the list and never the code.
+    //
+    // Said on every attempt rather than once per process. The volume is capped
+    // by the rate limits above, the state is a misconfiguration nobody should
+    // be sitting in, and a warning that scrolled past hours ago helps no one.
+    console.warn(
+      'signup: PILOT_ALLOWED_EMAILS or PILOT_INVITE_CODE is set but PILOT_MODE is not "true". ' +
+        'Signup is OPEN. Set PILOT_MODE=true to enforce the allowlist and invitation code.',
+    );
+  }
+
   if (gate.mode === 'closed') {
     // The caller is told nothing, so the operator has to be told something —
     // this and the detailed health view are the only places the misconfiguration
-    // is visible. Counts only: the addresses themselves never reach a log.
+    // is visible. The reason names which variable is wrong; nothing here
+    // carries an address, and nothing carries the invitation code, its length
+    // or a digest of it. Hashing a secret into a log line is exactly as
+    // forbidden as printing it.
     console.error(
-      `signup: PILOT_MODE is on but the allowlist is unusable (${gate.reason}, ` +
-        `${gate.invalidEntries} malformed entries). Every signup is being refused.`,
+      `signup: pilot configuration is unusable (${gate.reason}` +
+        `${gate.invalidEntries > 0 ? `, ${gate.invalidEntries} malformed allowlist entries` : ''}). ` +
+        'Every signup is being refused.',
     );
     return refuse();
   }
 
-  if (!isSignupAllowed(gate, email)) return refuse();
+  if (!isSignupAllowed(gate, { email, inviteCode: input.inviteCode ?? '' })) return refuse();
 
   const existing = await db.user.findUnique({ where: { email }, select: { id: true } });
   if (existing) {

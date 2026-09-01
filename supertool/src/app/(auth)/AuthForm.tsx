@@ -23,13 +23,15 @@ export function AuthForm({
    */
   showDemoCredentials?: boolean;
   /**
-   * Whether this deployment refuses signups from addresses it was not given.
+   * Whether this deployment refuses signups without an approved address and a
+   * matching invitation code.
    *
-   * Presentation only. The gate lives in `POST /api/auth/signup` and a caller
-   * that never loads this page is refused exactly the same way — hiding a form
-   * is not access control. What this changes is honesty: without it the page
-   * offers a free trial to someone who cannot have one, and the refusal
-   * arrives after they have typed a password.
+   * Presentation only, and it adds the code field rather than enforcing it. The
+   * gate lives in `POST /api/auth/signup`, and a caller that never loads this
+   * page — or that posts without the field — is refused exactly the same way.
+   * Hiding a form is not access control. What this changes is honesty: without
+   * it the page offers a free trial to someone who cannot have one, and asks
+   * for no code they will nonetheless be refused for lacking.
    */
   invitationOnly?: boolean;
 }) {
@@ -52,6 +54,10 @@ export function AuthForm({
             password: String(form.get('password') ?? ''),
             company: String(form.get('company') ?? ''),
             domain: String(form.get('domain') ?? ''),
+            // Only present on an invitation-only deployment. Sent as typed;
+            // the server trims and compares it in constant time, and never
+            // stores it.
+            ...(invitationOnly ? { inviteCode: String(form.get('inviteCode') ?? '') } : {}),
           };
 
     try {
@@ -83,13 +89,22 @@ export function AuthForm({
         {mode === 'login'
           ? 'Sign in to your workspace.'
           : invitationOnly
-            ? 'This pilot is invitation-only. Accounts can only be created for email addresses that have been approved in advance.'
+            ? 'This pilot is invitation-only. Creating an account needs both an approved email address and the invitation code you were sent.'
             : 'Fourteen days, every feature, no card required.'}
       </p>
 
       <form onSubmit={onSubmit} className="mt-8 space-y-4">
         {mode === 'signup' && (
           <>
+            {invitationOnly && (
+              <Field
+                id="inviteCode"
+                label="Invitation code"
+                required
+                autoComplete="off"
+                placeholder="From your invitation"
+              />
+            )}
             <Field id="name" label="Your name" autoComplete="name" required />
             <Field id="company" label="Company" autoComplete="organization" />
             <Field id="domain" label="Website" placeholder="yourdomain.com" />

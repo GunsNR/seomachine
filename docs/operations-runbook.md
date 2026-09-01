@@ -24,8 +24,9 @@ battle-tested.
 | `CORS_ALLOWED_ORIGINS` | no | Only origins of connected sites get a CORS grant. |
 | `HEALTH_TOKEN` | no | The detailed health view is unavailable rather than public. |
 | `CRON_SECRET` | no | Scheduled runs are disabled. |
-| `PILOT_MODE` | no | Signup is **open** — correct for a self-hosted install, wrong for a hosted pilot on a public URL. Must be literally `true` to enable the gate; `1`, `yes` and `on` do not. |
-| `PILOT_ALLOWED_EMAILS` | yes when `PILOT_MODE=true` | Comma-separated allowlist. With the gate on, a missing, empty or malformed list refuses **every** signup, invited ones included. See §4. |
+| `PILOT_MODE` | no | Unset or `false`: signup is **open** — correct for a self-hosted install, wrong for a hosted pilot on a public URL. `true`: invitation-only. **Any other value refuses every signup**, `1`, `yes` and `on` included. See §4. |
+| `PILOT_ALLOWED_EMAILS` | yes when `PILOT_MODE=true` | Comma-separated allowlist. With the gate on, a missing, empty or malformed list refuses **every** signup, invited ones included. |
+| `PILOT_INVITE_CODE` | yes when `PILOT_MODE=true` | Shared invitation secret, ≥ 32 varied characters (`openssl rand -base64 24`). Missing or weak refuses every signup. Never logged, returned or persisted. Rotate or remove it once the intended accounts exist. |
 
 `TRUSTED_PROXY_COUNT` is the one that is easy to get wrong in both directions.
 Set it to the number of proxies that will **always** be in front of the app.
@@ -326,31 +327,63 @@ Phase 2 closed these. Each has a regression test named beside it.
 
 Signup is open by default. That is correct for a self-hosted install — there is
 nobody to issue an invitation — and wrong for a hosted pilot, where the URL is
-public and the intended user list has one name on it. `PILOT_MODE=true` plus
-`PILOT_ALLOWED_EMAILS` closes it. Four properties are worth knowing before you
-rely on it:
+public and the intended user list has one name on it. `PILOT_MODE=true`,
+`PILOT_ALLOWED_EMAILS` and `PILOT_INVITE_CODE` close it. **All three are
+required together**: with the gate on, an allowlisted address presenting the
+wrong code is refused, and so is the correct code from an address that is not
+on the list.
+
+`PILOT_MODE` has three states, and the third is the one worth reading twice:
+
+| Value | Effect |
+| --- | --- |
+| unset, or `false` | Signup is open. A deployment may legitimately want this. |
+| `true` | Invitation-only. |
+| anything else | **Configuration error. Every signup is refused.** |
+
+`1`, `yes` and `on` land in the third row. Someone who writes one of those meant
+to close the door; reading the value as "not `true`, therefore open" would leave
+a public signup form on a deployment whose owner believes it is shut, which is
+the worst of the three possible readings.
+
+Five properties are worth knowing before you rely on any of it:
 
 - **The gate is in the route, not the page.** `POST /api/auth/signup` enforces
-  it. A caller with `curl` and no browser is refused identically.
-- **It fails closed.** With the gate on, a missing, empty or malformed allowlist
-  refuses every signup rather than falling back to open. One malformed entry
+  it. A caller with `curl`, no browser, and no `inviteCode` field at all is
+  refused identically.
+- **It fails closed, on every input.** A bad mode flag, a missing, empty or
+  malformed allowlist, or a missing or weak invitation code each refuse every
+  signup rather than falling back to open. One malformed allowlist entry
   invalidates the whole list on purpose: silently dropping one address would
   lock a person out while the deployment looked healthy.
-- **Refusals are indistinguishable.** Not invited, allowlist broken and account
-  already exists all return the same status and the same message, so the form
-  cannot be used to discover who is invited or who is registered. The cost is
-  that a broken allowlist is invisible from outside — read
-  `checks.signup` in the detailed health view, which reports
-  `invitation-only` or `misconfigured-allowlist`, and watch for the
-  `signup: PILOT_MODE is on but the allowlist is unusable` log line.
+- **Refusals are indistinguishable.** Wrong code, uninvited address, broken
+  configuration and "account already exists" all return the same status and the
+  same message, so the form cannot be used to discover who is invited, who is
+  registered, or whether a code was close. The address and the code are checked
+  without short-circuiting, so a wrong address and a wrong code also cost the
+  same time. The cost of all this is that a broken configuration is invisible
+  from outside — read `checks.signup` in the detailed health view, which reports
+  `invitation-only` or `misconfigured:<reason>` naming the wrong variable, and
+  watch for the `signup: pilot configuration is unusable` log line.
+- **The code never appears anywhere but the comparison.** It is not logged, not
+  returned, not persisted, and not hashed into a log line. Comparison is
+  constant-time over SHA-256 digests of both sides, so neither its value nor its
+  length leaks through timing or through a length-mismatch shortcut.
 - **It governs account creation only.** Sign-in and password reset never read
-  the allowlist, so removing an address cannot lock its owner out of an account
-  they already hold, and adding one grants nothing until they sign up.
+  any of it. An existing user never needs the code, removing their address
+  cannot lock them out of an account they already hold, and adding an address
+  grants nothing until someone signs up with it.
 
-What it does **not** do: the allowlist is not an invitation token. Anyone who
-learns an allowlisted address before its owner signs up can claim that account.
-For a pilot whose addresses are not public that is an acceptable trade; a wider
-programme needs single-use invitations, which this is not.
+**Rotate or remove the code once the intended accounts exist.** It is a single
+shared secret, not a per-person token: every invitee holds the same string, and
+anyone they forward it to can sign up for as long as their address is still
+listed. Replacing `PILOT_INVITE_CODE`, or clearing `PILOT_ALLOWED_EMAILS` —
+which fails closed rather than opening up — costs nothing and shuts that window.
+Existing accounts are unaffected by either.
+
+What this still does **not** do: it is not a per-person invitation. Two people
+sharing one code are indistinguishable to the server, and nothing expires on its
+own. A wider programme needs single-use invitations, which this is not.
 
 Behaviour is covered by `tests/pilot.test.ts` and `tests/pilot-signup.test.ts`.
 

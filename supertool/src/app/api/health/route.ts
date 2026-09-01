@@ -113,10 +113,15 @@ export async function GET(req: Request) {
         // unconfigured mode, and a self-hosted install may want none of them.
         billing: billingEnabled() ? 'stripe' : 'disabled-self-hosted',
         // Every refused signup returns one indistinguishable message, so a
-        // broken allowlist is invisible from outside on purpose. This is where
-        // the operator finds out. `misconfigured-allowlist` means PILOT_MODE is
-        // on and every signup is being refused, including invited ones. Reports
-        // the shape of the configuration, never the addresses in it.
+        // broken pilot configuration is invisible from outside on purpose. This
+        // is where the operator finds out, and it names which variable is
+        // wrong: `misconfigured:invalid-mode-flag` for a PILOT_MODE that is
+        // neither `true` nor `false`, and `missing-allowlist`,
+        // `invalid-allowlist`, `missing-invite-code` or `weak-invite-code` for
+        // the rest. Every one of those means signup is refusing everybody,
+        // invited people included. Reports the shape of the configuration
+        // only — never an address, never the invitation code, and never its
+        // length or a digest of it.
         signup: signupPosture(),
         email: emailProvider(),
         keywordData: providerConfigured() ? 'provider' : 'modelled',
