@@ -11,6 +11,7 @@ const inputCls =
 export function AuthForm({
   mode,
   showDemoCredentials = false,
+  invitationOnly = false,
 }: {
   mode: 'login' | 'signup';
   /**
@@ -21,6 +22,18 @@ export function AuthForm({
    * workspace, and on a deployment with no demo data the hint is simply false.
    */
   showDemoCredentials?: boolean;
+  /**
+   * Whether this deployment refuses signups without an approved address and a
+   * matching invitation code.
+   *
+   * Presentation only, and it adds the code field rather than enforcing it. The
+   * gate lives in `POST /api/auth/signup`, and a caller that never loads this
+   * page — or that posts without the field — is refused exactly the same way.
+   * Hiding a form is not access control. What this changes is honesty: without
+   * it the page offers a free trial to someone who cannot have one, and asks
+   * for no code they will nonetheless be refused for lacking.
+   */
+  invitationOnly?: boolean;
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -41,6 +54,10 @@ export function AuthForm({
             password: String(form.get('password') ?? ''),
             company: String(form.get('company') ?? ''),
             domain: String(form.get('domain') ?? ''),
+            // Only present on an invitation-only deployment. Sent as typed;
+            // the server trims and compares it in constant time, and never
+            // stores it.
+            ...(invitationOnly ? { inviteCode: String(form.get('inviteCode') ?? '') } : {}),
           };
 
     try {
@@ -62,17 +79,32 @@ export function AuthForm({
   return (
     <div>
       <h1 className="text-display-md">
-        {mode === 'login' ? 'Welcome back' : 'Start your free trial'}
+        {mode === 'login'
+          ? 'Welcome back'
+          : invitationOnly
+            ? 'Private pilot'
+            : 'Start your free trial'}
       </h1>
       <p className="mt-3 text-[0.9375rem] text-body">
         {mode === 'login'
           ? 'Sign in to your workspace.'
-          : 'Fourteen days, every feature, no card required.'}
+          : invitationOnly
+            ? 'This pilot is invitation-only. Creating an account needs both an approved email address and the invitation code you were sent.'
+            : 'Fourteen days, every feature, no card required.'}
       </p>
 
       <form onSubmit={onSubmit} className="mt-8 space-y-4">
         {mode === 'signup' && (
           <>
+            {invitationOnly && (
+              <Field
+                id="inviteCode"
+                label="Invitation code"
+                required
+                autoComplete="off"
+                placeholder="From your invitation"
+              />
+            )}
             <Field id="name" label="Your name" autoComplete="name" required />
             <Field id="company" label="Company" autoComplete="organization" />
             <Field id="domain" label="Website" placeholder="yourdomain.com" />
