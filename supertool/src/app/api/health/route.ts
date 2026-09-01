@@ -5,6 +5,7 @@ import { billingEnabled } from '@/lib/billing';
 import { db } from '@/lib/db';
 import { emailProvider } from '@/lib/email';
 import { queueStats } from '@/lib/jobs/queue';
+import { signupPosture } from '@/lib/pilot';
 import { providerConfigured } from '@/lib/seo/providers/keyword-data';
 
 export const runtime = 'nodejs';
@@ -111,6 +112,12 @@ export async function GET(req: Request) {
         // Reported as information, not failure: each of these has a supported
         // unconfigured mode, and a self-hosted install may want none of them.
         billing: billingEnabled() ? 'stripe' : 'disabled-self-hosted',
+        // Every refused signup returns one indistinguishable message, so a
+        // broken allowlist is invisible from outside on purpose. This is where
+        // the operator finds out. `misconfigured-allowlist` means PILOT_MODE is
+        // on and every signup is being refused, including invited ones. Reports
+        // the shape of the configuration, never the addresses in it.
+        signup: signupPosture(),
         email: emailProvider(),
         keywordData: providerConfigured() ? 'provider' : 'modelled',
         scheduledRuns: process.env.CRON_SECRET ? 'enabled' : 'disabled',

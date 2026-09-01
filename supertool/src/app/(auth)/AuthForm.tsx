@@ -11,6 +11,7 @@ const inputCls =
 export function AuthForm({
   mode,
   showDemoCredentials = false,
+  invitationOnly = false,
 }: {
   mode: 'login' | 'signup';
   /**
@@ -21,6 +22,16 @@ export function AuthForm({
    * workspace, and on a deployment with no demo data the hint is simply false.
    */
   showDemoCredentials?: boolean;
+  /**
+   * Whether this deployment refuses signups from addresses it was not given.
+   *
+   * Presentation only. The gate lives in `POST /api/auth/signup` and a caller
+   * that never loads this page is refused exactly the same way — hiding a form
+   * is not access control. What this changes is honesty: without it the page
+   * offers a free trial to someone who cannot have one, and the refusal
+   * arrives after they have typed a password.
+   */
+  invitationOnly?: boolean;
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
@@ -62,12 +73,18 @@ export function AuthForm({
   return (
     <div>
       <h1 className="text-display-md">
-        {mode === 'login' ? 'Welcome back' : 'Start your free trial'}
+        {mode === 'login'
+          ? 'Welcome back'
+          : invitationOnly
+            ? 'Private pilot'
+            : 'Start your free trial'}
       </h1>
       <p className="mt-3 text-[0.9375rem] text-body">
         {mode === 'login'
           ? 'Sign in to your workspace.'
-          : 'Fourteen days, every feature, no card required.'}
+          : invitationOnly
+            ? 'This pilot is invitation-only. Accounts can only be created for email addresses that have been approved in advance.'
+            : 'Fourteen days, every feature, no card required.'}
       </p>
 
       <form onSubmit={onSubmit} className="mt-8 space-y-4">

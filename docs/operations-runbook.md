@@ -24,6 +24,8 @@ battle-tested.
 | `CORS_ALLOWED_ORIGINS` | no | Only origins of connected sites get a CORS grant. |
 | `HEALTH_TOKEN` | no | The detailed health view is unavailable rather than public. |
 | `CRON_SECRET` | no | Scheduled runs are disabled. |
+| `PILOT_MODE` | no | Signup is **open** — correct for a self-hosted install, wrong for a hosted pilot on a public URL. Must be literally `true` to enable the gate; `1`, `yes` and `on` do not. |
+| `PILOT_ALLOWED_EMAILS` | yes when `PILOT_MODE=true` | Comma-separated allowlist. With the gate on, a missing, empty or malformed list refuses **every** signup, invited ones included. See §4. |
 
 `TRUSTED_PROXY_COUNT` is the one that is easy to get wrong in both directions.
 Set it to the number of proxies that will **always** be in front of the app.
@@ -319,6 +321,38 @@ Phase 2 closed these. Each has a regression test named beside it.
 | Health endpoint | Config and DB errors public | Minimal public, detail behind a token | `tests/health.test.ts` |
 | Referral attribution | Caller could assert `engine` | Always derived; provenance recorded | `tests/lead-attribution.test.ts` |
 | Secrets in logs | `console.error(err)` | Redacted at the boundary | `tests/observability.test.ts` |
+
+### The private-pilot signup gate
+
+Signup is open by default. That is correct for a self-hosted install — there is
+nobody to issue an invitation — and wrong for a hosted pilot, where the URL is
+public and the intended user list has one name on it. `PILOT_MODE=true` plus
+`PILOT_ALLOWED_EMAILS` closes it. Four properties are worth knowing before you
+rely on it:
+
+- **The gate is in the route, not the page.** `POST /api/auth/signup` enforces
+  it. A caller with `curl` and no browser is refused identically.
+- **It fails closed.** With the gate on, a missing, empty or malformed allowlist
+  refuses every signup rather than falling back to open. One malformed entry
+  invalidates the whole list on purpose: silently dropping one address would
+  lock a person out while the deployment looked healthy.
+- **Refusals are indistinguishable.** Not invited, allowlist broken and account
+  already exists all return the same status and the same message, so the form
+  cannot be used to discover who is invited or who is registered. The cost is
+  that a broken allowlist is invisible from outside — read
+  `checks.signup` in the detailed health view, which reports
+  `invitation-only` or `misconfigured-allowlist`, and watch for the
+  `signup: PILOT_MODE is on but the allowlist is unusable` log line.
+- **It governs account creation only.** Sign-in and password reset never read
+  the allowlist, so removing an address cannot lock its owner out of an account
+  they already hold, and adding one grants nothing until they sign up.
+
+What it does **not** do: the allowlist is not an invitation token. Anyone who
+learns an allowlisted address before its owner signs up can claim that account.
+For a pilot whose addresses are not public that is an acceptable trade; a wider
+programme needs single-use invitations, which this is not.
+
+Behaviour is covered by `tests/pilot.test.ts` and `tests/pilot-signup.test.ts`.
 
 ### Closed since the last release
 
