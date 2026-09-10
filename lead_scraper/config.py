@@ -12,7 +12,10 @@ import os
 from pathlib import Path
 from typing import Dict, List, Optional
 
-from dotenv import load_dotenv
+try:  # python-dotenv is listed in data_sources/requirements.txt
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover - keeps unit tests runnable without deps
+    load_dotenv = None
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 ENV_PATH = REPO_ROOT / "data_sources" / "config" / ".env"
@@ -70,6 +73,10 @@ USER_AGENT = "SEOMachineLeadScraper/1.0 (+https://github.com/GunsNR/seomachine)"
 def load_env(env_path: Optional[Path] = None) -> None:
     """Load .env without overriding variables already set in the environment."""
     path = env_path or ENV_PATH
+    if load_dotenv is None:
+        raise ImportError(
+            "python-dotenv is required: pip install -r data_sources/requirements.txt"
+        )
     if path.exists():
         load_dotenv(path, override=False)
 
