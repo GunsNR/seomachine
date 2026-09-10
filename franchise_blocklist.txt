@@ -1,0 +1,6 @@
+# Franchise / national brand domains to exclude from lead output.
+# One root domain per line. Blank lines and # comments ignored.
+# Examples (uncomment or extend as needed):
+# roofconnect.com
+# theroofdepot.com
+# centriaautism.com
