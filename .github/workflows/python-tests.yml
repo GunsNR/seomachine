@@ -1,0 +1,37 @@
+name: Python Tests
+
+# The SuperTool workflow only covers supertool/ and docs/, so the Python
+# workspace tests had no CI. This runs them on any Python change.
+on:
+  push:
+    branches: [main]
+    paths:
+      - '**.py'
+      - 'data_sources/requirements.txt'
+      - '.github/workflows/python-tests.yml'
+  pull_request:
+    paths:
+      - '**.py'
+      - 'data_sources/requirements.txt'
+      - '.github/workflows/python-tests.yml'
+
+concurrency:
+  group: python-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unittest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # The suite under tests/ is dependency-free by design: external clients
+      # are stubbed, so no install step is needed and no API keys are used.
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -v
