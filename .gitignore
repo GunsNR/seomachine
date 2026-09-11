@@ -112,3 +112,7 @@ env/
 # GA4 Credentials (additional explicit entry)
 ga4-credentials.json
 google-analytics-credentials.json
+
+# Lead scraper output (contains scraped contact data)
+output/leads.csv
+output/candidates.csv
