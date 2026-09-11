@@ -15,8 +15,8 @@ from .config import (
     HTTP_TIMEOUT,
     SEMRUSH_DATABASE,
     SEMRUSH_DISPLAY_LIMIT,
-    SEMRUSH_UNITS_PER_LINE,
     USER_AGENT,
+    semrush_units_per_line,
 )
 from .usage import UsageMeter
 
@@ -73,7 +73,7 @@ class SemrushClient:
         rows = parse_phrase_organic(body)
         # Semrush bills per returned line, not per request.
         self.meter.record(
-            "semrush.phrase_organic", calls=0, units=len(rows) * SEMRUSH_UNITS_PER_LINE
+            "semrush.phrase_organic", calls=0, units=len(rows) * semrush_units_per_line()
         )
         return rows
 

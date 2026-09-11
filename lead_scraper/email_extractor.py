@@ -10,7 +10,7 @@ Rules, deliberately strict:
 import logging
 import re
 from typing import List, Optional
-from urllib.parse import unquote, urljoin
+from urllib.parse import unquote, urlparse
 
 import requests
 
@@ -20,7 +20,7 @@ from .usage import UsageMeter
 
 logger = logging.getLogger(__name__)
 
-PAGE_PATHS = ["", "/contact", "/about"]
+PAGE_PATHS = ["/", "/contact", "/about"]
 MAILTO_RE = re.compile(r"""mailto:\s*([^"'?\s>&]+)""", re.IGNORECASE)
 EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
 
@@ -51,6 +51,31 @@ def extract_mailto_emails(html: str, business_domain: str) -> List[str]:
     return found
 
 
+def candidate_urls(website: str) -> List[str]:
+    """
+    Pages to check for a contact address.
+
+    Contact paths are resolved against the site origin, so a Places website
+    such as https://example.com/locations/denver still yields
+    https://example.com/contact rather than .../denver/contact.
+    """
+    raw = website if website.startswith(("http://", "https://")) else f"https://{website}"
+    parsed = urlparse(raw)
+    if not parsed.hostname:
+        return []
+    origin = f"{parsed.scheme}://{parsed.netloc}"
+
+    urls: List[str] = []
+    # A location-specific landing page is the likeliest place for a local email.
+    if parsed.path and parsed.path.strip("/"):
+        urls.append(origin + "/" + parsed.path.strip("/"))
+    for path in PAGE_PATHS:
+        url = origin + path
+        if url not in urls:
+            urls.append(url)
+    return urls
+
+
 class EmailFinder:
     """Fetches homepage, /contact and /about and harvests mailto: addresses."""
 
@@ -77,11 +102,11 @@ class EmailFinder:
         """
         Return the first on-domain mailto: address found, else an empty string.
 
-        Pages are tried in order and the search stops at the first hit.
+        Pages are tried in order and the search stops at the first hit. When
+        the Places website has its own path (a location page, say), that page
+        is tried first, then the origin-level homepage/contact/about.
         """
-        base = website if website.startswith(("http://", "https://")) else f"https://{website}"
-        for path in PAGE_PATHS:
-            url = urljoin(base if base.endswith("/") else base + "/", path.lstrip("/"))
+        for url in candidate_urls(website):
             emails = extract_mailto_emails(self._fetch(url), website)
             if emails:
                 return emails[0]

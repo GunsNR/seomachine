@@ -7,7 +7,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lead_scraper.domains import is_blocked, root_domain, same_root
-from lead_scraper.email_extractor import extract_mailto_emails
+from lead_scraper.config import semrush_units_per_line
+from lead_scraper.email_extractor import candidate_urls, extract_mailto_emails
 from lead_scraper.pipeline import (
     CSV_COLUMNS,
     LeadPipeline,
@@ -30,6 +31,17 @@ class RootDomainTests(unittest.TestCase):
 
     def test_handles_multi_label_suffix(self):
         self.assertEqual(root_domain("shop.example.co.uk"), "example.co.uk")
+        self.assertEqual(root_domain("shop.example.com.ar"), "example.com.ar")
+
+    def test_hosted_platform_tenants_stay_distinct(self):
+        self.assertEqual(root_domain("roofer-one.weebly.com"), "roofer-one.weebly.com")
+        self.assertNotEqual(
+            root_domain("roofer-one.weebly.com"), root_domain("roofer-two.weebly.com")
+        )
+        self.assertEqual(root_domain("denver.roofco.wixsite.com"), "roofco.wixsite.com")
+
+    def test_hosted_tenants_are_not_treated_as_the_same_business(self):
+        self.assertFalse(same_root("roofer-one.weebly.com", "roofer-two.weebly.com"))
 
     def test_same_root_matches_across_subdomains(self):
         self.assertTrue(same_root("http://www.acme.com/x", "acme.com"))
@@ -97,6 +109,46 @@ class QualificationTests(unittest.TestCase):
         self.assertFalse(qualifies({"website": "", "reviews": 500, "locations": 9}, {"min_reviews": 1}))
 
 
+class CandidateUrlTests(unittest.TestCase):
+    def test_contact_paths_resolve_against_the_origin(self):
+        urls = candidate_urls("https://example.com/locations/denver")
+        self.assertIn("https://example.com/contact", urls)
+        self.assertIn("https://example.com/about", urls)
+        self.assertIn("https://example.com/", urls)
+
+    def test_location_page_is_tried_first(self):
+        urls = candidate_urls("https://example.com/locations/denver")
+        self.assertEqual(urls[0], "https://example.com/locations/denver")
+
+    def test_bare_domain_gets_scheme(self):
+        self.assertEqual(
+            candidate_urls("example.com"),
+            ["https://example.com/", "https://example.com/contact", "https://example.com/about"],
+        )
+
+    def test_unparseable_website_yields_nothing(self):
+        self.assertEqual(candidate_urls(""), [])
+
+
+class SemrushUnitOverrideTests(unittest.TestCase):
+    def test_override_is_read_at_call_time(self):
+        import os
+
+        original = os.environ.get("SEMRUSH_UNITS_PER_LINE")
+        try:
+            os.environ["SEMRUSH_UNITS_PER_LINE"] = "4"
+            self.assertEqual(semrush_units_per_line(), 4)
+            os.environ["SEMRUSH_UNITS_PER_LINE"] = "not-a-number"
+            self.assertEqual(semrush_units_per_line(), 10)
+            del os.environ["SEMRUSH_UNITS_PER_LINE"]
+            self.assertEqual(semrush_units_per_line(), 10)
+        finally:
+            if original is None:
+                os.environ.pop("SEMRUSH_UNITS_PER_LINE", None)
+            else:
+                os.environ["SEMRUSH_UNITS_PER_LINE"] = original
+
+
 class EmailExtractionTests(unittest.TestCase):
     def test_keeps_on_domain_mailto_only(self):
         html = (
@@ -126,8 +178,10 @@ class FakeSemrush:
 class FakePlaces:
     def __init__(self, businesses):
         self.businesses = businesses
+        self.lookups = []
 
     def lookup_business(self, domain, city, state):
+        self.lookups.append((domain, city))
         return self.businesses.get(domain)
 
 
@@ -173,6 +227,42 @@ class PipelineTests(unittest.TestCase):
             path = write_leads(leads, Path(tmp) / "leads.csv")
             header = path.read_text(encoding="utf-8").splitlines()[0]
         self.assertEqual(header.split(","), CSV_COLUMNS)
+
+    def test_rejected_domain_is_retried_in_a_later_metro(self):
+        """A domain rejected in metro A must still be checked in metro B."""
+        rows = [{"position": 22, "domain": "multi.com", "url": ""}]
+        semrush = FakeSemrush({
+            "roofing company Denver": rows,
+            "roofer Denver": [],
+            "roofing company Tampa": rows,
+            "roofer Tampa": [],
+        })
+
+        class MetroSensitivePlaces:
+            def __init__(self):
+                self.queried = []
+
+            def lookup_business(self, domain, city, state):
+                self.queried.append((domain, city))
+                if city == "Denver":
+                    return None  # no qualifying location in the first metro
+                return {"name": "Multi Roof", "website": "https://multi.com", "phone": "",
+                        "reviews": 50, "rating": 4.5, "locations": 2, "address": "Tampa"}
+
+        places = MetroSensitivePlaces()
+        pipeline = LeadPipeline(semrush, places, FakeEmails(), UsageMeter(), set(), 200)
+        leads = pipeline.run(
+            [{"city": "Denver", "state": "CO"}, {"city": "Tampa", "state": "FL"}], ["roofing"]
+        )
+        self.assertEqual([lead["city"] for lead in leads], ["Tampa"])
+        self.assertEqual(places.queried, [("multi.com", "Denver"), ("multi.com", "Tampa")])
+
+    def test_places_is_not_queried_twice_for_one_metro(self):
+        """Two keywords surfacing the same domain in one metro cost one lookup."""
+        pipeline = self.build()
+        pipeline.run([{"city": "Denver", "state": "CO"}], ["roofing"])
+        # roofa.com appears under both 'roofing company Denver' and 'roofer Denver'.
+        self.assertEqual(pipeline.places.lookups.count(("roofa.com", "Denver")), 1)
 
     def test_reason_mentions_keyword_and_page(self):
         reason = build_reason({"reviews": 40, "locations": 2, "rating": 4.8}, "roofing", "roofer Denver", 24)

@@ -62,9 +62,9 @@ SEMRUSH_DATABASE = "us"
 MAX_LEADS_PER_INDUSTRY = 200
 
 # ASSUMPTION (verify against your plan): Semrush bills phrase_organic at
-# 10 API units per returned line. Override with SEMRUSH_UNITS_PER_LINE if your
-# contract differs. Reported usage is an estimate, not a billing statement.
-SEMRUSH_UNITS_PER_LINE = int(os.getenv("SEMRUSH_UNITS_PER_LINE", "10"))
+# 10 API units per returned line. Reported usage is an estimate, not a
+# billing statement.
+DEFAULT_SEMRUSH_UNITS_PER_LINE = 10
 
 HTTP_TIMEOUT = 15
 USER_AGENT = "SEOMachineLeadScraper/1.0 (+https://github.com/GunsNR/seomachine)"
@@ -89,6 +89,21 @@ def get_key(name: str) -> str:
             f"{name} is not set. Add it to {ENV_PATH} or export it before running."
         )
     return value
+
+
+def semrush_units_per_line() -> int:
+    """
+    Units billed per returned Semrush line.
+
+    Read at call time, not import time, so an override set in .env is picked
+    up after load_env() has run. Falls back to the default when unset or
+    non-numeric.
+    """
+    raw = os.getenv("SEMRUSH_UNITS_PER_LINE", "").strip()
+    try:
+        return int(raw) if raw else DEFAULT_SEMRUSH_UNITS_PER_LINE
+    except ValueError:
+        return DEFAULT_SEMRUSH_UNITS_PER_LINE
 
 
 def load_franchise_blocklist(path: Optional[Path] = None) -> set:

@@ -7,6 +7,19 @@ from urllib.parse import urlparse
 MULTI_LABEL_SUFFIXES = {
     "co.uk", "org.uk", "ac.uk", "com.au", "co.nz", "co.za",
     "com.mx", "com.br", "co.in", "us.com",
+    # Generic second-level suffixes: "com.ar" is a suffix, not a domain.
+    "com.ar", "com.co", "com.pe", "com.sg", "com.tr", "com.tw",
+    "co.jp", "co.kr", "co.il", "net.au", "org.au", "gov.uk",
+}
+
+# Site builders and hosts that hand every tenant its own subdomain. Two shops
+# on the same platform are different businesses, so the tenant label is part
+# of the key: roofer-one.weebly.com must not collapse to weebly.com.
+HOSTED_PLATFORM_SUFFIXES = {
+    "weebly.com", "wixsite.com", "editorx.io", "squarespace.com",
+    "business.site", "godaddysites.com", "myshopify.com", "blogspot.com",
+    "wordpress.com", "webflow.io", "netlify.app", "vercel.app",
+    "github.io", "square.site", "companywebsite.net", "z-site.net",
 }
 
 
@@ -35,8 +48,15 @@ def root_domain(value: str) -> str:
     parts = host.split(".")
     if len(parts) <= 2:
         return host
+
     last_two = ".".join(parts[-2:])
-    if last_two in MULTI_LABEL_SUFFIXES and len(parts) >= 3:
+    if last_two in HOSTED_PLATFORM_SUFFIXES:
+        # Keep the tenant label: roofer-one.weebly.com, not weebly.com.
+        return ".".join(parts[-3:])
+    last_three = ".".join(parts[-3:])
+    if last_three in HOSTED_PLATFORM_SUFFIXES and len(parts) >= 4:
+        return ".".join(parts[-4:])
+    if last_two in MULTI_LABEL_SUFFIXES:
         return ".".join(parts[-3:])
     return last_two
 

@@ -142,7 +142,12 @@ class LeadPipeline:
                 logger.warning("Unknown industry %r, skipping", industry)
                 continue
             qualifier = INDUSTRY_QUALIFIERS.get(industry, {})
-            seen_roots: Set[str] = set()
+            # Emitted roots dedupe the output; checked pairs stop us paying for
+            # the same Places lookup twice inside one metro. A domain rejected
+            # in one metro is still re-checked in the next, so output does not
+            # depend on metro ordering.
+            emitted_roots: Set[str] = set()
+            checked_in_metro: Set[tuple] = set()
             industry_leads = 0
 
             for metro in metros:
@@ -168,9 +173,12 @@ class LeadPipeline:
                         if industry_leads >= self.max_per_industry:
                             break
                         domain = str(candidate["domain"])
-                        if domain in seen_roots:
+                        if domain in emitted_roots:
                             continue
-                        seen_roots.add(domain)
+                        metro_key = (domain, city, state)
+                        if metro_key in checked_in_metro:
+                            continue
+                        checked_in_metro.add(metro_key)
 
                         business = self.places.lookup_business(domain, city, state)
                         if not business or not qualifies(business, qualifier):
@@ -193,6 +201,7 @@ class LeadPipeline:
                             ),
                         }
                         leads.append(lead)
+                        emitted_roots.add(domain)
                         industry_leads += 1
 
             logger.info("%s: %d qualified leads", industry, industry_leads)
