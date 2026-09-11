@@ -31,7 +31,10 @@ jobs:
         with:
           python-version: '3.11'
 
-      # The suite under tests/ is dependency-free by design: external clients
-      # are stubbed, so no install step is needed and no API keys are used.
+      # The suite stubs every API client, so no keys are needed, but the
+      # modules under test import requests at module scope.
+      - name: Install test dependencies
+        run: python -m pip install --quiet requests
+
       - name: Run unit tests
         run: python -m unittest discover -s tests -v
