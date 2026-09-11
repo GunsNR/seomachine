@@ -115,3 +115,4 @@ google-analytics-credentials.json
 
 # Lead scraper output (contains scraped contact data)
 output/leads.csv
+output/candidates.csv
