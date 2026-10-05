@@ -1,0 +1,23 @@
+{
+  "skill_name": "design-reference",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Restyle my recovery app to look like this case study: https://www.behance.net/gallery/215519917/Compy-Eating-Disorder-Recovery-App-UXUI-Case-Study — keep all my content, just the look.",
+      "expected_output": "Attempts capture; if the host is blocked, reports the exact hosts (www.behance.net and the image CDN) and how to allow them, offers the screenshot route, and does not reach for mirrors or caches. If reachable: reads the style-guide frame first, extracts a palette from screen frames, writes a brief marking stated vs observed, and maps it onto the app's existing tokens.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "here are 4 screenshots of an app i love (attached). pull out the colors and fonts and tell me what tokens i should change in my css to get this vibe",
+      "expected_output": "Runs palette.mjs on the screenshots, checks swatches.png, names fonts as observed classifications with Google Fonts candidates (not as facts), and returns a token mapping table against the person's CSS variables.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Grab the design system from https://www.anthropic.com/news and give me a one-page brief I can hand to a designer.",
+      "expected_output": "Runs trust-proxy-ca.sh if needed, captures tiles and frames, fills the brief template with stated/observed labels, and does not propose copying artwork or copy.",
+      "files": []
+    }
+  ]
+}
