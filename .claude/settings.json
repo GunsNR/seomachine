@@ -1,0 +1,16 @@
+{
+  "extraKnownMarketplaces": {
+    "nateherk-mods": {
+      "source": {
+        "source": "github",
+        "repo": "nateherkai/claude-code-mods"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "cache-keeper@nateherk-mods": true,
+    "recording-mode@nateherk-mods": true,
+    "goal-meter@nateherk-mods": true,
+    "collision-guard@nateherk-mods": true
+  }
+}
