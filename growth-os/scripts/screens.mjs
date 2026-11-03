@@ -20,7 +20,7 @@ const errors = [];
 page.on("console", (m) => { if (m.type() === "error") errors.push(m.text()); });
 await page.goto(`${BASE}/login`);
 await page.fill("#email", user);
-await page.fill("#password", "growth-demo-local");
+await page.fill("#password", process.env.SEED_PASSWORD);
 await Promise.all([page.waitForURL(/\/(app|portal)/), page.click("button[type=submit]")]);
 
 if (process.env.WORKSPACE) {

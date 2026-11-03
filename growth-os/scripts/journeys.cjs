@@ -9,7 +9,7 @@ const seen = (page, sel, timeout = 8000) => page.locator(sel).first().waitFor({ 
 
 async function login(page, email) {
   await page.goto(`${BASE}/login`);
-  await page.fill("#email", email); await page.fill("#password", "growth-demo-local");
+  await page.fill("#email", email); await page.fill("#password", process.env.SEED_PASSWORD);
   await Promise.all([page.waitForURL(/\/(app|portal)/), page.click("button[type=submit]")]);
 }
 async function switchTo(page, name) {

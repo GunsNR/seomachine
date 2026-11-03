@@ -24,7 +24,10 @@ async function main() {
   const tables = await systemDb.$queryRaw<{ tablename: string }[]>`SELECT tablename FROM pg_tables WHERE schemaname='public' AND tablename <> '_prisma_migrations'`;
   await systemDb.$executeRawUnsafe(`TRUNCATE ${tables.map((t) => `"${t.tablename}"`).join(", ")} CASCADE`);
 
-  const pw = await bcrypt.hash("growth-demo-local", 10);
+  // The demo password comes from the environment so no credential lives in the repo.
+  const demoPassword = process.env.SEED_PASSWORD;
+  if (!demoPassword || demoPassword.length < 12) throw new Error("Set SEED_PASSWORD (12+ characters) in .env before seeding demo data.");
+  const pw = await bcrypt.hash(demoPassword, 10);
   const owner = await systemDb.user.create({ data: { email: "owner@ranklogic.example", name: "Izzy (demo)", passwordHash: pw } });
   const staff = await systemDb.user.create({ data: { email: "staff@ranklogic.example", name: "Jordan Staff (demo)", passwordHash: pw } });
   const clientUser = await systemDb.user.create({ data: { email: "client@harborline.example", name: "Maria Okonkwo-Vandermeer (demo client)", passwordHash: pw } });
@@ -170,7 +173,7 @@ async function main() {
   void ig;
   await runDueJobs(handlers);
 
-  console.log("Seeded. Sign in at /login with owner@ranklogic.example (staff) or client@harborline.example (client portal). Password: growth-demo-local (local demo only).");
+  console.log("Seeded. Sign in at /login with owner@ranklogic.example (staff) or client@harborline.example (client portal). Password: the SEED_PASSWORD value from your .env (local demo only).");
 }
 
 main().then(() => systemDb.$disconnect()).catch(async (e) => { console.error(e); await systemDb.$disconnect(); process.exit(1); });
