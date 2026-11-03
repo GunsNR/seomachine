@@ -1,0 +1,23 @@
+{
+  "extraKnownMarketplaces": {
+    "nateherk-mods": {
+      "source": {
+        "source": "github",
+        "repo": "nateherkai/claude-code-mods"
+      }
+    },
+    "agricidaniel-claude-seo": {
+      "source": {
+        "source": "github",
+        "repo": "AgriciDaniel/claude-seo"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "cache-keeper@nateherk-mods": true,
+    "recording-mode@nateherk-mods": true,
+    "goal-meter@nateherk-mods": true,
+    "collision-guard@nateherk-mods": true,
+    "claude-seo@agricidaniel-claude-seo": true
+  }
+}
