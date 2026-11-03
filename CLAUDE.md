@@ -6,6 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 SEO Machine is an open-source Claude Code workspace for creating SEO-optimized blog content. It combines custom commands, specialized agents, and Python-based analytics to research, write, optimize, and publish articles for any business.
 
+## Skill Routing
+
+For any non-trivial task, start with the `skill-orchestrator` skill: it picks the best ordered group of installed skills for the job, runs them in sequence, and avoids running overlapping skills. Skip it only when a single skill obviously fits.
+
 ## Setup
 
 ```bash
