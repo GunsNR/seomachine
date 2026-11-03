@@ -1,0 +1,864 @@
+// Rank Logic Growth OS data model.
+//
+// One relational database, one modular monolith. Every tenant-owned row carries
+// `workspaceId`; src/lib/db.ts refuses tenant-model queries that omit it.
+// Money is integer minor units + explicit ISO-4217 currency. Instants are UTC;
+// the IANA timezone that a human scheduled in is stored beside them.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ─── Identity, tenancy, access ─────────────────────────────────────────────
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  passwordHash String
+  createdAt    DateTime  @default(now())
+  disabledAt   DateTime?
+
+  memberships Membership[]
+  sessions    Session[]
+}
+
+/// kind = "agency" (Rank Logic's own business) | "client" (a client business).
+/// A client's second brand is a separate Brand row inside the client workspace,
+/// with its own destinations — never merged with another business.
+model Workspace {
+  id        String    @id @default(cuid())
+  kind      String
+  name      String
+  slug      String    @unique
+  parentId  String?
+  timezone  String    @default("America/New_York")
+  currency  String    @default("USD")
+  /// Emergency pause. Checked by every dispatch at execution time.
+  pausedAt  DateTime?
+  pausedBy  String?
+  /// Synthetic fixture workspace. Never mixed into live reporting.
+  isFixture Boolean   @default(false)
+  /// AI spend cap for the current calendar month, in USD micro-dollars.
+  aiMonthlyCapMicros Int @default(0)
+  createdAt DateTime  @default(now())
+
+  parent      Workspace?   @relation("WorkspaceTree", fields: [parentId], references: [id])
+  children    Workspace[]  @relation("WorkspaceTree")
+  memberships Membership[]
+}
+
+/// role: owner | admin | member | client. "client" only ever sees the portal.
+model Membership {
+  id          String    @id @default(cuid())
+  userId      String
+  workspaceId String
+  role        String
+  createdAt   DateTime  @default(now())
+  revokedAt   DateTime?
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+  @@index([workspaceId])
+}
+
+model Session {
+  id            String    @id @default(cuid())
+  /// SHA-256 of the cookie token. The raw token is never stored.
+  tokenHash     String    @unique
+  userId        String
+  workspaceId   String
+  createdAt     DateTime  @default(now())
+  expiresAt     DateTime
+  revokedAt     DateTime?
+  revokedReason String    @default("")
+  lastSeenAt    DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+/// Invitation and password-reset tokens. Hash only; single use; expiring.
+model AuthToken {
+  id          String    @id @default(cuid())
+  kind        String // invite | reset
+  tokenHash   String    @unique
+  email       String
+  workspaceId String?
+  role        String    @default("")
+  createdById String    @default("")
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdAt   DateTime  @default(now())
+}
+
+// ─── Brand memory ──────────────────────────────────────────────────────────
+
+model Brand {
+  id               String   @id @default(cuid())
+  workspaceId      String
+  name             String
+  slug             String
+  /// The version every generator must read. Changing it changes cache keys.
+  currentVersionId String?
+  createdAt        DateTime @default(now())
+
+  versions BrandVersion[]
+
+  @@unique([workspaceId, slug])
+  @@index([workspaceId])
+}
+
+/// Immutable snapshot of what we may say for a brand. `profile` is validated by
+/// src/lib/brand.ts: voice, audience, offers, service areas, prohibited claims,
+/// theme, and facts[] — each fact with provenance and a review status.
+model BrandVersion {
+  id          String    @id @default(cuid())
+  workspaceId String
+  brandId     String
+  version     Int
+  profile     Json
+  createdById String
+  createdAt   DateTime  @default(now())
+  approvedAt  DateTime?
+  approvedBy  String?
+
+  brand Brand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+
+  @@unique([brandId, version])
+  @@index([workspaceId])
+}
+
+// ─── CRM ──────────────────────────────────────────────────────────────────
+
+model Company {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  domain      String   @default("")
+  createdAt   DateTime @default(now())
+
+  contacts Contact[]
+
+  @@index([workspaceId])
+}
+
+/// A person. Not a lead, not an opportunity, not a customer: those are separate
+/// records. Dedupe is by normalized email within a workspace only. A shared
+/// phone number is a *hint* surfaced to a human, never an automatic merge.
+model Contact {
+  id              String    @id @default(cuid())
+  workspaceId     String
+  companyId       String?
+  firstName       String    @default("")
+  lastName        String    @default("")
+  email           String    @default("")
+  emailNormalized String?
+  phone           String    @default("")
+  phoneNormalized String    @default("")
+  ownerId         String?
+  tags            String[]  @default([])
+  /// lead | customer | archived
+  lifecycle       String    @default("lead")
+  source          String    @default("unknown")
+  /// First-touch attribution captured at creation; never overwritten.
+  firstTouch      Json?
+  /// Most recent touch; updated on each genuine new inquiry.
+  lastTouch       Json?
+  nextAction      String    @default("")
+  nextActionAt    DateTime?
+  /// Manual takeover: automation stops; a human owns the conversation.
+  manualTakeover  Boolean   @default(false)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  isFixture       Boolean   @default(false)
+
+  company       Company?       @relation(fields: [companyId], references: [id])
+  opportunities Opportunity[]
+  consents      ConsentEvent[]
+
+  @@unique([workspaceId, emailNormalized])
+  @@index([workspaceId, nextActionAt])
+  @@index([workspaceId, phoneNormalized])
+}
+
+/// Append-only consent history. Current state = latest event per channel.
+model ConsentEvent {
+  id          String   @id @default(cuid())
+  workspaceId String
+  contactId   String
+  channel     String // email | sms | call
+  status      String // granted | revoked
+  source      String // form | manual | import | reply
+  /// The exact consent wording the person saw, when captured by a form.
+  wording     String   @default("")
+  recordedBy  String   @default("")
+  createdAt   DateTime @default(now())
+
+  contact Contact @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, contactId, channel])
+}
+
+/// Never message these values. Checked immediately before every dispatch.
+model Suppression {
+  id          String   @id @default(cuid())
+  workspaceId String
+  channel     String
+  value       String
+  reason      String // opt_out | bounce | complaint | manual
+  createdAt   DateTime @default(now())
+
+  @@unique([workspaceId, channel, value])
+}
+
+/// Stages are configurable per pipeline. kind = agency | client.
+/// stages: [{ id, name, type: "open" | "won" | "lost", order }]
+model Pipeline {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  kind        String
+  stages      Json
+  isDefault   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  opportunities Opportunity[]
+
+  @@index([workspaceId])
+}
+
+/// One job/deal. Several legitimate opportunities per contact are allowed.
+model Opportunity {
+  id             String    @id @default(cuid())
+  workspaceId    String
+  contactId      String
+  pipelineId     String
+  stageId        String
+  title          String
+  /// open | won | lost
+  status         String    @default("open")
+  estimatedValueMinor Int?
+  currency       String    @default("USD")
+  ownerId        String?
+  /// Attribution snapshot taken when the opportunity was created.
+  attribution    Json?
+  qualification  String    @default("unknown") // unknown | qualified | unqualified
+  lostReason     String    @default("")
+  wonAt          DateTime?
+  closedAt       DateTime?
+  lastActivityAt DateTime  @default(now())
+  createdAt      DateTime  @default(now())
+  isFixture      Boolean   @default(false)
+
+  contact  Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  pipeline Pipeline @relation(fields: [pipelineId], references: [id])
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, contactId])
+}
+
+/// Timeline entry. actorType: user | client | system | workflow.
+model Activity {
+  id            String   @id @default(cuid())
+  workspaceId   String
+  contactId     String?
+  opportunityId String?
+  kind          String
+  body          String   @default("")
+  meta          Json?
+  actorId       String?
+  actorType     String   @default("user")
+  createdAt     DateTime @default(now())
+
+  @@index([workspaceId, contactId, createdAt])
+  @@index([workspaceId, opportunityId])
+}
+
+model Task {
+  id            String    @id @default(cuid())
+  workspaceId   String
+  contactId     String?
+  opportunityId String?
+  title         String
+  dueAt         DateTime?
+  status        String    @default("open") // open | done | cancelled
+  assigneeId    String?
+  workflowRunId String?
+  /// Prevents a replayed workflow step from creating a second task.
+  idempotencyKey String?
+  completedAt   DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@unique([workspaceId, idempotencyKey])
+  @@index([workspaceId, status, dueAt])
+}
+
+/// Raw inbound form submission. The idempotency key makes a double-submit or
+/// a retried webhook produce exactly one business effect.
+model FormSubmission {
+  id             String   @id @default(cuid())
+  workspaceId    String
+  formKey        String
+  idempotencyKey String
+  payload        Json
+  attribution    Json?
+  /// created_opportunity | attached_existing | duplicate | rejected
+  outcome        String
+  contactId      String?
+  opportunityId  String?
+  rejectReason   String   @default("")
+  receivedAt     DateTime @default(now())
+
+  @@unique([workspaceId, idempotencyKey])
+  @@index([workspaceId, receivedAt])
+}
+
+/// A booking record. source=manual means a human typed it in: it is NOT a
+/// verified calendar reservation, and the UI says so.
+model Booking {
+  id            String   @id @default(cuid())
+  workspaceId   String
+  contactId     String
+  opportunityId String?
+  title         String
+  startsAt      DateTime
+  endsAt        DateTime
+  timezone      String
+  status        String   @default("scheduled") // scheduled | rescheduled | cancelled | completed | no_show
+  source        String   @default("manual") // manual | provider
+  providerRef   String   @default("")
+  verified      Boolean  @default(false)
+  createdById   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([workspaceId, startsAt])
+}
+
+model Proposal {
+  id            String   @id @default(cuid())
+  workspaceId   String
+  opportunityId String
+  title         String
+  /// draft | sent | accepted | declined | expired
+  status        String   @default("draft")
+  currentVersion Int     @default(1)
+  sentAt        DateTime?
+  respondedAt   DateTime?
+  createdAt     DateTime @default(now())
+
+  versions ProposalVersion[]
+
+  @@index([workspaceId, status])
+}
+
+/// Immutable once the proposal is sent. lineItems: see src/lib/offers.ts.
+model ProposalVersion {
+  id          String   @id @default(cuid())
+  workspaceId String
+  proposalId  String
+  version     Int
+  scope       String
+  deliverables Json
+  lineItems   Json
+  currency    String
+  createdById String
+  createdAt   DateTime @default(now())
+
+  proposal Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  @@unique([proposalId, version])
+}
+
+/// A confirmed business outcome on an opportunity, with who said so.
+/// kind: qualified | unqualified | appointment | won | lost | job_value
+/// source: client_manual | agency_manual | provider
+model OutcomeEvent {
+  id            String   @id @default(cuid())
+  workspaceId   String
+  opportunityId String
+  kind          String
+  valueMinor    Int?
+  currency      String?
+  note          String   @default("")
+  source        String
+  confirmedById String?
+  confirmedRole String   @default("")
+  createdAt     DateTime @default(now())
+
+  @@index([workspaceId, opportunityId])
+}
+
+/// Money actually moving. Won ≠ paid. Refunds are negative-effect rows of kind
+/// "refund" with a positive amount. A provider event id dedupes replays.
+model Payment {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  opportunityId   String
+  kind            String // payment | refund
+  amountMinor     Int
+  currency        String
+  receivedAt      DateTime
+  source          String // client_manual | agency_manual | provider
+  providerEventId String?
+  confirmedById   String?
+  confirmedRole   String   @default("")
+  note            String   @default("")
+  createdAt       DateTime @default(now())
+
+  @@unique([workspaceId, providerEventId])
+  @@index([workspaceId, receivedAt])
+}
+
+// ─── Automation ────────────────────────────────────────────────────────────
+
+model Workflow {
+  id             String   @id @default(cuid())
+  workspaceId    String
+  name           String
+  trigger        String // form_submitted | opportunity_assigned | stage_changed | booking_created
+  enabled        Boolean  @default(false)
+  currentVersion Int      @default(1)
+  createdAt      DateTime @default(now())
+
+  versions WorkflowVersion[]
+
+  @@index([workspaceId, trigger])
+}
+
+/// Runs snapshot the version they started on; editing a workflow never
+/// changes an in-flight run.
+model WorkflowVersion {
+  id          String   @id @default(cuid())
+  workspaceId String
+  workflowId  String
+  version     Int
+  definition  Json
+  createdAt   DateTime @default(now())
+
+  workflow Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@unique([workflowId, version])
+}
+
+model WorkflowRun {
+  id                String    @id @default(cuid())
+  workspaceId       String
+  workflowVersionId String
+  contactId         String?
+  opportunityId     String?
+  /// running | waiting | completed | stopped | failed
+  status            String    @default("running")
+  stepIndex         Int       @default(0)
+  stepsExecuted     Int       @default(0)
+  stopReason        String    @default("")
+  idempotencyKey    String
+  nextStepAt        DateTime?
+  startedById       String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@unique([workspaceId, idempotencyKey])
+  @@index([workspaceId, status])
+}
+
+/// An outbound message. With no verified provider and LIVE_SENDING_ENABLED off,
+/// dispatch ends in "held" with the reason — it never pretends to have sent.
+model OutboundMessage {
+  id            String    @id @default(cuid())
+  workspaceId   String
+  contactId     String
+  opportunityId String?
+  workflowRunId String?
+  channel       String
+  subject       String    @default("")
+  body          String
+  /// draft | queued | blocked | held | sent | failed
+  status        String    @default("draft")
+  blockReason   String    @default("")
+  idempotencyKey String?
+  scheduledFor  DateTime?
+  sentAt        DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@unique([workspaceId, idempotencyKey])
+  @@index([workspaceId, status])
+}
+
+// ─── Content ───────────────────────────────────────────────────────────────
+
+model ResearchSource {
+  id          String    @id @default(cuid())
+  workspaceId String
+  brandId     String
+  url         String
+  title       String
+  publisher   String    @default("")
+  publishedAt DateTime?
+  retrievedAt DateTime
+  excerpt     String    @default("")
+  /// discovery | verified — a discovered claim is not a verified fact.
+  evidence    String    @default("discovery")
+  createdAt   DateTime  @default(now())
+
+  @@index([workspaceId, brandId])
+}
+
+model ContentBrief {
+  id             String   @id @default(cuid())
+  workspaceId    String
+  brandId        String
+  brandVersionId String
+  objective      String
+  audienceQuestion String
+  cta            String
+  destinationUrl String
+  campaignKey    String
+  /// Stable ID carried into UTM content and lead attribution.
+  contentKey     String
+  sourceIds      String[] @default([])
+  createdAt      DateTime @default(now())
+
+  @@unique([workspaceId, contentKey])
+}
+
+model ContentPiece {
+  id             String    @id @default(cuid())
+  workspaceId    String
+  brandId        String
+  briefId        String?
+  title          String
+  /// draft | in_review | approved | scheduled | publishing | published | partial | failed | rejected
+  status         String    @default("draft")
+  currentVersion Int       @default(1)
+  scheduledFor   DateTime?
+  scheduleTimezone String  @default("America/New_York")
+  createdAt      DateTime  @default(now())
+  isFixture      Boolean   @default(false)
+
+  versions ContentVersion[]
+
+  @@index([workspaceId, status])
+  @@index([workspaceId, scheduledFor])
+}
+
+/// variants: [{ platform, caption, hashtags[], mentions[], internalTags[] }]
+/// asset: carousel/image spec rendered by /api/assets/[id].svg
+/// contentHash covers every field an approval binds to.
+model ContentVersion {
+  id          String   @id @default(cuid())
+  workspaceId String
+  pieceId     String
+  version     Int
+  variants    Json
+  asset       Json?
+  generator   String   @default("human") // human | template | ai
+  contentHash String
+  createdById String
+  createdAt   DateTime @default(now())
+
+  piece ContentPiece @relation(fields: [pieceId], references: [id], onDelete: Cascade)
+
+  @@unique([pieceId, version])
+}
+
+/// A publishing destination. status is truthful: a destination without a
+/// verified adapter is "manual_handoff", never "connected".
+model Destination {
+  id          String   @id @default(cuid())
+  workspaceId String
+  brandId     String
+  platform    String
+  label       String
+  adapter     String   @default("manual") // manual | dry_run | <provider>
+  status      String   @default("manual_handoff") // connected | manual_handoff | not_connected | expired
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, brandId])
+}
+
+/// Approval binds to: subject + exact content hash + destinations + schedule +
+/// approver. Any relevant edit makes the hash differ, so the approval no
+/// longer matches — the worker and API both re-check.
+model Approval {
+  id             String    @id @default(cuid())
+  workspaceId    String
+  subjectType    String // content | page_change | seo_change | automation_policy
+  subjectId      String
+  subjectHash    String
+  destinationIds String[]  @default([])
+  scheduleAt     DateTime?
+  approverId     String
+  approverRole   String
+  decision       String // approved | rejected
+  note           String    @default("")
+  createdAt      DateTime  @default(now())
+  revokedAt      DateTime?
+  revokedReason  String    @default("")
+
+  @@index([workspaceId, subjectType, subjectId])
+}
+
+/// One row per (content version, destination). Provider acceptance, delivery
+/// and the public URL are separate facts.
+model Publication {
+  id             String    @id @default(cuid())
+  workspaceId    String
+  pieceId        String
+  versionId      String
+  destinationId  String
+  approvalId     String
+  /// queued | accepted | published | failed | ambiguous | refused | manual_handoff | cancelled
+  status         String    @default("queued")
+  idempotencyKey String
+  providerRef    String    @default("")
+  publishedUrl   String    @default("")
+  attempts       Int       @default(0)
+  lastError      String    @default("")
+  acceptedAt     DateTime?
+  publishedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([workspaceId, idempotencyKey])
+  @@index([workspaceId, pieceId])
+}
+
+// ─── Websites ──────────────────────────────────────────────────────────────
+
+model Site {
+  id          String   @id @default(cuid())
+  workspaceId String
+  brandId     String
+  name        String
+  slug        String   @unique
+  /// Client brand theme for generated pages. Never the Rank Logic app theme.
+  theme       Json
+  baseUrl     String   @default("")
+  createdAt   DateTime @default(now())
+
+  pages Page[]
+
+  @@index([workspaceId])
+}
+
+model Page {
+  id                 String   @id @default(cuid())
+  workspaceId        String
+  siteId             String
+  slug               String
+  kind               String // home | service | about | contact | landing | area | blog
+  draftVersion       Int      @default(1)
+  publishedVersion   Int?
+  createdAt          DateTime @default(now())
+
+  site     Site          @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  versions PageVersion[]
+
+  @@unique([siteId, slug])
+  @@index([workspaceId])
+}
+
+/// Immutable page snapshot. sections: see src/lib/site/sections.ts.
+model PageVersion {
+  id          String   @id @default(cuid())
+  workspaceId String
+  pageId      String
+  version     Int
+  sections    Json
+  meta        Json
+  origin      String // template | human | ai_proposal | seo_patch | rollback
+  note        String   @default("")
+  createdById String
+  createdAt   DateTime @default(now())
+
+  page Page @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@unique([pageId, version])
+}
+
+/// A proposed change against a specific base version. Applying it against a
+/// newer draft is refused (stale) instead of overwriting a human's edit.
+model PageChange {
+  id          String   @id @default(cuid())
+  workspaceId String
+  pageId      String
+  baseVersion Int
+  /// [{ op: "set", path, value }] — see src/lib/site/patch.ts
+  patch       Json
+  origin      String // ai_edit | seo_patch | human
+  rationale   String   @default("")
+  findingId   String?
+  /// proposed | applied | rejected | stale | rolled_back
+  status      String   @default("proposed")
+  appliedVersion Int?
+  createdById String
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, pageId, status])
+}
+
+// ─── SEO ───────────────────────────────────────────────────────────────────
+
+model CrawlRun {
+  id          String    @id @default(cuid())
+  workspaceId String
+  siteId      String?
+  rootUrl     String
+  /// owned_preview (our builder, no network) | fixture | live
+  mode        String
+  status      String    @default("queued") // queued | running | completed | failed
+  maxPages    Int       @default(50)
+  pagesCrawled Int      @default(0)
+  error       String    @default("")
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  pages CrawlPage[]
+
+  @@index([workspaceId, createdAt])
+}
+
+model CrawlPage {
+  id          String  @id @default(cuid())
+  workspaceId String
+  runId       String
+  url         String
+  status      Int
+  title       String  @default("")
+  description String  @default("")
+  h1          String[] @default([])
+  canonical   String  @default("")
+  noindex     Boolean @default(false)
+  wordCount   Int     @default(0)
+  internalLinks String[] @default([])
+  schemaTypes String[] @default([])
+  inSitemap   Boolean @default(false)
+  textHash    String  @default("")
+
+  run CrawlRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
+}
+
+model SeoFinding {
+  id              String   @id @default(cuid())
+  workspaceId     String
+  runId           String
+  rule            String
+  severity        String // high | medium | low
+  urls            String[]
+  finding         String
+  evidence        Json
+  dataFreshness   DateTime
+  businessIntent  String   @default("")
+  proposedChange  String
+  impactHypothesis String
+  effort          String // S | M | L
+  risk            String // low | medium | high
+  verification    String
+  /// open | patch_proposed | resolved | dismissed
+  status          String   @default("open")
+  pageId          String?
+  createdAt       DateTime @default(now())
+
+  @@index([workspaceId, status])
+}
+
+// ─── Integrations, jobs, audit, usage ──────────────────────────────────────
+
+/// Truthful integration state. Tokens are AES-GCM encrypted (src/lib/crypto.ts).
+model Integration {
+  id             String    @id @default(cuid())
+  workspaceId    String
+  provider       String
+  status         String // not_configured | connected | error | expired | blocked
+  scopes         String[]  @default([])
+  encryptedToken String    @default("")
+  note           String    @default("")
+  lastCheckedAt  DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@unique([workspaceId, provider])
+}
+
+model Job {
+  id             String    @id @default(cuid())
+  workspaceId    String
+  kind           String
+  payload        Json
+  status         String    @default("queued") // queued | running | succeeded | failed | dead | cancelled
+  runAfter       DateTime  @default(now())
+  attempts       Int       @default(0)
+  maxAttempts    Int       @default(5)
+  idempotencyKey String?   @unique
+  lockedBy       String?
+  leaseExpiresAt DateTime?
+  lastError      String    @default("")
+  createdAt      DateTime  @default(now())
+  finishedAt     DateTime?
+
+  @@index([status, runAfter])
+  @@index([workspaceId, status])
+}
+
+model AuditEvent {
+  id          String   @id @default(cuid())
+  workspaceId String
+  actorId     String?
+  action      String
+  subjectType String
+  subjectId   String
+  meta        Json?
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, createdAt])
+}
+
+/// AI and paid-provider usage. estimated=true until the provider's own usage
+/// figures are recorded.
+model UsageEvent {
+  id          String   @id @default(cuid())
+  workspaceId String
+  provider    String
+  operation   String
+  inputTokens Int      @default(0)
+  outputTokens Int     @default(0)
+  costMicros  Int      @default(0)
+  estimated   Boolean  @default(true)
+  cacheHit    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, createdAt])
+}
+
+/// AI output cache keyed by brand version + prompt version + input hash, so a
+/// change of active brand can never return another brand's output.
+model AiCache {
+  key         String   @id
+  workspaceId String
+  brandVersionId String
+  promptVersion String
+  output      Json
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId])
+}
+
+/// Public form abuse limiter (fixed window, shared across instances).
+model RateLimitCounter {
+  key     String   @id
+  count   Int      @default(0)
+  resetAt DateTime
+}
