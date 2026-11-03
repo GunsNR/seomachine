@@ -3,6 +3,7 @@
 import { createRequire } from "module";
 const require = createRequire(import.meta.url);
 const { chromium } = require("playwright"); // pre-installed in the environment; not a project dependency
+const probe = require("./a11y-probe.cjs");
 import fs from "fs";
 
 const BASE = process.env.BASE_URL || "http://localhost:3100";
@@ -37,9 +38,10 @@ for (const [label, path] of targets) {
     await page.setViewportSize({ width: w, height: w < 500 ? 844 : w < 1000 ? 1024 : 900 });
     const resp = await page.goto(`${BASE}${path}`, { waitUntil: "networkidle" });
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    const a11y = await page.evaluate(`(${probe.toString()})()`);
     const file = `${out}/${label}-${w}.png`;
     await page.screenshot({ path: file, fullPage: true });
-    report.push({ label, w, status: resp?.status(), horizontalOverflowPx: overflow, file });
+    report.push({ label, w, status: resp?.status(), horizontalOverflowPx: overflow, a11y, file });
   }
 }
 console.log(JSON.stringify({ report, consoleErrors: errors.slice(0, 10) }, null, 1));

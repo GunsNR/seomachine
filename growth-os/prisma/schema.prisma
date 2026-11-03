@@ -862,3 +862,19 @@ model RateLimitCounter {
   count   Int      @default(0)
   resetAt DateTime
 }
+
+/// Marketing cost the agency enters for a period, so revenue-to-cost can be
+/// computed. Without it the ratio is shown as unavailable.
+model MarketingCost {
+  id          String   @id @default(cuid())
+  workspaceId String
+  periodStart DateTime
+  periodEnd   DateTime
+  amountMinor Int
+  currency    String
+  label       String   @default("")
+  enteredById String
+  createdAt   DateTime @default(now())
+
+  @@index([workspaceId, periodStart])
+}

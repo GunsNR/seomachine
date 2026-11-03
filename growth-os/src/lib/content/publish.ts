@@ -38,7 +38,7 @@ async function currentVersion(workspaceId: string, pieceId: string) {
  */
 export async function editPiece(a: Actor, pieceId: string, p: { title: string; variants: Variant[]; asset: Asset | null }) {
   const { piece, version } = await currentVersion(a.workspaceId, pieceId);
-  if (["publishing", "published"].includes(piece.status)) throw new ContentError("Already published. Duplicate it to make a new post.");
+  if (["publishing", "published", "partial"].includes(piece.status)) throw new ContentError("This post already went out to at least one destination, so it can't be changed. Start a new post instead.");
   const variants = z.array(VariantSchema).parse(p.variants);
   const asset = p.asset ? AssetSchema.parse(p.asset) : null;
   const hash = contentHash(p.title, variants, asset);

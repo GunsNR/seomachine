@@ -21,9 +21,9 @@ const ICON: Record<Tone, typeof Info> = { neutral: CircleDashed, ok: CheckCircle
 export function Status({ tone = "neutral", children, title }: { tone?: Tone; children: ReactNode; title?: string }) {
   const Icon = ICON[tone];
   return (
-    <span title={title} className={clsx("inline-flex items-center gap-1 rounded-ctl border px-1.5 py-0.5 text-2xs font-medium whitespace-nowrap", TONE[tone])}>
-      <Icon aria-hidden className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
-      {children}
+    <span title={title} className={clsx("inline-flex max-w-full items-start gap-1 rounded-ctl border px-1.5 py-0.5 text-2xs font-medium", TONE[tone])}>
+      <Icon aria-hidden className="mt-px h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+      <span className="min-w-0">{children}</span>
     </span>
   );
 }

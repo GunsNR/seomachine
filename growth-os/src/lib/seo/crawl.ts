@@ -46,7 +46,7 @@ export async function startCrawl(a: { workspaceId: string; userId: string }, inp
     const site = await db.site.findFirst({ where: { workspaceId: a.workspaceId, id: input.siteId } });
     if (!site) throw new Error("Unknown site.");
     mode = "owned_preview";
-    rootUrl = `${siteBase(OWNED_ORIGIN, site.slug)}/`;
+    rootUrl = siteBase(OWNED_ORIGIN, site.slug);
   } else {
     const u = new URL(rootUrl);
     if (!["http:", "https:"].includes(u.protocol)) throw new Error("Enter an http(s) address.");
@@ -65,7 +65,7 @@ async function crawlOwned(workspaceId: string, siteId: string, maxPages: number)
   for (const p of pages) {
     const r = await buildRender({ siteSlug: site.slug, pageSlug: p.slug, which: "published", origin: OWNED_ORIGIN, mode: "public", workspaceId });
     if (!r) continue;
-    const url = p.slug === "home" ? `${siteBase(OWNED_ORIGIN, site.slug)}/` : `${siteBase(OWNED_ORIGIN, site.slug)}/${p.slug}`;
+    const url = p.slug === "home" ? siteBase(OWNED_ORIGIN, site.slug) : `${siteBase(OWNED_ORIGIN, site.slug)}/${p.slug}`;
     const cp = parseHtml(url, 200, r.html, OWNED_ORIGIN);
     cp.inSitemap = sitemap.has(url.replace(/\/$/, ""));
     out.push(cp);

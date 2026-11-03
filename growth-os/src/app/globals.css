@@ -29,5 +29,9 @@
   .table th { @apply text-2xs font-medium text-ink-2 px-3 py-2 border-b border-line bg-canvas/60 whitespace-nowrap; }
   .table td { @apply px-3 py-2.5 border-b border-line align-top; }
   .table tr:last-child td { @apply border-b-0; }
-  @media (max-width: 767px) { .btn { min-height: 44px; } .field { min-height: 44px; font-size: 16px; } }
+  @media (max-width: 767px) {
+    .btn { min-height: 44px; } .field { min-height: 44px; font-size: 16px; }
+    /* WCAG 2.2 target size: lift standalone text links to at least 24px tall. */
+    main a:not([class*="btn"]) { padding-block: 3px; }
+  }
 }

@@ -52,7 +52,7 @@ export default async function Today({ searchParams }: { searchParams: Promise<{ 
         <div className="flex min-w-0 flex-col gap-5">
           <Section id="fu" title="Follow-ups" count={d.followUps.length} action={<Link className="link text-xs" href="/app/crm?view=list&filter=overdue">All overdue</Link>}>
             {d.followUps.length === 0 ? (
-              <Empty title="No follow-ups due">Tasks you or a workflow create appear here when they're due.</Empty>
+              <Empty title="No follow-ups due">Tasks you or a workflow create appear here when they’re due.</Empty>
             ) : (
               <ul className="divide-y divide-line">
                 {d.followUps.slice(0, 12).map((t) => (
@@ -124,7 +124,7 @@ export default async function Today({ searchParams }: { searchParams: Promise<{ 
           </Section>
 
           <Section id="wk" title="Appointments, next 7 days" count={d.bookings.length}>
-            {d.bookings.length === 0 ? <Empty title="Nothing booked">Record a booking from a lead's page.</Empty> : (
+            {d.bookings.length === 0 ? <Empty title="Nothing booked">Record a booking from a lead’s page.</Empty> : (
               <ul className="divide-y divide-line">
                 {d.bookings.map((b) => (
                   <li key={b.id} className="flex items-start gap-3 px-4 py-2.5">

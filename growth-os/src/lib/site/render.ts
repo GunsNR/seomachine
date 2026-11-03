@@ -32,7 +32,8 @@ export type RenderInput = {
 };
 
 function pageUrl(base: string, slug: string) {
-  return slug === "" || slug === "home" ? `${base}/` : `${base}/${slug}`;
+  // No trailing slash: Next.js redirects /s/site/ → /s/site, and a canonical must not point at a redirect.
+  return slug === "" || slug === "home" ? base : `${base}/${slug}`;
 }
 
 function sectionHtml(s: Section, r: RenderInput): string {

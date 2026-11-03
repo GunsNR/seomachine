@@ -45,7 +45,7 @@ export default async function ContactPage({ params, searchParams }: { params: Pr
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-xl font-semibold tracking-[-0.01em] [overflow-wrap:anywhere]">{name}</h1>
             {c.lifecycle === "customer" ? <Status tone="ok">Customer</Status> : <Status>Lead</Status>}
-            {c.manualTakeover ? <Status tone="action">You've taken over</Status> : null}
+            {c.manualTakeover ? <Status tone="action">You’ve taken over</Status> : null}
             {c.isFixture ? <FixtureTag /> : null}
           </div>
           <p className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-sm text-ink-2">

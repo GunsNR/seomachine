@@ -8,11 +8,9 @@ import type { Asset, Platform, Variant } from "./variants";
  */
 export function templateVariants(p: BrandProfile, brief: { objective: string; audienceQuestion: string; cta: string; destinationUrl: string; contentKey: string; campaignKey: string }, platforms: Platform[]): { variants: Variant[]; asset: Asset; blocked: string[] } {
   const service = approvedFacts(p, "service")[0]?.text ?? p.offers[0] ?? "our services";
-  const area = p.serviceAreas[0] ?? "";
   const link = utm(brief.destinationUrl, brief.campaignKey, brief.contentKey);
   const q = brief.audienceQuestion.replace(/\?*$/, "?");
   const base = `${q}\n\nShort answer from ${p.businessName}: it depends on a few things we check on every visit. Here's what to look at before you call anyone.`;
-  const tags = [service, area].filter(Boolean).map((t) => t.replace(/[^\p{L}\p{N}]+/gu, "")).filter(Boolean);
   const variants: Variant[] = platforms.map((platform) => {
     const caption =
       platform === "linkedin" ? `${base}\n\n${brief.cta}: ${link}`
@@ -21,7 +19,8 @@ export function templateVariants(p: BrandProfile, brief: { objective: string; au
       : platform === "youtube" ? `${base}\n\n${brief.cta}: ${link}`
       : platform === "google_business" ? `${q} ${p.businessName} serves ${p.serviceAreas.slice(0, 3).join(", ") || "your area"}. ${brief.cta}.`
       : `${base}\n\n${brief.cta}: ${link}`;
-    return { platform, caption, hook: q, hashtags: platform === "linkedin" || platform === "google_business" ? [] : tags.slice(0, 3), mentions: [], internalTags: [brief.campaignKey], title: platform === "youtube" ? q.slice(0, 100) : "" };
+    return { platform, caption, hook: q, // Hashtags must come from research, so templates never invent them.
+      hashtags: [], mentions: [], internalTags: [brief.campaignKey], title: platform === "youtube" ? q.slice(0, 100) : "" };
   });
   const asset: Asset = {
     kind: "carousel",

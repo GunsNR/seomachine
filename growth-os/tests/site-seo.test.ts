@@ -71,7 +71,7 @@ describe("acceptance 10 — stale patches are rejected; approved patches roll ba
     const preview = (await buildRender({ siteSlug: S.site.slug, pageSlug: "home", which: "draft", origin: "http://x", mode: "preview" }))!.html;
     expect(preview).toContain('content="noindex, nofollow"');
     expect(await buildRender({ siteSlug: S.site.slug, pageSlug: "draft-only", which: "published", origin: "http://x", mode: "public" })).toBeNull();
-    expect(await sitemapEntries(S.site.slug, "http://x")).toEqual([`http://x/s/${S.site.slug}/`]);
+    expect(await sitemapEntries(S.site.slug, "http://x")).toEqual([`http://x/s/${S.site.slug}`]);
   });
 
   it("only approved facts render as proof; unreviewed statistics never appear", async () => {

@@ -46,7 +46,7 @@ export async function sitemapEntries(siteSlug: string, origin: string): Promise<
   const out: string[] = [];
   for (const p of pages) {
     const v = await db.pageVersion.findFirst({ where: { workspaceId: site.workspaceId, pageId: p.id, version: p.publishedVersion! } });
-    if (v && !MetaSchema.parse(v.meta).noindex) out.push(p.slug === "home" ? `${siteBase(origin, siteSlug)}/` : `${siteBase(origin, siteSlug)}/${p.slug}`);
+    if (v && !MetaSchema.parse(v.meta).noindex) out.push(p.slug === "home" ? siteBase(origin, siteSlug) : `${siteBase(origin, siteSlug)}/${p.slug}`);
   }
   return out;
 }

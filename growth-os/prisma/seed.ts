@@ -138,7 +138,7 @@ async function main() {
     const site = await db.site.create({ data: { workspaceId: w.id, brandId: brands[w.id]!.id, name: p.businessName, slug, theme: p.theme } });
     const home = templatePage(p, "home");
     const pg = await db.page.create({ data: { workspaceId: w.id, siteId: site.id, slug: "home", kind: "home", draftVersion: 1, publishedVersion: 1 } });
-    await db.pageVersion.create({ data: { workspaceId: w.id, pageId: pg.id, version: 1, sections: home.sections, meta: w.id === harbor.id ? { ...home.meta, title: "Harbor Line Plumbing & Heating of Ocean County — Water Heaters, Repiping, Boilers" } : home.meta, origin: "template", note: "Template from brand profile (not AI)", createdById: owner.id } });
+    await db.pageVersion.create({ data: { workspaceId: w.id, pageId: pg.id, version: 1, sections: home.sections, meta: w.id === harbor.id ? { ...home.meta, title: "Harbor Line Plumbing & Heating — Water Heaters, Repiping & Boilers" } : home.meta, origin: "template", note: "Template from brand profile (not AI)", createdById: owner.id } });
     if (w.id === harbor.id) {
       const lp = templatePage(p, "landing", "Water heater replacement");
       const lpg = await db.page.create({ data: { workspaceId: w.id, siteId: site.id, slug: "water-heaters", kind: "service", draftVersion: 1, publishedVersion: 1 } });
