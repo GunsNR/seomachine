@@ -117,7 +117,8 @@ export async function intakeLead(args: {
         }
       }
 
-      const title = input.service ? `${input.service} — ${displayName({ ...input, email })}` : `Inquiry — ${displayName({ ...input, email })}`;
+      // The person's name is shown next to the title everywhere, so the title names the job only.
+      const title = input.service || (input.message ? input.message.split(/[.!?\n]/)[0]!.slice(0, 80) : "General inquiry");
       const opp = await tx.opportunity.create({
         data: { workspaceId, contactId: contact.id, pipelineId: pipeline.id, stageId: firstStage.id, title: title.slice(0, 160), attribution: args.touch, isFixture: !!args.isFixture },
       });

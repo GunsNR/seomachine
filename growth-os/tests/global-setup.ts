@@ -11,5 +11,5 @@ export default function setup() {
   }
   const url = env.TEST_DATABASE_URL;
   if (!url) throw new Error("TEST_DATABASE_URL is required");
-  execSync("npx prisma migrate deploy", { env: { ...env, DATABASE_URL: url, DIRECT_URL: url }, stdio: "pipe" });
+  execSync("npx prisma migrate deploy", { env: { ...env, DATABASE_URL: url, DIRECT_URL: url } as unknown as NodeJS.ProcessEnv, stdio: "pipe" });
 }

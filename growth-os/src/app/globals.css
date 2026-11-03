@@ -1,0 +1,33 @@
+@import "@fontsource-variable/schibsted-grotesk";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html { -webkit-text-size-adjust: 100%; }
+  body { @apply bg-canvas text-ink font-sans text-sm antialiased; font-feature-settings: "tnum" 0; }
+  .num, td, time { font-variant-numeric: tabular-nums; }
+  :focus-visible { outline: 2px solid #8f3f1f; outline-offset: 2px; border-radius: 4px; }
+  .on-dark :focus-visible { outline-color: #d16c42; }
+  h1, h2, h3 { text-wrap: balance; }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; } }
+}
+
+@layer components {
+  .panel { @apply bg-surface border border-line rounded-panel; }
+  .btn { @apply inline-flex items-center justify-center gap-1.5 rounded-ctl px-3 min-h-[36px] text-sm font-medium border transition-colors duration-100 disabled:opacity-60 disabled:cursor-not-allowed whitespace-nowrap; }
+  .btn-primary { @apply btn bg-action border-action text-white hover:bg-action-hover; }
+  .btn-secondary { @apply btn bg-surface border-line-strong text-ink hover:bg-canvas; }
+  .btn-quiet { @apply btn border-transparent text-ink hover:bg-canvas; }
+  .btn-danger { @apply btn bg-surface border-bad/40 text-bad hover:bg-bad-soft; }
+  .field { @apply block w-full rounded-ctl border border-line-strong bg-surface px-3 min-h-[38px] text-sm text-ink placeholder:text-ink-2/70; }
+  textarea.field { @apply py-2; }
+  .label { @apply block text-xs font-medium text-ink mb-1; }
+  .hint { @apply text-2xs text-ink-2 mt-1; }
+  .link { @apply text-action-ink underline decoration-1 underline-offset-2 hover:decoration-2; }
+  .table { @apply w-full text-left text-sm; }
+  .table th { @apply text-2xs font-medium text-ink-2 px-3 py-2 border-b border-line bg-canvas/60 whitespace-nowrap; }
+  .table td { @apply px-3 py-2.5 border-b border-line align-top; }
+  .table tr:last-child td { @apply border-b-0; }
+  @media (max-width: 767px) { .btn { min-height: 44px; } .field { min-height: 44px; font-size: 16px; } }
+}

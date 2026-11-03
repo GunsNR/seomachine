@@ -8,6 +8,7 @@ const securityHeaders = [
 
 const nextConfig = {
   poweredByHeader: false,
+  devIndicators: false,
   reactStrictMode: true,
   async headers() {
     return [
