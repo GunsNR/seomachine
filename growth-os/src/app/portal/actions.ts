@@ -18,7 +18,7 @@ export async function confirmAction(f: FormData) {
     else if (kind === "won") {
       await recordOutcome(actor(ctx), id, "won");
       if (str(f, "value")) await recordOutcome(actor(ctx), id, "job_value", { valueMinor: parseMoney(str(f, "value"), cur), currency: cur });
-    } else if (kind === "paid") await recordPayment(actor(ctx), id, { kind: "payment", amountMinor: parseMoney(str(f, "amount"), cur), currency: cur, receivedAt: new Date() });
+    } else if (kind === "paid") await recordPayment(actor(ctx), id, { kind: "payment", amountMinor: parseMoney(str(f, "amount"), cur), currency: cur, receivedAt: new Date(), idempotencyKey: str(f, "idempotencyKey") || undefined });
     else throw new Error("Pick what happened.");
     return "Thanks — saved with your name and today's date.";
   });

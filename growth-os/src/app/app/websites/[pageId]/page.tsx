@@ -91,12 +91,12 @@ export default async function Editor({ params, searchParams }: { params: Promise
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="flex min-w-0 flex-col gap-4">
-          <Panel title="Ask for a change" action={ai.live ? <Status tone="info">AI on</Status> : <Status>AI off — template commands</Status>}>
+          <Panel title="Ask for a change" action={<Status>Template commands (not AI)</Status>}>
             <form action={proposeEditAction} className="flex flex-col gap-2 p-4">
               {hidden}
               <label className="label" htmlFor="instruction">Describe the change</label>
               <textarea id="instruction" name="instruction" rows={2} className="field" placeholder={"headline: Water heater repair in Lakewood\nmove faq up"} />
-              <p className="hint">{ai.live ? "AI drafts a change against this exact version. You review it before anything is saved." : `${ai.reason} Commands: headline:, subhead:, button:, title:, description:, move <section> up/down, remove <section>.`}</p>
+              <p className="hint">{ai.live ? "AI page editing isn’t connected yet, so this uses commands." : ai.reason} Commands: headline:, subhead:, button:, title:, description:, move &lt;section&gt; up/down, remove &lt;section&gt;. You review the before/after before anything is saved.</p>
               <SubmitButton variant="secondary" className="self-start">Propose change</SubmitButton>
             </form>
             {changes.filter((c) => c.status === "proposed").map((c) => {

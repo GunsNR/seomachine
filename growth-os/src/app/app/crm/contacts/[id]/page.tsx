@@ -6,6 +6,7 @@ import { contactDetail } from "@/lib/crm/queries";
 import { displayName } from "@/lib/normalize";
 import { parseTouch, sourceLabel } from "@/lib/attribution";
 import { addLocalDays, toLocalInput, zonedToUtc, daysBetween } from "@/lib/time";
+import { randomToken } from "@/lib/crypto";
 import { Empty, Flash, FixtureTag, KeyVal, Money, Notice, OverdueBar, Section, Status, SubmitButton, When } from "@/components/ui";
 import { addNoteAction, bookingAction, bookingStatusAction, completeTaskAction, createTaskAction, inboundAction, moveStageAction, outcomeAction, paymentAction, proposalCreateAction, takeoverAction } from "../../actions";
 
@@ -104,7 +105,7 @@ export default async function ContactPage({ params, searchParams }: { params: Pr
                       <SubmitButton variant="secondary" className="self-start">Save outcome</SubmitButton>
                     </form>
                     <form action={paymentAction} className="flex flex-col gap-2">
-                      <input type="hidden" name="opportunityId" value={o.id} /><input type="hidden" name="returnTo" value={here} />
+                      <input type="hidden" name="opportunityId" value={o.id} /><input type="hidden" name="returnTo" value={here} /><input type="hidden" name="idempotencyKey" value={randomToken(12)} />
                       <fieldset className="flex gap-4 text-sm"><legend className="label">Money</legend>
                         <label className="flex items-center gap-1.5"><input type="radio" name="kind" value="payment" defaultChecked />Received</label>
                         <label className="flex items-center gap-1.5"><input type="radio" name="kind" value="refund" />Refunded</label>

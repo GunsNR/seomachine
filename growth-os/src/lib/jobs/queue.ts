@@ -36,7 +36,10 @@ export async function enqueue(
   }
 }
 
-export async function claim(workerId: string, leaseMs = 60_000, now = new Date()): Promise<JobRow | null> {
+/** Lease must exceed the slowest bounded handler (a 25-page live crawl at 8s/page ≈ 3.5 min). */
+export const LEASE_MS = 5 * 60_000;
+
+export async function claim(workerId: string, leaseMs = LEASE_MS, now = new Date()): Promise<JobRow | null> {
   const lease = new Date(now.getTime() + leaseMs);
   const rows = await systemDb.$queryRaw<JobRow[]>`
     UPDATE "Job" SET status = 'running', "lockedBy" = ${workerId}, "leaseExpiresAt" = ${lease}, attempts = attempts + 1
@@ -82,7 +85,7 @@ export async function runDueJobs(handlers: Record<string, Handler>, opts: { work
   const workerId = opts.workerId ?? `inline-${process.pid}`;
   let n = 0;
   while (n < (opts.max ?? 100)) {
-    const job = await claim(workerId, 60_000, opts.now ?? new Date());
+    const job = await claim(workerId, LEASE_MS, opts.now ?? new Date());
     if (!job) break;
     n++;
     const h = handlers[job.kind];

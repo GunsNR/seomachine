@@ -6,7 +6,9 @@ import { aiStatus, monthSpendMicros } from "@/lib/ai/provider";
 import { liveSendingEnabled } from "@/lib/workflows/engine";
 import { livePublishingEnabled } from "@/lib/content/adapters";
 import { DefinitionSchema } from "@/lib/workflows/definition";
+import { cookies } from "next/headers";
 import { Flash, Notice, PageHeader, Section, Status, SubmitButton, When, type Tone } from "@/components/ui";
+import { requestOrigin } from "@/app/lib-origin";
 import { budgetAction, inviteAction, pauseAction, resetLinkAction, retryJobAction, revokeMemberAction, toggleWorkflowAction, unsuppressAction } from "./actions";
 
 export const metadata = { title: "Settings" };
@@ -29,6 +31,8 @@ export default async function Settings({ searchParams }: { searchParams: Promise
     systemDb.authToken.findMany({ where: { workspaceId: ws.id, kind: "invite", usedAt: null, expiresAt: { gt: new Date() } } }),
   ]);
   const ai = aiStatus();
+  const once = (await cookies()).get("gos_once_link")?.value;
+  const origin = await requestOrigin();
   const switches = [
     { name: "Sending email/SMS", on: liveSendingEnabled(), env: "LIVE_SENDING_ENABLED" },
     { name: "Publishing to real accounts", on: livePublishingEnabled(), env: "LIVE_PUBLISHING_ENABLED" },
@@ -40,6 +44,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
     <>
       <PageHeader title="Settings" description={`${ws.name} · ${ws.kind === "agency" ? "agency workspace" : "client workspace"} · ${tz} · ${ws.currency}`} />
       <Flash ok={sp.ok} error={sp.error} />
+      {once && can(ctx.role, "members.manage") ? <div className="mb-4"><Notice tone="warn" title="One-time link — copy it now">It disappears within two minutes and is never shown again: <code className="select-all [overflow-wrap:anywhere]">{origin}{once}</code></Notice></div> : null}
       <div className="grid gap-5 lg:grid-cols-2">
         <Section id="pause" title="Emergency pause">
           <div className="p-4">

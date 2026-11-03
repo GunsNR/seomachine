@@ -127,44 +127,50 @@ export async function advanceRun(workspaceId: string, runId: string, stepIndex: 
   const key = `run:${run.id}:step:${stepIndex}`;
   let nextAt = new Date();
 
-  switch (step.type) {
-    case "wait":
-      nextAt = new Date(Date.now() + step.minutes * 60000);
-      await db.workflowRun.update({ where: { id: run.id, workspaceId }, data: { status: "waiting", nextStepAt: nextAt } });
-      break;
-    case "create_task":
-      await db.task.upsert({
-        where: { workspaceId_idempotencyKey: { workspaceId, idempotencyKey: key } },
-        create: { workspaceId, contactId: run.contactId, opportunityId: run.opportunityId, title: renderTemplate(step.title, vars), dueAt: new Date(Date.now() + step.dueInMinutes * 60000), workflowRunId: run.id, idempotencyKey: key },
-        update: {},
-      });
-      break;
-    case "draft_message":
-    case "send_message": {
-      const msg = await db.outboundMessage.upsert({
-        where: { workspaceId_idempotencyKey: { workspaceId, idempotencyKey: key } },
-        create: { workspaceId, contactId: run.contactId!, opportunityId: run.opportunityId, workflowRunId: run.id, channel: step.channel, subject: renderTemplate(step.subject, vars), body: renderTemplate(step.body, vars), status: step.type === "draft_message" ? "draft" : "queued", idempotencyKey: key },
-        update: {},
-      });
-      if (step.type === "send_message") await dispatchMessage(workspaceId, msg.id);
-      break;
-    }
-    case "require_stage": {
-      if (run.opportunityId) {
-        const o = await db.opportunity.findFirst({ where: { workspaceId, id: run.opportunityId }, include: { pipeline: true } });
-        const st = o ? parseStages(o.pipeline.stages).find((s) => s.id === o.stageId) : undefined;
-        if (!st || !step.stageTypes.includes(st.type)) {
-          await db.workflowRun.update({ where: { id: run.id, workspaceId }, data: { status: "stopped", stopReason: "stage_condition" } });
-          return { state: "stopped", detail: "stage_condition" };
-        }
+  try {
+    switch (step.type) {
+      case "wait":
+        nextAt = new Date(Date.now() + step.minutes * 60000);
+        await db.workflowRun.update({ where: { id: run.id, workspaceId }, data: { status: "waiting", nextStepAt: nextAt } });
+        break;
+      case "create_task":
+        await db.task.upsert({
+          where: { workspaceId_idempotencyKey: { workspaceId, idempotencyKey: key } },
+          create: { workspaceId, contactId: run.contactId, opportunityId: run.opportunityId, title: renderTemplate(step.title, vars), dueAt: new Date(Date.now() + step.dueInMinutes * 60000), workflowRunId: run.id, idempotencyKey: key },
+          update: {},
+        });
+        break;
+      case "draft_message":
+      case "send_message": {
+        const msg = await db.outboundMessage.upsert({
+          where: { workspaceId_idempotencyKey: { workspaceId, idempotencyKey: key } },
+          create: { workspaceId, contactId: run.contactId!, opportunityId: run.opportunityId, workflowRunId: run.id, channel: step.channel, subject: renderTemplate(step.subject, vars), body: renderTemplate(step.body, vars), status: step.type === "draft_message" ? "draft" : "queued", idempotencyKey: key },
+          update: {},
+        });
+        if (step.type === "send_message") await dispatchMessage(workspaceId, msg.id);
+        break;
       }
-      break;
+      case "require_stage": {
+        if (run.opportunityId) {
+          const o = await db.opportunity.findFirst({ where: { workspaceId, id: run.opportunityId }, include: { pipeline: true } });
+          const st = o ? parseStages(o.pipeline.stages).find((s) => s.id === o.stageId) : undefined;
+          if (!st || !step.stageTypes.includes(st.type)) {
+            await db.workflowRun.update({ where: { id: run.id, workspaceId }, data: { status: "stopped", stopReason: "stage_condition" } });
+            return { state: "stopped", detail: "stage_condition" };
+          }
+        }
+        break;
+      }
+      case "assign_owner": {
+        const m = await systemDb.membership.findUnique({ where: { userId_workspaceId: { userId: step.userId, workspaceId } } });
+        if (m && !m.revokedAt && run.opportunityId) await db.opportunity.update({ where: { id: run.opportunityId, workspaceId }, data: { ownerId: step.userId } });
+        break;
+      }
     }
-    case "assign_owner": {
-      const m = await systemDb.membership.findUnique({ where: { userId_workspaceId: { userId: step.userId, workspaceId } } });
-      if (m && !m.revokedAt && run.opportunityId) await db.opportunity.update({ where: { id: run.opportunityId, workspaceId }, data: { ownerId: step.userId } });
-      break;
-    }
+  } catch (e) {
+    // Un-claim so the retried job executes this step again. Effects are idempotent per (run, step).
+    await db.workflowRun.updateMany({ where: { workspaceId, id: run.id, stepIndex: stepIndex + 1 }, data: { stepIndex, stepsExecuted: { decrement: 1 } } });
+    throw e;
   }
 
   if (stepIndex + 1 >= def.steps.length) {

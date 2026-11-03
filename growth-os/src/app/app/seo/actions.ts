@@ -19,9 +19,12 @@ export async function startCrawlAction(f: FormData) {
       if (f.get("authorized") !== "on") throw new Error("Confirm you're authorized to audit that site.");
       await startCrawl(actor(ctx), { rootUrl: str(f, "rootUrl"), maxPages: 25 });
     }
-    // Local convenience: run due jobs inline so the result shows without a separate worker.
-    if (process.env.NODE_ENV !== "production") await runDueJobs(handlers, { max: 5 });
-    return "Audit run. Findings below are from this crawl.";
+    // Local development convenience: run due jobs inline. In production the worker does it.
+    if (process.env.NODE_ENV !== "production") {
+      await runDueJobs(handlers, { max: 10 });
+      return "Audit finished. Findings below are from this crawl.";
+    }
+    return "Audit queued. Results appear here when the background worker finishes it — refresh in a few seconds.";
   });
 }
 

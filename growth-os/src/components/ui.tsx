@@ -50,7 +50,7 @@ export function PageHeader({ title, description, actions }: { title: string; des
 
 export function Section({ title, count, action, children, className, id }: { title: string; count?: number; action?: ReactNode; children: ReactNode; className?: string; id?: string }) {
   return (
-    <section aria-labelledby={id ? `${id}-h` : undefined} className={clsx("panel", className)}>
+    <section id={id} aria-labelledby={id ? `${id}-h` : undefined} className={clsx("panel scroll-mt-4", className)}>
       <div className="flex items-center justify-between gap-3 border-b border-line px-4 py-3">
         <h2 id={id ? `${id}-h` : undefined} className="text-sm font-semibold">
           {title}

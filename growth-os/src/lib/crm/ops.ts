@@ -81,7 +81,7 @@ export async function recordOutcome(a: Actor, opportunityId: string, kind: Outco
 export async function recordPayment(
   a: Actor,
   opportunityId: string,
-  p: { kind: "payment" | "refund"; amountMinor: number; currency: string; receivedAt: Date; providerEventId?: string; note?: string; source?: "provider" },
+  p: { kind: "payment" | "refund"; amountMinor: number; currency: string; receivedAt: Date; providerEventId?: string; idempotencyKey?: string; note?: string; source?: "provider" },
 ) {
   if (!Number.isSafeInteger(p.amountMinor) || p.amountMinor <= 0) throw new DomainError("Enter an amount greater than zero.");
   const o = await oppOrThrow(a.workspaceId, opportunityId);
@@ -89,16 +89,22 @@ export async function recordPayment(
     const dup = await db.payment.findUnique({ where: { workspaceId_providerEventId: { workspaceId: a.workspaceId, providerEventId: p.providerEventId } } });
     if (dup) return { payment: dup, duplicate: true };
   }
+  if (p.idempotencyKey) {
+    const dup = await db.payment.findUnique({ where: { workspaceId_idempotencyKey: { workspaceId: a.workspaceId, idempotencyKey: p.idempotencyKey } } });
+    if (dup) return { payment: dup, duplicate: true };
+  }
   const source = p.source ?? (a.role === "client" ? "client_manual" : "agency_manual");
   try {
     const payment = await db.payment.create({
-      data: { workspaceId: a.workspaceId, opportunityId: o.id, kind: p.kind, amountMinor: p.amountMinor, currency: p.currency.toUpperCase(), receivedAt: p.receivedAt, source, providerEventId: p.providerEventId, confirmedById: source === "provider" ? null : a.userId, confirmedRole: source === "provider" ? "" : a.role, note: p.note ?? "" },
+      data: { workspaceId: a.workspaceId, opportunityId: o.id, kind: p.kind, amountMinor: p.amountMinor, currency: p.currency.toUpperCase(), receivedAt: p.receivedAt, source, providerEventId: p.providerEventId, idempotencyKey: p.idempotencyKey, confirmedById: source === "provider" ? null : a.userId, confirmedRole: source === "provider" ? "" : a.role, note: p.note ?? "" },
     });
     await db.activity.create({ data: { workspaceId: a.workspaceId, contactId: o.contactId, opportunityId: o.id, kind: p.kind === "payment" ? "payment_recorded" : "refund_recorded", body: "", meta: { amountMinor: p.amountMinor, currency: p.currency, source }, actorId: a.userId, actorType: a.role === "client" ? "client" : "user" } });
     return { payment, duplicate: false };
   } catch (e) {
-    if ((e as { code?: string }).code === "P2002" && p.providerEventId) {
-      const dup = await db.payment.findUnique({ where: { workspaceId_providerEventId: { workspaceId: a.workspaceId, providerEventId: p.providerEventId } } });
+    if ((e as { code?: string }).code === "P2002") {
+      const dup = p.providerEventId
+        ? await db.payment.findUnique({ where: { workspaceId_providerEventId: { workspaceId: a.workspaceId, providerEventId: p.providerEventId } } })
+        : p.idempotencyKey ? await db.payment.findUnique({ where: { workspaceId_idempotencyKey: { workspaceId: a.workspaceId, idempotencyKey: p.idempotencyKey } } }) : null;
       if (dup) return { payment: dup, duplicate: true };
     }
     throw e;

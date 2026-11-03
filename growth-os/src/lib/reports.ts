@@ -55,7 +55,7 @@ export async function outcomeReport(workspaceId: string, from: Date, to: Date, m
   return {
     period: { from, to },
     counts: {
-      submissions: subs.filter((s) => s.outcome !== "rejected" && s.outcome !== "duplicate").length,
+      submissions: subs.filter((s) => s.outcome === "created_opportunity").length,
       duplicatesIgnored: subs.filter((s) => s.outcome === "duplicate" || s.outcome === "attached_existing").length,
       opportunities: opps.length,
       qualified: outcomes.filter((o) => o.kind === "qualified").length,

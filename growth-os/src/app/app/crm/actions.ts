@@ -58,6 +58,7 @@ export async function paymentAction(f: FormData) {
       currency: ctx.workspace.currency,
       receivedAt: received ? parseLocalInput(`${received}T12:00`, ctx.workspace.timezone) : new Date(),
       note: str(f, "note"),
+      idempotencyKey: str(f, "idempotencyKey") || undefined,
     });
     return str(f, "kind") === "refund" ? "Refund recorded" : "Payment recorded";
   });

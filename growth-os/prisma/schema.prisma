@@ -411,12 +411,15 @@ model Payment {
   receivedAt      DateTime
   source          String // client_manual | agency_manual | provider
   providerEventId String?
+  /// Set by the entry form so a double-click or resubmit records one payment.
+  idempotencyKey  String?
   confirmedById   String?
   confirmedRole   String   @default("")
   note            String   @default("")
   createdAt       DateTime @default(now())
 
   @@unique([workspaceId, providerEventId])
+  @@unique([workspaceId, idempotencyKey])
   @@index([workspaceId, receivedAt])
 }
 

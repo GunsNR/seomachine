@@ -110,8 +110,11 @@ async function crawlLive(rootUrl: string, maxPages: number): Promise<CrawledPage
 /** Worker handler. Writes pages and findings; resolves earlier open findings that no longer reproduce. */
 export async function executeCrawl(workspaceId: string, runId: string) {
   const run = await db.crawlRun.findFirst({ where: { workspaceId, id: runId } });
-  if (!run || run.status === "completed") return;
-  await db.crawlRun.update({ where: { id: run.id, workspaceId }, data: { status: "running", startedAt: new Date() } });
+  if (!run) return;
+  // Claim the run itself: a duplicate job (expired lease, double enqueue) finds it already taken.
+  const stale = new Date(Date.now() - 10 * 60_000);
+  const claimed = await db.crawlRun.updateMany({ where: { workspaceId, id: run.id, OR: [{ status: "queued" }, { status: "running", startedAt: { lt: stale } }] }, data: { status: "running", startedAt: new Date() } });
+  if (claimed.count === 0) return;
   try {
     const pages = run.mode === "owned_preview" && run.siteId ? await crawlOwned(workspaceId, run.siteId, run.maxPages) : await crawlLive(run.rootUrl, run.maxPages);
     const now = new Date();
@@ -129,11 +132,12 @@ export async function executeCrawl(workspaceId: string, runId: string) {
       }
       const scopeRuns = (await tx.crawlRun.findMany({ where: { workspaceId, rootUrl: run.rootUrl }, select: { id: true } })).map((r) => r.id);
       const priorOpen = await tx.seoFinding.findMany({ where: { workspaceId, status: { in: ["open", "patch_proposed"] }, runId: { in: scopeRuns } } });
+      const dismissed = await tx.seoFinding.findMany({ where: { workspaceId, status: "dismissed", runId: { in: scopeRuns } } });
       const key = (rule: string, urls: string[]) => `${rule}|${[...urls].sort().join(",")}`;
       const current = new Set(findings.map((f) => key(f.rule, f.urls)));
       // A finding that no longer reproduces is resolved — this is the post-change verification.
       for (const f of priorOpen) if (!current.has(key(f.rule, f.urls))) await tx.seoFinding.update({ where: { id: f.id, workspaceId }, data: { status: "resolved" } });
-      const stillOpen = new Set(priorOpen.filter((x) => current.has(key(x.rule, x.urls))).map((x) => key(x.rule, x.urls)));
+      const stillOpen = new Set([...priorOpen, ...dismissed].filter((x) => current.has(key(x.rule, x.urls))).map((x) => key(x.rule, x.urls)));
       for (const f of findings) {
         if (stillOpen.has(key(f.rule, f.urls))) continue;
         await tx.seoFinding.create({ data: { workspaceId, runId, rule: f.rule, severity: f.severity, urls: f.urls, finding: f.finding, evidence: f.evidence as object, dataFreshness: now, businessIntent: f.businessIntent, proposedChange: f.proposedChange, impactHypothesis: f.impactHypothesis, effort: f.effort, risk: f.risk, verification: f.verification, pageId: pageIdFor(f.urls[0]!) } });

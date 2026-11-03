@@ -81,7 +81,7 @@ export default async function Crm({ searchParams }: { searchParams: Promise<SP> 
                           <input type="hidden" name="returnTo" value={returnTo} />
                           <label className="sr-only" htmlFor={`st-${c.id}`}>Move {c.name} to stage</label>
                           <select id={`st-${c.id}`} name="stageId" defaultValue={c.stageId} className="field min-h-[32px] flex-1 py-0 text-xs">
-                            {data.stages.filter((x) => x.type !== "lost").map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+                            {data.stages.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
                           </select>
                           <button type="submit" className="btn-secondary min-h-[32px] px-2 text-xs">Move</button>
                         </form>
@@ -92,7 +92,7 @@ export default async function Crm({ searchParams }: { searchParams: Promise<SP> 
               );
             })}
           </ol>
-          <p className="mt-2 text-2xs text-ink-2">To mark a deal lost, open it — a short reason is required.</p>
+          <p className="mt-2 text-2xs text-ink-2">Marking a deal lost needs a short reason — do it from the deal’s page.</p>
         </div>
       ) : (
         <div className="panel overflow-x-auto">

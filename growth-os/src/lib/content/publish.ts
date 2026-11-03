@@ -69,6 +69,9 @@ export async function decide(a: Actor, pieceId: string, d: { decision: "approved
     const dests = await db.destination.findMany({ where: { workspaceId: a.workspaceId, id: { in: d.destinationIds }, brandId: piece.brandId } });
     if (dests.length !== d.destinationIds.length) throw new ContentError("A destination doesn't belong to this brand.");
   }
+  // Any new decision supersedes earlier ones: a "send back" must never leave an older approval usable.
+  await db.approval.updateMany({ where: { workspaceId: a.workspaceId, subjectType: "content", subjectId: pieceId, revokedAt: null }, data: { revokedAt: new Date(), revokedReason: `superseded by ${d.decision} decision` } });
+  if (d.decision === "rejected") await db.publication.updateMany({ where: { workspaceId: a.workspaceId, pieceId, status: "queued" }, data: { status: "cancelled", lastError: "Sent back by an approver." } });
   const approval = await db.approval.create({
     data: {
       workspaceId: a.workspaceId, subjectType: "content", subjectId: pieceId, subjectHash: approvalHash(version.contentHash, d.destinationIds, d.scheduleAt),

@@ -4,6 +4,7 @@ import { displayName } from "@/lib/normalize";
 import { parseStages } from "@/lib/crm/pipelines";
 import { Empty, Flash, Money, Status, SubmitButton, When } from "@/components/ui";
 import { confirmAction } from "./actions";
+import { randomToken } from "@/lib/crypto";
 
 export const metadata = { title: "Leads to confirm" };
 
@@ -44,7 +45,7 @@ export default async function Portal({ searchParams }: { searchParams: Promise<{
               </details>
             ) : null}
             {o.status === "won" && !paid ? (
-              <form action={confirmAction} className="flex items-end gap-2"><input type="hidden" name="opportunityId" value={o.id} /><input type="hidden" name="kind" value="paid" /><div className="flex-1"><label className="label" htmlFor={`p-${o.id}`}>Payment received ({ctx.workspace.currency})</label><input id={`p-${o.id}`} name="amount" required inputMode="decimal" className="field" /></div><SubmitButton>Save</SubmitButton></form>
+              <form action={confirmAction} className="flex items-end gap-2"><input type="hidden" name="opportunityId" value={o.id} /><input type="hidden" name="kind" value="paid" /><input type="hidden" name="idempotencyKey" value={randomToken(12)} /><div className="flex-1"><label className="label" htmlFor={`p-${o.id}`}>Payment received ({ctx.workspace.currency})</label><input id={`p-${o.id}`} name="amount" required inputMode="decimal" className="field" /></div><SubmitButton>Save</SubmitButton></form>
             ) : null}
             {o.status === "open" ? <form action={confirmAction}><input type="hidden" name="opportunityId" value={o.id} /><input type="hidden" name="kind" value="lost" /><SubmitButton variant="quiet">We didn’t get it</SubmitButton></form> : null}
           </div>

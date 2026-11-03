@@ -5,8 +5,13 @@ import { db, systemDb } from "@/lib/db";
 import { audit } from "@/lib/audit";
 import { randomToken, sha256 } from "@/lib/crypto";
 import { revokeUserSessions } from "@/lib/session";
-import { stopRunsFor } from "@/lib/workflows/engine";
 import { normalizeEmail } from "@/lib/normalize";
+import { cookies } from "next/headers";
+
+/** One-time links are shown once from a short-lived cookie so they never land in URLs, history or access logs. */
+async function stashLink(path: string) {
+  (await cookies()).set("gos_once_link", path, { httpOnly: true, sameSite: "strict", secure: process.env.NODE_ENV === "production", path: "/app/settings", maxAge: 120 });
+}
 
 export async function pauseAction(f: FormData) {
   const ctx = await requirePermission("workspace.pause");
@@ -31,7 +36,6 @@ export async function toggleWorkflowAction(f: FormData) {
     await audit(ctx.workspace.id, ctx.userId, enabled ? "workflow.enable" : "workflow.disable", "workflow", id);
     return enabled ? "Workflow on for new triggers" : "Workflow off. In-flight runs were stopped.";
   });
-  void stopRunsFor;
 }
 
 export async function inviteAction(f: FormData) {
@@ -43,7 +47,8 @@ export async function inviteAction(f: FormData) {
     const token = randomToken();
     await systemDb.authToken.create({ data: { kind: "invite", tokenHash: sha256(token), email, workspaceId: ctx.workspace.id, role, createdById: ctx.userId, expiresAt: new Date(Date.now() + 7 * 86400000) } });
     await audit(ctx.workspace.id, ctx.userId, "member.invite", "workspace", ctx.workspace.id, { role });
-    return `Invitation created. Email isn't connected, so send this link yourself (valid 7 days, single use): /invite/${token}`;
+    await stashLink(`/invite/${token}`);
+    return "Invitation created. Copy the link shown below and send it yourself (valid 7 days, single use).";
   });
 }
 
@@ -55,7 +60,8 @@ export async function resetLinkAction(f: FormData) {
     const token = randomToken();
     await systemDb.authToken.create({ data: { kind: "reset", tokenHash: sha256(token), email: m.user.email, createdById: ctx.userId, expiresAt: new Date(Date.now() + 60 * 60000) } });
     await audit(ctx.workspace.id, ctx.userId, "member.reset_link", "user", m.userId);
-    return `Password reset link (valid 1 hour, single use): /reset/${token}`;
+    await stashLink(`/reset/${token}`);
+    return "Reset link created. Copy the link shown below and send it to them (valid 1 hour, single use).";
   });
 }
 

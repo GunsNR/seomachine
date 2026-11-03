@@ -7,7 +7,6 @@ import { SectionSchema, templatePage, type Section } from "@/lib/site/sections";
 import { BrandProfileSchema, ThemeSchema, themeIssues } from "@/lib/brand";
 import type { PatchOp } from "@/lib/site/patch";
 import { slugify } from "@/lib/normalize";
-import { aiStatus } from "@/lib/ai/provider";
 import { audit } from "@/lib/audit";
 
 const actor = (c: { workspace: { id: string }; userId: string; role: string }) => ({ workspaceId: c.workspace.id, userId: c.userId, role: c.role });
@@ -144,9 +143,10 @@ export async function proposeEditAction(f: FormData) {
   const pageId = str(f, "pageId");
   await runAction(`/app/websites/${pageId}`, async () => {
     const { page, doc } = await loadPage(ctx.workspace.id, pageId);
-    const status = aiStatus();
+    // Page edits use the deterministic command parser only; the AI path is not wired here yet,
+    // so the proposal is always labelled as a template edit regardless of the AI switch.
     const ops = parseCommand(str(f, "instruction"), doc.sections);
-    await proposeChange(actor(ctx), pageId, page.draftVersion, ops, status.live ? "ai_edit" : "human", `${status.live ? "AI" : "Template edit (not AI)"}: ${str(f, "instruction").slice(0, 300)}`);
+    await proposeChange(actor(ctx), pageId, page.draftVersion, ops, "human", `Template edit (not AI): ${str(f, "instruction").slice(0, 300)}`);
     return "Change proposed. Review the before/after below, then apply or reject.";
   });
 }
