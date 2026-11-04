@@ -45,7 +45,8 @@ export function templatePage(p: BrandProfile, kind: "home" | "landing", focusSer
   const sections: Section[] = [
     { id: "hero", type: "hero", headline: kind === "home" ? `${focus} for ${areas || "your area"}` : `${focus} in ${p.serviceAreas[0] ?? "your area"}`, subhead: p.offers[0] ?? "", ctaLabel: healthcare ? "Request an appointment" : "Get a free estimate", ctaTarget: "lead_form", proofFactId: proof[0]?.id ?? "" },
     { id: "services", type: "services", heading: "What we do", items: (services.length ? services : [focus]).slice(0, 6).map((s) => ({ name: s, body: "" })) },
-    ...(proof.length ? [{ id: "proof", type: "proof" as const, heading: "Why people choose us", factIds: proof.map((f) => f.id) }] : []),
+    // The first fact sits under the hero button; the proof section shows the rest, so nothing repeats.
+    ...(proof.length > 1 ? [{ id: "proof", type: "proof" as const, heading: "Why people choose us", factIds: proof.slice(1).map((f) => f.id) }] : []),
     { id: "faq", type: "faq", heading: "Common questions", items: [{ q: `Which areas do you serve?`, a: p.serviceAreas.length ? `We serve ${p.serviceAreas.join(", ")}.` : "Ask us about your location." }] },
     {
       id: "form", type: "lead_form", heading: healthcare ? "Request an appointment" : "Tell us about your project",

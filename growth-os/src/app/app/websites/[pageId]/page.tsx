@@ -10,7 +10,7 @@ import { describePatch, PatchOpSchema } from "@/lib/site/patch";
 import { approvedFacts, BrandProfileSchema, ThemeSchema, themeIssues } from "@/lib/brand";
 import { aiStatus } from "@/lib/ai/provider";
 import { Flash, Notice, PageHeader, Section as Panel, Status, SubmitButton, When } from "@/components/ui";
-import { addSectionAction, applyChangeAction, moveSectionAction, proposeEditAction, publishAction, rejectChangeAction, removeSectionAction, rollbackAction, saveMetaAction, saveSectionAction, themeAction } from "../actions";
+import { allowedOriginsAction, addSectionAction, applyChangeAction, moveSectionAction, proposeEditAction, publishAction, rejectChangeAction, removeSectionAction, rollbackAction, saveMetaAction, saveSectionAction, themeAction } from "../actions";
 
 export const metadata = { title: "Page editor" };
 
@@ -174,6 +174,16 @@ export default async function Editor({ params, searchParams }: { params: Promise
               <label className="text-xs">Corners<select name="radius" defaultValue={theme.radius} className="field mt-1"><option value="none">Square</option><option value="small">Slightly rounded</option><option value="round">Rounded</option></select></label>
               {tIssues.length ? <div className="col-span-2"><Notice tone="warn" title="Contrast problem">{tIssues.join(" ")}</Notice></div> : null}
               <div className="col-span-2"><SubmitButton variant="secondary">Save theme</SubmitButton><p className="hint">Themes that fail WCAG AA contrast are refused.</p></div>
+            </form>
+          </Panel>
+
+          <Panel title="Exported copies">
+            <form action={allowedOriginsAction} className="flex flex-col gap-2 p-4">
+              <input type="hidden" name="siteId" value={site.id} /><input type="hidden" name="returnTo" value={`/app/websites/${page.id}`} />
+              <label className="label" htmlFor="origins">Other domains allowed to send this site’s form</label>
+              <input id="origins" name="origins" defaultValue={site.allowedOrigins.join(", ")} placeholder="https://www.harborline.com" className="field" />
+              <p className="hint">Only needed if you host the exported HTML on the client’s own domain. Leads still land here, with the same spam protection.</p>
+              <SubmitButton variant="secondary" className="self-start">Save domains</SubmitButton>
             </form>
           </Panel>
 

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { ZodError } from "zod";
 import { PermissionError } from "./rbac";
+import { signFlash } from "./flash";
 
 /**
  * Run a mutation and come back to `to` with a plain-language flash message.
@@ -26,9 +27,12 @@ export async function runAction(to: string, fn: () => Promise<string | void | { 
       error = "Something went wrong saving that. Nothing was changed. Try again, and if it keeps happening, check Settings → System health.";
     }
   }
-  revalidatePath(to.split("?")[0]!);
-  const sep = to.includes("?") ? "&" : "?";
-  redirect(error ? `${to}${sep}error=${encodeURIComponent(error)}` : ok ? `${to}${sep}ok=${encodeURIComponent(ok)}` : to);
+  // The flash must go before any #anchor, or the browser never sends it to the server.
+  const [pathAndQuery, hash] = to.split("#");
+  revalidatePath(pathAndQuery!.split("?")[0]!);
+  const sep = pathAndQuery!.includes("?") ? "&" : "?";
+  const flash = error ? `${sep}error=${signFlash(error)}` : ok ? `${sep}ok=${signFlash(ok)}` : "";
+  redirect(`${pathAndQuery}${flash}${hash ? `#${hash}` : ""}`);
 }
 
 const USER_FACING = new Set(["Error", "DomainError", "StaleVersionError", "PatchError", "FetchBlockedError", "ContentError"]);

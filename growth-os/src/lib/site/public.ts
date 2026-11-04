@@ -33,7 +33,7 @@ export async function buildRender(opts: { siteSlug: string; pageSlug: string; wh
   const html = renderPageHtml({
     siteSlug: site.slug, siteName: site.name, baseUrl: siteBase(opts.origin, site.slug), pageSlug: page.slug,
     sections: SectionsSchema.parse(v.sections), meta: MetaSchema.parse(v.meta), brand: profile, theme: ThemeSchema.parse(site.theme),
-    mode: opts.mode, formAction: `/api/forms/${site.slug}`, navPages,
+    mode: opts.mode, formAction: opts.mode === "export" ? `${(process.env.APP_ORIGIN || opts.origin).replace(/\/$/, "")}/api/forms/${site.slug}` : `/api/forms/${site.slug}`, navPages,
   });
   return { html, workspaceId: ws, pageId: page.id, version: versionNo };
 }

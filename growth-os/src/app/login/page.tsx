@@ -1,10 +1,11 @@
 import { loginAction } from "../session-actions";
 import { Notice } from "@/components/ui";
+import { readFlash } from "@/lib/flash";
 
 export const metadata = { title: "Sign in" };
 
 export default async function Login({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
-  const { error } = await searchParams;
+  const error = readFlash((await searchParams).error);
   return (
     <main className="grid min-h-dvh place-items-center bg-rail px-4 on-dark">
       <div className="w-full max-w-sm">

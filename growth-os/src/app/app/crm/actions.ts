@@ -1,7 +1,7 @@
 "use server";
 import { requirePermission } from "@/lib/auth";
 import { runAction, str, bool, back } from "@/lib/actions";
-import { completeTask, createTask, addNote, moveStage, recordOutcome, recordPayment, createBooking, setBookingStatus, recordInbound, createProposal, reviseProposal, setProposalStatus, OutcomeKinds, type OutcomeKind, DomainError } from "@/lib/crm/ops";
+import { assignOwner, completeTask, createTask, addNote, moveStage, recordOutcome, recordPayment, createBooking, setBookingStatus, recordInbound, createProposal, reviseProposal, setProposalStatus, OutcomeKinds, type OutcomeKind, DomainError } from "@/lib/crm/ops";
 import { intakeLead, parseCsv } from "@/lib/crm/intake";
 import { touchFromRequest } from "@/lib/attribution";
 import { parseLocalInput } from "@/lib/time";
@@ -35,6 +35,11 @@ export async function addNoteAction(f: FormData) {
 export async function moveStageAction(f: FormData) {
   const ctx = await requirePermission("crm.write");
   await runAction(back(f, "/app/crm"), async () => { await moveStage(actor(ctx), str(f, "opportunityId"), str(f, "stageId"), str(f, "lostReason")); return "Stage updated"; });
+}
+
+export async function assignOwnerAction(f: FormData) {
+  const ctx = await requirePermission("crm.write");
+  await runAction(back(f, "/app/crm"), async () => { await assignOwner(actor(ctx), str(f, "opportunityId"), str(f, "ownerId")); return "Owner assigned"; });
 }
 
 export async function outcomeAction(f: FormData) {

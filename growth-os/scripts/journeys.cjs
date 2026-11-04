@@ -107,6 +107,33 @@ async function switchTo(page, name) {
   await staff.goto(`${BASE}/app/settings`);
   await Promise.all([staff.waitForURL(/ok=/), staff.click("button:has-text('Resume workspace')")]);
 
+  // J7 onboarding: agency creates a client → brand fact approval → stage → workflow.
+  await staff.goto(`${BASE}/app`);
+  await staff.click("aside details summary");
+  await Promise.all([staff.waitForLoadState("networkidle"), staff.click('aside details button:has-text("Rank Logic SEO")')]);
+  await staff.goto(`${BASE}/app/settings/clients`);
+  await staff.fill("#name", "Journey Test Roofing"); await staff.fill("#serviceAreas", "Brick, Toms River");
+  await Promise.all([staff.waitForURL(/settings\/brand/), staff.click("button:has-text('Create client workspace')")]);
+  check("J7a new client workspace opens on its brand profile", await seen(staff, "text=Journey Test Roofing created"));
+  await staff.fill("#text", "Licensed roofing contractor (journey test)"); await staff.fill("#source", "client call");
+  await Promise.all([staff.waitForURL(/ok=/), staff.click("button:has-text('Add fact')")]);
+  await seen(staff, "text=Fact added");
+  check("J7b client-supplied fact waits for review unless approved", await seen(staff, "li:has-text('Licensed roofing contractor') >> text=Needs review"));
+  await Promise.all([staff.waitForURL(/ok=/), staff.locator("li", { hasText: "Licensed roofing contractor" }).locator("button:has-text('Approve')").click()]);
+  check("J7c approving creates a new brand version", await seen(staff, "li:has-text('Licensed roofing contractor') >> text=Approved"));
+  await staff.goto(`${BASE}/app/settings/pipeline`);
+  await staff.locator("input[name=newStage]").first().fill("Roof inspected");
+  await Promise.all([staff.waitForURL(/ok=/), staff.locator("button:has-text('Save pipeline')").first().click()]);
+  check("J7d pipeline stage added", await seen(staff, "input[value='Roof inspected']"));
+  await staff.goto(`${BASE}/app/settings/workflows/new`);
+  await staff.fill("#name", "Journey nurture");
+  await Promise.all([staff.waitForURL(/workflows\/c/), staff.click("button:has-text('Create workflow')")]);
+  check("J7e workflow created switched off", await seen(staff, "text=it's off until you turn it on"));
+
+  // J8 a crafted message link shows nothing.
+  await staff.goto(`${BASE}/app?error=${encodeURIComponent("Your account is locked. Call 555-0100.")}`);
+  check("J8 unsigned flash text is not displayed", (await staff.locator("text=Your account is locked").count()) === 0);
+
   // J6 preview is private.
   const anon = await (await browser.newContext()).newPage();
   const pv = await anon.request.get(`${BASE}/preview/does-not-matter`);

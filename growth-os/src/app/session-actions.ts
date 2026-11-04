@@ -8,6 +8,8 @@ import { createSession, revokeSession, switchSessionWorkspace, workspacesForUser
 import { hit } from "@/lib/rate-limit";
 import { sha256 } from "@/lib/crypto";
 import { isStaff } from "@/lib/rbac";
+import { signFlash } from "@/lib/flash";
+import { clientIp } from "@/lib/client-ip";
 
 // Constant-time-ish failure path: compare against a real hash when the user is unknown.
 const DUMMY_HASH = bcrypt.hashSync("not-a-real-password-placeholder", 10);
@@ -15,15 +17,15 @@ const DUMMY_HASH = bcrypt.hashSync("not-a-real-password-placeholder", 10);
 export async function loginAction(form: FormData) {
   const email = String(form.get("email") ?? "").trim().toLowerCase();
   const password = String(form.get("password") ?? "");
-  const ip = (await headers()).get("x-forwarded-for")?.split(",")[0]?.trim() ?? "local";
+  const ip = clientIp(await headers());
   if (!(await hit(`login:${sha256(ip)}`, 20, 15 * 60_000)) || !(await hit(`login-acct:${sha256(email)}`, 8, 15 * 60_000))) {
-    redirect("/login?error=" + encodeURIComponent("Too many attempts. Wait 15 minutes and try again."));
+    redirect("/login?error=" + signFlash("Too many attempts. Wait 15 minutes and try again."));
   }
   const user = await systemDb.user.findUnique({ where: { email } });
   const ok = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_HASH);
-  if (!user || !ok || user.disabledAt) redirect("/login?error=" + encodeURIComponent("That email and password don't match an account."));
+  if (!user || !ok || user.disabledAt) redirect("/login?error=" + signFlash("That email and password don't match an account."));
   const list = await workspacesForUser(user.id);
-  if (!list.length) redirect("/login?error=" + encodeURIComponent("Your account isn't a member of any workspace yet. Ask the workspace owner for an invitation."));
+  if (!list.length) redirect("/login?error=" + signFlash("Your account isn't a member of any workspace yet. Ask the workspace owner for an invitation."));
   const first = list.find((w) => w.kind === "agency" && isStaff(w.role)) ?? list[0]!;
   const { token, expiresAt } = await createSession(user.id, first.id);
   await setSessionCookie(token, expiresAt);

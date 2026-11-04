@@ -4,6 +4,7 @@ import { AlertTriangle, CheckCircle2, CircleDashed, Clock, FlaskConical, Info, L
 import type { ReactNode } from "react";
 import { formatMoney } from "@/lib/money";
 import { formatInZone } from "@/lib/time";
+import { readFlash } from "@/lib/flash";
 
 export type Tone = "neutral" | "ok" | "warn" | "bad" | "info" | "action";
 
@@ -87,7 +88,10 @@ export function Notice({ tone = "info", title, children }: { tone?: Tone; title:
 }
 
 /** Flash message from a server action redirect (?ok= / ?error=). */
-export function Flash({ ok, error }: { ok?: string; error?: string }) {
+export function Flash({ ok: okParam, error: errorParam }: { ok?: string; error?: string }) {
+  // Only messages this server signed are shown; a hand-crafted link displays nothing.
+  const ok = readFlash(okParam);
+  const error = readFlash(errorParam);
   if (error) return <div className="mb-4"><Notice tone="bad" title="That didn't work">{error}</Notice></div>;
   if (ok) return <div className="mb-4"><Notice tone="ok" title={ok} /></div>;
   return null;

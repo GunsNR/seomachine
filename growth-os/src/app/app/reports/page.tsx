@@ -54,7 +54,7 @@ export default async function Reports({ searchParams }: { searchParams: Promise<
         <div className="flex min-w-0 flex-col gap-5">
           <Section title="Money">
             <dl className="px-4 py-3 text-sm">
-              {Object.keys(r.collections).length === 0 ? <p className="text-ink-2">No payments recorded this month.</p> : Object.entries(r.collections).map(([c, v]) => (
+              {Object.keys(r.collections).length === 0 ? <div><dt className="sr-only">Collected</dt><dd className="text-ink-2">No payments recorded this month.</dd></div> : Object.entries(r.collections).map(([c, v]) => (
                 <div key={c} className="mb-2"><dt className="text-2xs text-ink-2">Collected ({c})</dt><dd className="text-xl font-semibold"><Money minor={v.net} currency={c} /></dd><dd className="text-2xs text-ink-2"><Money minor={v.gross} currency={c} /> received − <Money minor={v.refunds} currency={c} /> refunded</dd></div>
               ))}
               <div className="mt-3 border-t border-line pt-3">

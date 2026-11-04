@@ -4,6 +4,7 @@ import { systemDb } from "@/lib/db";
 import { sha256 } from "@/lib/crypto";
 import { revokeUserSessions } from "@/lib/session";
 import { Notice } from "@/components/ui";
+import { signFlash } from "@/lib/flash";
 
 export const metadata = { title: "Reset password" };
 
@@ -18,7 +19,7 @@ async function reset(f: FormData) {
   if (!claimed.count) redirect(`/reset/${encodeURIComponent(token)}?error=expired`);
   const user = await systemDb.user.update({ where: { email: t.email }, data: { passwordHash: await bcrypt.hash(pw, 12) } });
   await revokeUserSessions(user.id, "password-reset");
-  redirect("/login?error=" + encodeURIComponent("Password changed. Sign in with your new password."));
+  redirect("/login?error=" + signFlash("Password changed. Sign in with your new password."));
 }
 
 export default async function Reset({ params, searchParams }: { params: Promise<{ token: string }>; searchParams: Promise<{ error?: string }> }) {

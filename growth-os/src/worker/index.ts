@@ -7,6 +7,8 @@ import { runDueJobs } from "../lib/jobs/queue";
 import { handlers } from "../lib/jobs/handlers";
 import { systemDb } from "../lib/db";
 import { redact } from "../lib/crypto";
+import { purge } from "../lib/retention";
+import { enqueue } from "../lib/jobs/queue";
 
 const workerId = `worker-${process.pid}-${Math.random().toString(36).slice(2, 6)}`;
 let stopping = false;
@@ -15,7 +17,9 @@ async function loop() {
   console.log(`[worker] ${workerId} started`);
   while (!stopping) {
     try {
-      const n = await runDueJobs(handlers, { workerId, max: 25 });
+      // One retention purge per UTC day, deduped by idempotency key across workers.
+      await enqueue("ops.purge", "system", {}, { idempotencyKey: `purge:${new Date().toISOString().slice(0, 10)}` });
+      const n = await runDueJobs({ ...handlers, "ops.purge": async () => { console.log("[worker] retention purge", JSON.stringify(await purge())); } }, { workerId, max: 25 });
       if (n) console.log(`[worker] ran ${n} job(s)`);
     } catch (e) {
       console.error("[worker] loop error:", redact(e instanceof Error ? e.message : String(e)));

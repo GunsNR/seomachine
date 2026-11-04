@@ -204,6 +204,21 @@ export async function themeAction(f: FormData) {
   });
 }
 
+export async function allowedOriginsAction(f: FormData) {
+  const ctx = await requirePermission("site.write");
+  await runAction(str(f, "returnTo") || "/app/websites", async () => {
+    const origins = str(f, "origins").split(/[\s,]+/).filter(Boolean).map((o) => {
+      let u: URL;
+      try { u = new URL(o); } catch { throw new Error(`“${o}” isn't a web address.`); }
+      if (u.protocol !== "https:") throw new Error(`Use https:// for ${o}.`);
+      return u.origin;
+    });
+    await db.site.update({ where: { id: str(f, "siteId"), workspaceId: ctx.workspace.id }, data: { allowedOrigins: [...new Set(origins)].slice(0, 10) } });
+    await audit(ctx.workspace.id, ctx.userId, "site.origins", "site", str(f, "siteId"), { origins });
+    return origins.length ? `Forms on ${origins.join(", ")} can now send leads here.` : "Only pages served by Growth OS can send leads now.";
+  });
+}
+
 export async function newPageAction(f: FormData) {
   const ctx = await requirePermission("site.write");
   await runAction("/app/websites", async () => {

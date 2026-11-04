@@ -149,9 +149,9 @@ export default async function PiecePage({ params, searchParams }: { params: Prom
           {brief ? (
             <Section title="Brief & sources">
               <dl className="px-4 py-3 text-xs">
-                <p><span className="text-ink-2">Goal:</span> {brief.objective}</p>
-                <p><span className="text-ink-2">Sends to:</span> <span className="[overflow-wrap:anywhere]">{brief.destinationUrl}</span></p>
-                <p><span className="text-ink-2">Content ID:</span> {brief.contentKey} <span className="text-ink-2">(campaign {brief.campaignKey})</span></p>
+                <div><dt className="inline text-ink-2">Goal: </dt><dd className="inline">{brief.objective}</dd></div>
+                <div><dt className="inline text-ink-2">Sends to: </dt><dd className="inline [overflow-wrap:anywhere]">{brief.destinationUrl}</dd></div>
+                <div><dt className="inline text-ink-2">Content ID: </dt><dd className="inline">{brief.contentKey} <span className="text-ink-2">(campaign {brief.campaignKey})</span></dd></div>
               </dl>
               {sources.length ? <ul className="border-t border-line px-4 py-2 text-xs">{sources.map((s) => <li key={s.id} className="py-1"><a className="link" href={s.url} target="_blank" rel="noreferrer nofollow">{s.title}</a> · retrieved <When at={s.retrievedAt} tz={tz} short /> · <Status tone={s.evidence === "verified" ? "ok" : "warn"}>{s.evidence === "verified" ? "Verified" : "Discovery only"}</Status>{s.excerpt ? <p className="text-ink-2">{s.excerpt}</p> : null}</li>)}</ul> : <p className="border-t border-line px-4 py-2 text-2xs text-ink-2">No sources attached. Don’t state facts the brand profile doesn’t already approve.</p>}
             </Section>

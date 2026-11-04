@@ -8,7 +8,7 @@ import { parseTouch, sourceLabel } from "@/lib/attribution";
 import { addLocalDays, toLocalInput, zonedToUtc, daysBetween } from "@/lib/time";
 import { randomToken } from "@/lib/crypto";
 import { Empty, Flash, FixtureTag, KeyVal, Money, Notice, OverdueBar, Section, Status, SubmitButton, When } from "@/components/ui";
-import { addNoteAction, bookingAction, bookingStatusAction, completeTaskAction, createTaskAction, inboundAction, moveStageAction, outcomeAction, paymentAction, proposalCreateAction, takeoverAction } from "../../actions";
+import { assignOwnerAction, addNoteAction, bookingAction, bookingStatusAction, completeTaskAction, createTaskAction, inboundAction, moveStageAction, outcomeAction, paymentAction, proposalCreateAction, takeoverAction } from "../../actions";
 
 export const metadata = { title: "Lead" };
 
@@ -81,6 +81,7 @@ export default async function ContactPage({ params, searchParams }: { params: Pr
                     <KeyVal k="Qualified?">{o.qualification === "unknown" ? <span className="text-ink-2">Not yet confirmed</span> : o.qualification === "qualified" ? "Yes" : "No"}</KeyVal>
                     <KeyVal k="Job value">{o.estimatedValueMinor ? <Money minor={o.estimatedValueMinor} currency={o.currency} /> : <span className="text-ink-2">Not set</span>}</KeyVal>
                     <KeyVal k="Collected">{pays.length ? <><Money minor={net} currency={o.currency} /> <span className="text-2xs text-ink-2">net, {pays.length} record{pays.length > 1 ? "s" : ""}</span></> : <span className="text-ink-2">No payment recorded{o.status === "won" ? " — won is not paid" : ""}</span>}</KeyVal>
+                    <KeyVal k="Owner"><form action={assignOwnerAction} className="flex gap-1.5"><input type="hidden" name="opportunityId" value={o.id} /><input type="hidden" name="returnTo" value={here} /><label className="sr-only" htmlFor={`own-${o.id}`}>Owner</label><select id={`own-${o.id}`} name="ownerId" defaultValue={o.ownerId ?? ""} className="field min-h-[32px] py-0 text-xs"><option value="" disabled>Unassigned</option>{d.team.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</select><SubmitButton variant="secondary" className="min-h-[32px] px-2 text-xs">Assign</SubmitButton></form></KeyVal>
                     <KeyVal k="Came from">{sourceLabel(att)}{att?.campaign ? ` · ${att.campaign}` : ""}{att?.content ? ` · content ${att.content}` : ""}</KeyVal>
                     {o.lostReason ? <KeyVal k="Lost because">{o.lostReason}</KeyVal> : null}
                   </dl>

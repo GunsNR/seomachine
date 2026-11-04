@@ -49,6 +49,19 @@ export async function moveStage(a: Actor, opportunityId: string, stageId: string
   return updated;
 }
 
+/** Assign a deal to a member. Fires the "opportunity_assigned" workflow trigger. */
+export async function assignOwner(a: Actor, opportunityId: string, ownerId: string) {
+  const o = await oppOrThrow(a.workspaceId, opportunityId);
+  if (o.ownerId === ownerId) return o;
+  const { systemDb } = await import("../db");
+  const m = await systemDb.membership.findUnique({ where: { userId_workspaceId: { userId: ownerId, workspaceId: a.workspaceId } } });
+  if (!m || m.revokedAt || m.role === "client") throw new DomainError("Pick a current team member.");
+  const updated = await db.opportunity.update({ where: { id: o.id, workspaceId: a.workspaceId }, data: { ownerId, lastActivityAt: new Date() } });
+  await db.activity.create({ data: { workspaceId: a.workspaceId, contactId: o.contactId, opportunityId: o.id, kind: "owner_assigned", body: "", meta: { ownerId }, actorId: a.userId } });
+  await fireTrigger(a.workspaceId, "opportunity_assigned", { contactId: o.contactId, opportunityId: o.id }, `assign:${o.id}:${ownerId}:${Date.now()}`);
+  return updated;
+}
+
 export const OutcomeKinds = ["qualified", "unqualified", "appointment", "won", "lost", "job_value"] as const;
 export type OutcomeKind = (typeof OutcomeKinds)[number];
 

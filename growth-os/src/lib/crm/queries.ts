@@ -56,7 +56,9 @@ export async function contactDetail(workspaceId: string, contactId: string) {
   const actorIds = [...new Set([...activities.map((a) => a.actorId), ...outcomeRows.map((o) => o.confirmedById), ...paymentRows.map((p) => p.confirmedById)].filter(Boolean) as string[])];
   const { systemDb } = await import("../db");
   const users = await systemDb.user.findMany({ where: { id: { in: actorIds } }, select: { id: true, name: true } });
+  const team = await systemDb.membership.findMany({ where: { workspaceId, revokedAt: null, role: { not: "client" } }, include: { user: { select: { id: true, name: true } } } });
   return {
+    team: team.map((m) => m.user),
     contact, opps: opps.map((o) => ({ ...o, stages: parseStages(o.pipeline.stages) })), activities, tasks, bookings, consents, proposals, outcomes: outcomeRows, payments: paymentRows, messages, runs, suppression, phoneTwins,
     userName: (id: string | null | undefined) => users.find((u) => u.id === id)?.name ?? (id ? "Former member" : "System"),
   };

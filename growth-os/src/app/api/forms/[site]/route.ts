@@ -6,6 +6,7 @@ import { sha256 } from "@/lib/crypto";
 import { esc } from "@/lib/site/render";
 import { ThemeSchema } from "@/lib/brand";
 import { requestOrigin } from "@/app/lib-origin";
+import { clientIp } from "@/lib/client-ip";
 
 export const dynamic = "force-dynamic";
 
@@ -26,9 +27,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ site: s
   const theme = ThemeSchema.parse(site.theme);
   const back = `/s/${site.slug}`;
   const origin = req.headers.get("origin");
-  if (origin && origin !== (await requestOrigin())) return page(theme, "Couldn't send that", "This form can only be sent from its own page.", 403);
+  const allowed = new Set([await requestOrigin(), ...site.allowedOrigins]);
+  if (origin && !allowed.has(origin)) return page(theme, "Couldn't send that", "This form can only be sent from its own page.", 403);
   if (Number(req.headers.get("content-length") ?? 0) > 20_000) return page(theme, "Couldn't send that", "That message is too long.", 413);
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "local";
+  const ip = clientIp(req.headers);
   if (!(await hit(`form:${site.id}:${sha256(ip)}`, 8, 10 * 60_000)) || !(await hit(`form:${site.id}`, 300, 60 * 60_000))) {
     return page(theme, "Please try again shortly", `We've had a lot of requests. Wait a few minutes, or call us. <a href="${esc(back)}">Back</a>`, 429);
   }
