@@ -89,7 +89,9 @@ describe("ContentStudio adapter (REQ-CON-07)", () => {
     expect(pub.providerRef).toBe("61e006a89be9dd0cd07ec692");
     const post = seen.find((x) => x.url.endsWith("/posts"))!;
     expect(post.headers["x-api-key"]).toBe("cs_testkey123");
-    expect(JSON.parse(post.body)).toMatchObject({ content: { text: "Hello" }, accounts: ["acc1"] });
+    expect(JSON.parse(post.body)).toMatchObject({ content: { text: "Hello" }, accounts: ["acc1"], scheduling: { publish_type: "scheduled" } });
+    const piece = await db.contentPiece.findFirstOrThrow({ where: { workspaceId: S.ws.id, id: S.piece.id } });
+    expect(piece.status).toBe("publishing"); // accepted by the provider is not "done"
   });
 
   it("a timeout is never auto-resent: it becomes 'check ContentStudio'", async () => {
@@ -104,6 +106,7 @@ describe("ContentStudio adapter (REQ-CON-07)", () => {
     expect(pub.lastError).toMatch(/won't resend/);
     expect(seen.filter((x) => x.url.endsWith("/posts"))).toHaveLength(1);
     await markPostedByHand(S.actor, S.pubId, "https://facebook.com/harbor/posts/1");
+    expect((await db.contentPiece.findFirstOrThrow({ where: { workspaceId: S.ws.id, id: S.piece.id } })).status).toBe("published");
     const after = await db.publication.findFirstOrThrow({ where: { workspaceId: S.ws.id, id: S.pubId } });
     expect(after.status).toBe("published");
     expect(after.lastError).toMatch(/Posted by hand/);
@@ -115,6 +118,16 @@ describe("ContentStudio adapter (REQ-CON-07)", () => {
     mode.csPost = "reject";
     await dispatchPublication(S.ws.id, S.pubId);
     expect((await db.publication.findFirstOrThrow({ where: { workspaceId: S.ws.id, id: S.pubId } })).lastError).toMatch(/Video required/);
+  });
+});
+
+describe("ContentStudio platform limits", () => {
+  it("refuses media-only platforms on a text-only connection", async () => {
+    const W = await makeWorkspace();
+    const { brand } = await makeBrand(W.ws.id, W.user.id);
+    await saveCredential(W.actor, "contentstudio", "cs_testkey123", { csWorkspaceId: "ws1" });
+    await testContentStudio(W.ws.id);
+    await expect(addDestination(W.actor, { brandId: brand.id, platform: "instagram", label: "IG", adapter: "contentstudio", providerAccountId: "acc1" })).rejects.toThrow(/text only/);
   });
 });
 
@@ -166,7 +179,8 @@ describe("Search Console CSV import (REQ-SEO-05)", () => {
     const csv = "Top pages,Clicks,Impressions,CTR,Position\nhttps://harborline.example/,12,1,340,3.5%,8.2\nhttps://harborline.example/water-heaters,4,\"2,100\",0.2%,14.1\n";
     const r = await importGscCsv(W.actor, { property: "sc-domain:harborline.example", periodStart: new Date("2026-10-01"), periodEnd: new Date("2026-10-28"), csv: csv.replace("12,1,340", "12,\"1,340\"") });
     expect(r).toMatchObject({ rows: 2, kind: "pages" });
-    const g = await gscForPaths(W.ws.id, ["/water-heaters", "/boilers"]);
+    const g = await gscForPaths(W.ws.id, ["/water-heaters", "/boilers"], "harborline.example");
+    expect(await gscForPaths(W.ws.id, ["/water-heaters"], "otherbrand.example")).toBeNull(); // never matched across domains
     expect(g!.byPath["/water-heaters"]).toMatchObject({ clicks: 4, impressions: 2100, position: 14.1 });
     expect(g!.byPath["/boilers"]).toBeNull();
   });

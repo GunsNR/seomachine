@@ -31,7 +31,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ site: s
   if (origin && !allowed.has(origin)) return page(theme, "Couldn't send that", "This form can only be sent from its own page.", 403);
   if (Number(req.headers.get("content-length") ?? 0) > 20_000) return page(theme, "Couldn't send that", "That message is too long.", 413);
   const ip = clientIp(req.headers);
-  if (!(await hit(`form:${site.id}:${sha256(ip)}`, 8, 10 * 60_000)) || !(await hit(`form:${site.id}`, 300, 60 * 60_000))) {
+  // Per-visitor limit only when the client IP is trustworthy; otherwise every visitor would share one bucket.
+  const perIpOk = ip === "untrusted" ? true : await hit(`form:${site.id}:${sha256(ip)}`, 8, 10 * 60_000);
+  if (!perIpOk || !(await hit(`form:${site.id}`, 300, 60 * 60_000))) {
     return page(theme, "Please try again shortly", `We've had a lot of requests. Wait a few minutes, or call us. <a href="${esc(back)}">Back</a>`, 429);
   }
   const f = await req.formData();

@@ -107,12 +107,12 @@ export async function schedule(a: Actor, pieceId: string) {
 async function rollUpStatus(workspaceId: string, pieceId: string) {
   const pubs = await db.publication.findMany({ where: { workspaceId, pieceId, status: { not: "cancelled" } } });
   if (pubs.length === 0) return;
-  const done = (s: string) => ["published", "accepted", "manual_handoff"].includes(s);
+  // Only a confirmed public post is "done". Provider acceptance and manual hand-off are still in progress.
   const bad = (s: string) => ["failed", "refused"].includes(s);
   let status = "publishing";
-  if (pubs.every((p) => done(p.status))) status = "published";
-  else if (pubs.some((p) => done(p.status)) && pubs.some((p) => bad(p.status))) status = "partial";
+  if (pubs.every((p) => p.status === "published")) status = "published";
   else if (pubs.every((p) => bad(p.status))) status = "failed";
+  else if (pubs.some((p) => bad(p.status)) && pubs.some((p) => !bad(p.status))) status = "partial";
   await db.contentPiece.update({ where: { id: pieceId, workspaceId }, data: { status } });
 }
 
@@ -208,6 +208,11 @@ export type PubJson = Prisma.JsonValue;
 export async function markPostedByHand(a: Actor, publicationId: string, url: string) {
   const pub = await db.publication.findFirst({ where: { workspaceId: a.workspaceId, id: publicationId } });
   if (!pub || !["manual_handoff", "failed"].includes(pub.status)) throw new ContentError("Only hand-off or unconfirmed posts can be marked as posted by hand.");
+  const { version } = await currentVersion(a.workspaceId, pub.pieceId);
+  const approval = await db.approval.findFirst({ where: { workspaceId: a.workspaceId, id: pub.approvalId } });
+  if (pub.versionId !== version.id || !approval || approval.revokedAt || approval.decision !== "approved" || approval.subjectHash !== approvalHash(version.contentHash, approval.destinationIds, approval.scheduleAt)) {
+    throw new ContentError("This post's approved version is out of date or its approval was withdrawn. Get the current version approved first.");
+  }
   let u: URL;
   try { u = new URL(url); } catch { throw new ContentError("Paste the full link to the live post (https://…)."); }
   if (u.protocol !== "https:") throw new ContentError("Use the post's https:// link.");

@@ -49,8 +49,17 @@ const pathOf = (u: string) => {
  * by path. Owned pages are served at /s/<site>/<slug>; their public path is
  * /<slug>. Returns null when there is no data — never zero.
  */
-export async function gscForPaths(workspaceId: string, paths: string[]) {
-  const latest = await db.gscRow.findFirst({ where: { workspaceId, page: { not: "" } }, orderBy: { importedAt: "desc" } });
+export function hostOf(property: string): string {
+  if (property.startsWith("sc-domain:")) return property.slice(10).toLowerCase().replace(/^www\./, "");
+  try { return new URL(property).hostname.toLowerCase().replace(/^www\./, ""); } catch { return ""; }
+}
+
+/** Data is only ever matched to the site whose domain is the import's property — never across brands. */
+export async function gscForPaths(workspaceId: string, paths: string[], host: string) {
+  const h = host.toLowerCase().replace(/^www\./, "");
+  if (!h) return null;
+  const imports = await db.gscRow.findMany({ where: { workspaceId, page: { not: "" } }, orderBy: { importedAt: "desc" }, distinct: ["importId"], take: 20 });
+  const latest = imports.find((r) => hostOf(r.property) === h);
   if (!latest) return null;
   const rows = await db.gscRow.findMany({ where: { workspaceId, importId: latest.importId, page: { not: "" } } });
   const byPath = new Map<string, { clicks: number; impressions: number; position: number | null }>();

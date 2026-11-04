@@ -213,7 +213,10 @@ export async function allowedOriginsAction(f: FormData) {
       if (u.protocol !== "https:") throw new Error(`Use https:// for ${o}.`);
       return u.origin;
     });
-    await db.site.update({ where: { id: str(f, "siteId"), workspaceId: ctx.workspace.id }, data: { allowedOrigins: [...new Set(origins)].slice(0, 10) } });
+    const live = str(f, "baseUrl");
+    let baseUrl = "";
+    if (live) { try { const u = new URL(live); if (u.protocol !== "https:") throw new Error(); baseUrl = u.origin; } catch { throw new Error("The client's live website must be a full https:// address."); } }
+    await db.site.update({ where: { id: str(f, "siteId"), workspaceId: ctx.workspace.id }, data: { allowedOrigins: [...new Set(origins)].slice(0, 10), baseUrl } });
     await audit(ctx.workspace.id, ctx.userId, "site.origins", "site", str(f, "siteId"), { origins });
     return origins.length ? `Forms on ${origins.join(", ")} can now send leads here.` : "Only pages served by Growth OS can send leads now.";
   });

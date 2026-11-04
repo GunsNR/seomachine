@@ -30,6 +30,8 @@ These accounts exist only in the seeded demo database. Never seed them into a sh
 | `APP_ORIGIN` | recommended | Used for canonicals and the form same-origin check |
 | `LIVE_SENDING_ENABLED`, `LIVE_PUBLISHING_ENABLED`, `AI_LIVE_ENABLED` | no | All default off. Turning one on needs a recorded approval (below). |
 | `ANTHROPIC_API_KEY`, `AI_MODEL` | no | Without them AI stays off and templates are used |
+| `TRUST_PROXY_HOPS` | recommended in production | Number of proxies that append X-Forwarded-For; unset = don't trust it |
+| ContentStudio / Resend keys | no | Not env vars: pasted in Settings → Integrations, stored AES-GCM encrypted per workspace |
 
 ## Verification commands
 
@@ -57,7 +59,11 @@ npm run db:seed && node scripts/journeys.cjs
 node scripts/screens.mjs replica/screens
 ```
 
-`npm test` runs 69 behaviour tests. The journeys script makes 20 browser checks and needs `npm start` plus `npm run worker` running. The screens script captures screenshots and runs the a11y probe.
+```bash
+node scripts/axe.cjs
+```
+
+`npm test` runs 95 behaviour tests. The journeys script makes 26 browser checks and needs `npm start` plus `npm run worker` running. The screens script captures screenshots and runs the a11y probe; `axe.cjs` runs an axe-core WCAG 2.2 AA audit on 23 screens. CI (`.github/workflows/growth-os.yml`) runs audit, migrations, typecheck, lint, tests, build and a seeded smoke test on every change to `growth-os/**`.
 
 ## Trust boundaries
 
@@ -82,15 +88,16 @@ node scripts/screens.mjs replica/screens
 
 | # | Gap | Risk | Proposed fix | Needs |
 | --- | --- | --- | --- | --- |
-| G1 | `npm audit --omit=dev`: high advisories in transitive deps — `effect` and `deepmerge-ts` (via Prisma 6), `postcss` and `sharp` (via Next 15), `zod <4.6.6` | Mostly build-time or not reachable (no image optimisation of untrusted uploads), but unverified | Upgrade to Prisma 7, Next 16 and zod 4 in one reviewed change | **Your approval** (major upgrades) |
-| G2 | Auth is DB sessions + bcrypt, modelled on SuperTool's reviewed design. It is not a maintained auth library. No email verification and no MFA. | Account-security features lag | Evaluate Better Auth / Auth.js before external users; add MFA for owners | Decision |
-| G3 | No email delivery: invites and resets are one-time links the owner copies (2-minute httpOnly cookie, never in the URL) | Manual step | Connect a transactional email provider | Spending + domain DNS |
-| G4 | No Postgres row-level security; isolation relies on the app-level tenant guard plus re-scoped reads | A future raw-SQL bug could bypass the guard | Add RLS policies keyed on `app.workspace_id`, set per transaction | Migration approval |
-| G5 | Rate limiting trusts the first `X-Forwarded-For` value | Spoofable if not behind a proxy that overwrites it | Configure the host's trusted-proxy header | Hosting choice |
-| G6 | An exported HTML page posts its form to Growth OS, which rejects other origins | Exported forms fail on a client's own domain | Per-site allowed-origin list | Small change |
-| G7 | claude-api skill default: add server-side `fallbacks` for Opus 5.5. Not added while AI is off. | Refusals would surface as "declined" with no automatic retry | Switch the AI call to the beta messages endpoint with `fallbacks: "default"` when enabling AI | When AI is approved |
-| G8 | Flash messages come from the `?ok=` / `?error=` query string | A crafted link can show misleading text (no script injection; React escapes it) | Move flashes to a signed cookie | Small change |
-| G9 | The dry-run adapter's "accepted" memory is per process | After a restart, an ambiguous dry-run post would be re-simulated | Real adapters must look up by idempotency key at the provider | Part of the first real adapter |
+| G1 | High `npm audit` advisories in production dependencies | — | **Fixed 2026-11-04**: patched `postcss`, `effect`, `deepmerge-ts`, `sharp` via `overrides` (same majors); `zod` upgraded to 4.6.7. Production audit: 0 vulnerabilities. Dev-only moderate advisories remain (vitest, eslint's minimatch). CI now fails on any high production advisory. | — |
+| G2 | Auth is DB sessions + bcrypt, not a maintained auth library; no email verification or MFA | Account-security features lag | Evaluate Better Auth / Auth.js before external users; add MFA for owners | Decision |
+| G3 | No email delivery for invites/resets | Manual step | **Partly addressed**: Resend sender built for workflow email. Invites and resets still use the copy-the-link flow (2-minute httpOnly cookie). | Wire invites to the sender once live sending is approved |
+| G4 | No Postgres row-level security | A future raw-SQL bug could bypass the app's tenant guard | **Deliberately deferred.** RLS needs a per-transaction `set_config('app.workspace_id')`. The lead-intake, page-save and content-edit transactions would each need restructuring to set it first, and a partial version would protect nothing or break their atomicity. Plan: (1) wrap interactive transactions in a `tenantTx(workspaceId, fn)` helper that sets the variable first; (2) route non-transactional tenant queries through a batch transaction that sets it; (3) `ENABLE` + `FORCE ROW LEVEL SECURITY` with a `workspaceId = current_setting(...)` policy per tenant table; (4) give `systemDb` a separate bypass role. | Do before a second agency or external users |
+| G5 | Rate limiting trusted the first X-Forwarded-For value | Spoofable | **Fixed**: `TRUST_PROXY_HOPS` decides which entry to trust. When unset, per-visitor limits are skipped (so visitors never share a bucket) and the per-site and per-account limits apply. | Set `TRUST_PROXY_HOPS` on your host |
+| G6 | Exported pages couldn't post their form | Lost leads on client domains | **Fixed**: per-site allowed origins; exports post to the absolute `APP_ORIGIN` endpoint and include the key script | — |
+| G7 | Refusal fallback missing | No automatic retry on a refusal | **Fixed**: Opus/Sonnet/Fable calls use the beta endpoint with `fallbacks: "default"`; usage is priced at the model that served the request | — |
+| G8 | Unsigned flash messages | Crafted links could show misleading text | **Fixed**: HMAC-signed flash parameters; unsigned text is ignored. Flashes now also survive `#anchors`. | — |
+| G9 | Ambiguous provider results | Possible double posts | **Fixed for real adapters**: ContentStudio never auto-resends after an unclear result. The dry-run adapter's in-memory lookup remains for tests only. | — |
+| G10 | No route loading skeletons | Slow pages show nothing while loading | **Not added**: under Next 15.5, a `loading.tsx` boundary stopped server-action redirects from navigating (reproduced in the browser). Revisit after the Next 16 upgrade. | — |
 
 ## Live-action approval policy
 
@@ -110,8 +117,10 @@ The workspace emergency pause overrides every switch. Revoking a membership ends
 | `20261103181123_init` | Full schema | Drop database (fresh install only) |
 | `20261103184617_marketing_cost` | Adds `MarketingCost` | `DROP TABLE "MarketingCost";` |
 | `20261103200000_payment_idempotency` | Adds nullable `Payment.idempotencyKey` + unique index | `DROP INDEX "Payment_workspaceId_idempotencyKey_key"; ALTER TABLE "Payment" DROP COLUMN "idempotencyKey";` |
+| `20261104010000_setup_adapters` | Adds `Destination.providerAccountId`, `Integration.meta`, `Site.allowedOrigins`, table `GscRow` | Drop the three columns and `DROP TABLE "GscRow";` |
+| `20261104020000_outbound_provider_ref` | Adds `OutboundMessage.providerRef` | `ALTER TABLE "OutboundMessage" DROP COLUMN "providerRef";` |
 
-All three were applied only to the local throwaway dev and test databases in this session. Applying them to any shared or production database requires your approval: `npm run db:deploy`.
+All five were applied only to the local throwaway dev and test databases in this session. Applying them to any shared or production database requires your approval: `npm run db:deploy`.
 
 ## Backup and restore (tested locally 2026-11-03)
 
@@ -134,10 +143,11 @@ Restored row counts matched the source for Contact (11), Opportunity (11), Payme
 - **Crawl pages:** keep the last 10 runs per site.
 - **Healthcare:** marketing inquiries only — no patient histories or clinical notes. The form omits free-text details for healthcare brands.
 
-A purge job is not built yet (tracked in `progress.md`).
+The worker runs this purge once a day (`src/lib/retention.ts`).
 
 ## Monitoring
 
+- `GET /api/health` reports database status, worker backlog (jobs waiting over 5 minutes), failed jobs and the live switches. It contains no secrets or client data.
 - Settings → System health lists failed (dead) jobs and lets you retry them.
 - The worker logs a line per batch.
 - Not connected yet: uptime check, error tracking. Pick these with the host.

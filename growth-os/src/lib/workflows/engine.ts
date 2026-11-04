@@ -221,7 +221,12 @@ export async function dispatchMessage(workspaceId: string, messageId: string): P
   const claimed = await db.outboundMessage.updateMany({ where: { workspaceId, id: msg.id, status: { in: ["queued", "draft"] } }, data: { status: "sending" } });
   if (claimed.count === 0) return { status: "skipped", reason: "already being sent" };
   const { sendEmail } = await import("../integrations/email");
-  const r = await sendEmail(workspaceId, { to: contact.email, subject: msg.subject, text: msg.body, idempotencyKey: `gos-${msg.id}` });
+  let r: Awaited<ReturnType<typeof sendEmail>>;
+  try {
+    r = await sendEmail(workspaceId, { to: contact.email, subject: msg.subject, text: msg.body, idempotencyKey: `gos-${msg.id}` });
+  } catch {
+    r = { kind: "unknown" };
+  }
   if (r.kind === "sent") {
     await db.outboundMessage.update({ where: { id: msg.id, workspaceId }, data: { status: "sent", sentAt: new Date(), blockReason: "", providerRef: r.providerRef } });
     await db.activity.create({ data: { workspaceId, contactId: contact.id, opportunityId: msg.opportunityId, kind: "email_sent", body: msg.subject, actorType: "workflow" } });

@@ -15,6 +15,9 @@ import type { PublishAdapter, PublishRequest, PublishResponse } from "../content
  * Not yet live verified: needs an approved plan and a real key.
  */
 
+/** This adapter sends text only. These platforms accept text-only posts; Instagram, TikTok and YouTube need media. */
+export const CS_TEXT_PLATFORMS = ["facebook", "linkedin", "google_business"] as const;
+
 export function csBase() {
   return (process.env.CONTENTSTUDIO_API_BASE || "https://api.contentstudio.io").replace(/\/$/, "");
 }
@@ -58,11 +61,15 @@ export async function contentStudioAdapter(workspaceId: string, accountId: strin
     name: "contentstudio",
     safeToRetryWhenNotFound: false,
     async publish(req: PublishRequest): Promise<PublishResponse> {
+      if (!(CS_TEXT_PLATFORMS as readonly string[]).includes(req.platform)) return { kind: "rejected", reason: `${req.platform} needs an image or video, which this connection doesn't send yet. Post it by hand.`, permanent: true };
+      // Only documented publish_type values ("draft", "scheduled") are used; "post now" is a
+      // schedule two minutes ahead, because ContentStudio requires a future time.
+      const when = req.scheduleAt && req.scheduleAt.getTime() > Date.now() + 120_000 ? req.scheduleAt : new Date(Date.now() + 120_000);
       const body = {
         content: { text: req.caption },
         accounts: [accountId],
         post_type: "feed",
-        scheduling: req.scheduleAt && req.scheduleAt.getTime() > Date.now() + 60_000 ? { publish_type: "scheduled", scheduled_at: csTime(req.scheduleAt) } : { publish_type: "now" },
+        scheduling: { publish_type: "scheduled", scheduled_at: csTime(when) },
       };
       const r = await timedFetch(`${csBase()}/api/v1/workspaces/${encodeURIComponent(csWorkspace)}/posts`, { method: "POST", headers: { "X-API-Key": cred.secret, "content-type": "application/json", accept: "application/json" }, body: JSON.stringify(body), timeoutMs: 20000 });
       if (r.kind === "timeout" || r.kind === "network") return { kind: "timeout" };

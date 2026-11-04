@@ -50,7 +50,21 @@ Evidence screenshots are in `replica/screens/` (1×). Earlier rounds were captur
 | 15 | P1 | `#follow-up` and Settings anchors went nowhere: `Section` didn't set its id | `id` on the section element | J1 passes |
 | 16 | P1 | Home canonical and sitemap pointed at a URL that 308-redirects | No trailing slash | curl ✓ |
 
-## Journeys exercised in the browser (20/20 checks pass)
+## Round 4 — 2026-11-04: setup screens, integrations, axe
+
+| # | Sev | Issue | Fix | Re-checked |
+| --- | --- | --- | --- | --- |
+| 17 | P1 | Confirmation and error messages after actions on `#anchor` targets (Settings sections, brand facts) were silently lost: the message was appended after the `#` | The message now goes before the anchor | J7b passes |
+| 18 | P1 | Adding a `loading.tsx` skeleton stopped every form's redirect from navigating (Next 15.5) | Skeleton removed; recorded as G10 | J1–J8 pass |
+| 19 | P2 | axe: "Brief & sources" used `<p>` inside `<dl>` | `dt`/`dd` pairs | axe 0 violations |
+| 20 | P2 | Reports "no payments" state had the same `<dl>` misuse (not visible in demo data) | Fixed | Code inspection |
+| 21 | P3 | Hero proof fact repeated in the proof section | Proof section shows the remaining facts | Template test |
+
+New screens (Brand profile, Destinations, Pipeline, Workflow editor, Integrations, Clients) at 390 and 1440: 0 overflow, 0 unlabeled controls, 0 targets under 24px.
+
+axe-core 4.14.0 (WCAG 2.0/2.1/2.2 A + AA rules) on 23 screens, staff and client portal: **0 violations**. The script now refuses to audit a screen that redirected to sign-in, which an earlier version silently did.
+
+## Journeys exercised in the browser (26/26 checks pass)
 
 | Journey | Checks |
 | --- | --- |
@@ -61,6 +75,8 @@ Evidence screenshots are in `replica/screens/` (1×). Earlier rounds were captur
 | J4 | Client approves a post, confirms a lead, cannot open the staff CRM or the export |
 | J5 | Emergency pause banner shows on every staff screen |
 | J6 | Private preview refuses signed-out visitors |
+| J7 | Agency creates a client → opens on its brand profile; a client-supplied fact waits for review, then is approved (new version); a pipeline stage is added; a workflow is created switched off |
+| J8 | A hand-crafted `?error=` message link shows nothing |
 
 ## Design completion gate
 
@@ -70,10 +86,10 @@ Evidence screenshots are in `replica/screens/` (1×). Earlier rounds were captur
 | Visual system applied consistently | **Pass** | Tokens only via Tailwind theme; one primary per view checked on 16 screens | — |
 | Primary action and active workspace clear | **Pass** | Rail switcher / mobile header on every staff screen; "Next up" bar | — |
 | Widths 390 / 768 / 1440 | **Pass** | Probe: 0 overflow on all screens in round 3 | Check 1024 and 1280 breakpoints explicitly |
-| Contrast | **Pass (computed)** | `design.md` §4 table | Re-measure on rendered components with a full axe run |
+| Contrast | **Pass** | `design.md` §4 table; axe color-contrast rule passes on 23 rendered screens | — |
 | Focus and keyboard | **Pass (partial)** | J0; `:focus-visible` outline on all controls | Full keyboard pass through the editor and dialogs |
 | States: empty, error, disabled, permission, held, fixture | **Pass** | Seen in screenshots and journeys | — |
-| Loading state | **Not verified** | No route-level skeletons yet; pages are server-rendered | Add `loading.tsx` for slow routes |
+| Loading state | **Not added** | `loading.tsx` broke action redirects under Next 15.5 (round 4, #18) | Revisit after the Next 16 upgrade |
 | Screen-reader pass | **Not verified** | — | NVDA/VoiceOver pass |
 | Dark mode | **Not applicable** | Light-only by design decision | — |
 

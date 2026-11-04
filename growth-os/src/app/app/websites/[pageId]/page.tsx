@@ -177,9 +177,12 @@ export default async function Editor({ params, searchParams }: { params: Promise
             </form>
           </Panel>
 
-          <Panel title="Exported copies">
+          <Panel title="Live domain and exported copies">
             <form action={allowedOriginsAction} className="flex flex-col gap-2 p-4">
               <input type="hidden" name="siteId" value={site.id} /><input type="hidden" name="returnTo" value={`/app/websites/${page.id}`} />
+              <label className="label" htmlFor="baseUrl">Client’s live website</label>
+              <input id="baseUrl" name="baseUrl" defaultValue={site.baseUrl} placeholder="https://www.harborline.com" className="field" />
+              <p className="hint">Used to match Search Console data to this site only.</p>
               <label className="label" htmlFor="origins">Other domains allowed to send this site’s form</label>
               <input id="origins" name="origins" defaultValue={site.allowedOrigins.join(", ")} placeholder="https://www.harborline.com" className="field" />
               <p className="hint">Only needed if you host the exported HTML on the client’s own domain. Leads still land here, with the same spam protection.</p>

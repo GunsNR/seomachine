@@ -14,6 +14,31 @@ import { auditPages } from "@/lib/seo/rules";
 
 beforeEach(resetDb);
 
+describe("code-review regressions (round 2)", () => {
+  it("exported pages include the script that creates the form's idempotency key", async () => {
+    const { renderPageHtml } = await import("@/lib/site/render");
+    const { templatePage } = await import("@/lib/site/sections");
+    const p = profile();
+    const t = templatePage(p, "home");
+    const html = renderPageHtml({ siteSlug: "x", siteName: "X", baseUrl: "https://x.example", pageSlug: "home", sections: t.sections, meta: t.meta, brand: p, theme: p.theme, mode: "export", formAction: "https://app.example/api/forms/x", navPages: [] });
+    expect(html).toContain("data-gos-form");
+    expect(html).toContain("randomUUID");
+  });
+
+  it("can't mark a post as hand-posted once its approval is withdrawn", async () => {
+    const W = await makeWorkspace();
+    const { brand } = await makeBrand(W.ws.id, W.user.id);
+    const d = await db.destination.create({ data: { workspaceId: W.ws.id, brandId: brand.id, platform: "linkedin", label: "LI", adapter: "manual", status: "manual_handoff" } });
+    const { markPostedByHand, dispatchPublication } = await import("@/lib/content/publish");
+    const p = await createPiece(W.actor, { brandId: brand.id, title: "T", variants: [{ platform: "linkedin", caption: "x", hook: "", hashtags: [], mentions: [], internalTags: [], title: "" }], asset: null, generator: "human" });
+    await decide(W.actor, p.id, { decision: "approved", destinationIds: [d.id], scheduleAt: null });
+    const [pubId] = await schedule(W.actor, p.id);
+    await dispatchPublication(W.ws.id, pubId!);
+    await db.approval.updateMany({ where: { workspaceId: W.ws.id, subjectId: p.id }, data: { revokedAt: new Date() } });
+    await expect(markPostedByHand(W.actor, pubId!, "https://linkedin.com/posts/1")).rejects.toThrow(/out of date|withdrawn/);
+  });
+});
+
 describe("code-review regressions", () => {
   it("sending content back revokes the earlier approval so it can't be scheduled", async () => {
     const W = await makeWorkspace();

@@ -58,7 +58,7 @@ function sectionHtml(s: Section, r: RenderInput): string {
     case "lead_form": {
       const healthcare = r.brand.industry === "healthcare";
       return `<section id="request" class="alt"><div class="wrap narrow"><h2>${esc(s.heading)}</h2>${s.body ? `<p>${esc(s.body)}</p>` : ""}
-<form method="post" action="${esc(r.formAction)}" class="form" ${r.mode === "export" ? "" : 'data-gos-form="1"'}>
+<form method="post" action="${esc(r.formAction)}" class="form" data-gos-form="1">
 <input type="hidden" name="idempotencyKey" value="">
 <input type="hidden" name="landingPage" value=""><input type="hidden" name="referrer" value="">
 <div class="hp" aria-hidden="true"><label>Leave this empty<input name="company_website" tabindex="-1" autocomplete="off"></label></div>
@@ -96,7 +96,8 @@ export function renderPageHtml(r: RenderInput): string {
   const robots = r.mode === "preview" || r.meta.noindex ? "noindex, nofollow" : "index, follow";
   const nav = r.navPages.length > 1 ? `<nav aria-label="Main"><div class="wrap navrow"><a class="brand" href="${esc(pageUrl(r.baseUrl, ""))}">${esc(r.brand.businessName)}</a><ul>${r.navPages.map((p) => `<li><a href="${esc(pageUrl(r.baseUrl, p.slug))}"${p.slug === r.pageSlug ? ' aria-current="page"' : ""}>${esc(p.label)}</a></li>`).join("")}</ul></div></nav>` : `<nav aria-label="Main"><div class="wrap navrow"><a class="brand" href="${esc(pageUrl(r.baseUrl, ""))}">${esc(r.brand.businessName)}</a></div></nav>`;
   const banner = r.mode === "preview" ? `<div class="preview-bar" role="status">Private preview — not public, not indexed</div>` : "";
-  const script = r.mode === "export" ? "" : `<script>(function(){var f=document.querySelector('[data-gos-form]');if(!f)return;var k=f.querySelector('[name=idempotencyKey]');k.value=(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random());f.querySelector('[name=landingPage]').value=location.href;f.querySelector('[name=referrer]').value=document.referrer;f.addEventListener('submit',function(){var b=f.querySelector('button[type=submit]');setTimeout(function(){b.disabled=true;b.textContent='Sending…'},0)});})();</script>`;
+  // Exported copies need the script too: it creates the idempotency key the endpoint requires.
+  const script = `<script>(function(){var f=document.querySelector('[data-gos-form]');if(!f)return;var k=f.querySelector('[name=idempotencyKey]');k.value=(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random());f.querySelector('[name=landingPage]').value=location.href;f.querySelector('[name=referrer]').value=document.referrer;f.addEventListener('submit',function(){var b=f.querySelector('button[type=submit]');setTimeout(function(){b.disabled=true;b.textContent='Sending…'},0)});})();</script>`;
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(r.meta.title)}</title><meta name="description" content="${esc(r.meta.description)}"><meta name="robots" content="${robots}">
 <link rel="canonical" href="${esc(canonical)}"><meta property="og:title" content="${esc(r.meta.ogTitle || r.meta.title)}"><meta property="og:description" content="${esc(r.meta.description)}"><meta property="og:type" content="website"><meta property="og:url" content="${esc(canonical)}">

@@ -53,7 +53,9 @@ The password for both is whatever you set as `SEED_PASSWORD` in `.env` before ru
 | Websites | Section editor, preview, versions, publish, rollback, export |
 | SEO | Audits, evidence-backed findings, previewing a fix on hosted pages |
 | Reports | Outcomes by step and source, collections, coverage, freshness |
-| Settings | Emergency pause, workflows, members and invites, AI budget, system health, capabilities |
+| Settings | Emergency pause, members and invites, AI budget, system health, capabilities — plus Brand profile (facts review), Destinations, Pipeline stages, Workflow builder, Integrations (ContentStudio, Resend, Search Console CSV) and Clients (agency only) |
 | Portal (clients) | Confirm leads and sales, approve work, see results |
 
 What works today vs. what's planned: Settings → Capabilities, or `replica/feature-matrix.md`.
+
+Health check: http://localhost:3100/api/health. Accessibility audit: `node scripts/axe.cjs` (with the app running and `.env` loaded).

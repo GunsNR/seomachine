@@ -93,7 +93,9 @@ export async function generateStructured<T>(args: {
       ? await client.beta.messages.create({ model: status.model, max_tokens: 16000, betas: ["server-side-fallback-2026-07-01"], fallbacks: "default", output_config, system, messages })
       : await client.messages.create({ model: status.model, max_tokens: 16000, output_config, system, messages });
     const usage = response.usage;
-    await db.usageEvent.create({ data: { workspaceId: args.workspaceId, provider: "anthropic", operation: args.operation, inputTokens: usage.input_tokens, outputTokens: usage.output_tokens, costMicros: costMicros(status.model, usage.input_tokens, usage.output_tokens), estimated: false } });
+    // With a server-side fallback the response names the model that actually served it.
+    const servedBy = String((response as { model?: string }).model ?? status.model);
+    await db.usageEvent.create({ data: { workspaceId: args.workspaceId, provider: "anthropic", operation: `${args.operation}${servedBy !== status.model ? ` (served by ${servedBy})` : ""}`, inputTokens: usage.input_tokens, outputTokens: usage.output_tokens, costMicros: costMicros(PRICING[servedBy] ? servedBy : status.model, usage.input_tokens, usage.output_tokens), estimated: !PRICING[servedBy] } });
     if (response.stop_reason === "refusal") return { ok: false, state: "refused", message: "The model declined this request. Edit the brief and try again, or write it by hand." };
     const text = (response.content as { type: string; text?: string }[]).map((b) => (b.type === "text" ? b.text ?? "" : "")).join("");
     let json: unknown = null;

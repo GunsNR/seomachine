@@ -18,7 +18,8 @@ export async function loginAction(form: FormData) {
   const email = String(form.get("email") ?? "").trim().toLowerCase();
   const password = String(form.get("password") ?? "");
   const ip = clientIp(await headers());
-  if (!(await hit(`login:${sha256(ip)}`, 20, 15 * 60_000)) || !(await hit(`login-acct:${sha256(email)}`, 8, 15 * 60_000))) {
+  const ipOk = ip === "untrusted" ? await hit("login:global", 500, 15 * 60_000) : await hit(`login:${sha256(ip)}`, 20, 15 * 60_000);
+  if (!ipOk || !(await hit(`login-acct:${sha256(email)}`, 8, 15 * 60_000))) {
     redirect("/login?error=" + signFlash("Too many attempts. Wait 15 minutes and try again."));
   }
   const user = await systemDb.user.findUnique({ where: { email } });

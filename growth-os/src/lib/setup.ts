@@ -133,6 +133,8 @@ export async function addDestination(a: Actor, input: { brandId: string; platfor
     const integ = await db.integration.findFirst({ where: { workspaceId: a.workspaceId, provider: "contentstudio", status: "connected" } });
     if (!integ) throw new SetupError("Connect ContentStudio in Settings → Integrations first.");
     if (!input.providerAccountId?.trim()) throw new SetupError("Enter the ContentStudio account ID for this profile.");
+    const { CS_TEXT_PLATFORMS } = await import("./integrations/contentstudio");
+    if (!(CS_TEXT_PLATFORMS as readonly string[]).includes(input.platform)) throw new SetupError("This ContentStudio connection sends text only, so it works for Facebook, LinkedIn and Google Business Profile. Use manual hand-off for platforms that need media.");
     status = "connected";
   }
   const d = await db.destination.create({ data: { workspaceId: a.workspaceId, brandId: brand.id, platform: input.platform, label: input.label.trim().slice(0, 120) || input.platform, adapter: input.adapter, status, providerAccountId: input.providerAccountId?.trim() ?? "" } });

@@ -9,7 +9,7 @@ One source of truth for MVP scope. Status uses the claim ladder:
 
 Nothing here is live verified.
 
-Tests live in `tests/*.test.ts` (69 tests). Journeys are J0–J6 (20 checks).
+Tests live in `tests/*.test.ts` (95 tests). Journeys are J0–J8 (26 checks).
 
 ## CRM and sales
 
@@ -33,7 +33,7 @@ Tests live in `tests/*.test.ts` (69 tests). Journeys are J0–J6 (20 checks).
 | REQ-AUT-02 | Runs snapshot their workflow version; bounded steps; overlapping executions produce one effect | `advanceRun` (CAS + idempotency keys; un-claim on failure) | `workflows.test.ts`, `review-regressions.test.ts` | Tested |
 | REQ-AUT-03 | Suppression, consent, pause and stop rules checked at dispatch, not only at enqueue | `stopReasonNow`, `dispatchMessage` | acceptance 6 (4 cases) | Tested |
 | REQ-AUT-04 | Stop on reply, opt-out, booking, disqualification, close; manual takeover; workspace emergency pause | `stopRunsFor`, `takeoverAction`, `pauseAction` | `workflows.test.ts`; J5a | Tested + Journey |
-| REQ-AUT-05 | No live sending without a verified sender: messages are held with a reason, never marked sent | `dispatchMessage` | `workflows.test.ts` | Tested · sending itself **Blocked** |
+| REQ-AUT-05 | Live email only with a verified domain + DMARC + LIVE_SENDING_ENABLED; idempotency key per send; opt-out re-checked at send time; unclear results held, not resent | `dispatchMessage`, `lib/integrations/email.ts` | `workflows.test.ts`, `adapters.test.ts` | Tested against mock · not live verified |
 
 ## Websites
 
@@ -59,7 +59,8 @@ Tests live in `tests/*.test.ts` (69 tests). Journeys are J0–J6 (20 checks).
 | REQ-CON-04 | Approval binds to version + destinations + schedule + approver; edits or a send-back revoke it; worker refuses stale versions | `lib/content/publish.ts` | acceptance 5; `review-regressions.test.ts` | Tested |
 | REQ-CON-05 | Per-destination status; acceptance, delivery and URL kept separate; partial success visible; timeout reconciles before resend | `dispatchPublication`, `reconcilePublication` | acceptance 7 (4 cases) | Tested |
 | REQ-CON-06 | One branded image/carousel export path | `content/svg.ts`, `/api/assets` | Inspected | Inspected |
-| REQ-CON-07 | Real publishing adapter | — | — | **Deferred** (ContentStudio recommended) |
+| REQ-CON-07 | Real publishing adapter; never fake-connected; never auto-resend after unclear result | `lib/integrations/contentstudio.ts`, `lib/setup.ts` | `adapters.test.ts` (6 cases), `setup.test.ts` | Tested against mock · not live verified |
+| REQ-CON-08 | Manual hand-off package + mark as posted (current approved version only) | `/api/export/post/[pubId]`, `markPostedByHand` | `adapters.test.ts`, `review-regressions.test.ts` | Tested |
 
 ## SEO
 
@@ -69,7 +70,7 @@ Tests live in `tests/*.test.ts` (69 tests). Journeys are J0–J6 (20 checks).
 | REQ-SEO-02 | Evidence-backed findings: urls, freshness, intent, proposal, hypothesis, effort, risk, verification; no ranking guarantees | `lib/seo/rules.ts` | `site-seo.test.ts` | Tested |
 | REQ-SEO-03 | Owned pages: versioned patch → approve → publish → recheck → rollback; external sites: proposal only | `seo/patches.ts` | acceptance 10; J3 | Tested + Journey |
 | REQ-SEO-04 | Dismissed stays dismissed; unreachable pages reported as gaps | `executeCrawl`, `fetch_failed` | `review-regressions.test.ts` | Tested |
-| REQ-SEO-05 | GSC / GA4 / Ahrefs ingestion | — | — | **Deferred** — shown as "Not connected" |
+| REQ-SEO-05 | Search Console data (CSV import, period + source, matched by site domain only) | `lib/integrations/gsc.ts`, SEO queue | `adapters.test.ts` | Tested · API sync, GA4 and Ahrefs **Deferred** |
 
 ## Measurement
 
@@ -102,6 +103,18 @@ Tests live in `tests/*.test.ts` (69 tests). Journeys are J0–J6 (20 checks).
 | REQ-UX-03 | No overflow, visible focus, labelled controls, ≥24px targets at 390/768/1440 | `globals.css`, components | `a11y-probe.cjs` across 16 screens | Inspected (automated probe) |
 | REQ-OPS-01 | Durable leased jobs, retries with backoff, failed-job visibility and retry | `lib/jobs/queue.ts`, Settings → System health | `content.test.ts`, `workflows.test.ts` | Tested |
 | REQ-OPS-02 | Data persists across restarts | Postgres | DB and app restarted; journey lead still present (`progress.md`) | Inspected |
+
+## Setup and operations (added 2026-11-04)
+
+| ID | Requirement | Implementation | Evidence | Status |
+| --- | --- | --- | --- | --- |
+| REQ-SET-01 | Agency creates isolated client workspaces; nothing published or switched on by default | `createClientWorkspace`, Settings → Clients | `setup.test.ts`; J7a | Tested + Journey |
+| REQ-SET-02 | Brand profile editor; website/inferred facts always need review; testimonials need attribution | `saveBrandVersion`, `addFact`, `reviewFact` | `setup.test.ts`; J7b–c | Tested + Journey |
+| REQ-SET-03 | Pipeline stage editor (one won, one lost, can't drop stages holding deals) | `updateStages` | `setup.test.ts`; J7d | Tested + Journey |
+| REQ-SET-04 | Workflow builder with versioning; new workflows start off; assignment trigger reachable | `saveWorkflow`, `assignOwner` | `setup.test.ts`, `ops.test.ts`; J7e | Tested + Journey |
+| REQ-OPS-03 | Retention purge (suppression never deleted); health endpoint | `lib/retention.ts`, `/api/health` | `ops.test.ts`; curl | Tested |
+| REQ-SEC-07 | Signed flash messages; trusted-proxy IP; per-site allowed origins | `lib/flash.ts`, `lib/client-ip.ts`, forms route | `ops.test.ts`, `review-regressions.test.ts`; J8 | Tested + Journey |
+| REQ-UX-04 | WCAG 2.2 AA automated audit | `scripts/axe.cjs` | 23 screens, 0 violations | Inspected (automated) |
 
 ## Deferred, outside the MVP
 

@@ -22,8 +22,13 @@ export default async function Seo({ searchParams }: { searchParams: Promise<{ vi
   // Rank: severity, then real Search Console impressions where imported, then effort.
   const siteFor = (u: string) => sites.find((s) => u.includes(`/s/${s.slug}`));
   const pathFor = (u: string) => { const s = siteFor(u); return s ? publicPathFor(u, s.slug) : (() => { try { return new URL(u).pathname.replace(/\/$/, "") || "/"; } catch { return u; } })(); };
-  const gscData = await gscForPaths(ctx.workspace.id, [...new Set(findings.flatMap((f) => f.urls.map(pathFor)))]);
-  const imp = (f: (typeof findings)[number]) => f.urls.reduce((sum, u) => sum + (gscData?.byPath[pathFor(u)]?.impressions ?? 0), 0);
+  // Search Console data is matched per site domain: owned sites use their "Client's live website" setting.
+  const hostFor = (u: string) => { const s = siteFor(u); if (s) { try { return s.baseUrl ? new URL(s.baseUrl).hostname : ""; } catch { return ""; } } try { return new URL(u).hostname; } catch { return ""; } };
+  const hosts = [...new Set(findings.flatMap((f) => f.urls.map(hostFor)).filter(Boolean))];
+  const gscByHost = Object.fromEntries(await Promise.all(hosts.map(async (h) => [h, await gscForPaths(ctx.workspace.id, [...new Set(findings.flatMap((f) => f.urls.filter((u) => hostFor(u) === h).map(pathFor)))], h)] as const)));
+  const gscRow = (u: string) => gscByHost[hostFor(u)]?.byPath[pathFor(u)] ?? null;
+  const gscData = Object.values(gscByHost).find(Boolean) ?? null;
+  const imp = (f: (typeof findings)[number]) => f.urls.reduce((sum, u) => sum + (gscRow(u)?.impressions ?? 0), 0);
   findings.sort((a, b) => (SEV[a.severity]! - SEV[b.severity]!) || imp(b) - imp(a) || (a.effort < b.effort ? -1 : 1));
   return (
     <>
@@ -66,7 +71,7 @@ export default async function Seo({ searchParams }: { searchParams: Promise<{ vi
                 <tr key={f.id}>
                   <td className="min-w-[240px]"><Link className="font-medium hover:underline" href={`/app/seo/${f.id}`}>{f.finding}</Link><p className="text-2xs text-ink-2">{f.proposedChange}</p></td>
                   <td className="max-w-[220px] text-xs text-ink-2 [overflow-wrap:anywhere]">{f.urls.map((u) => u.replace(/^https?:\/\/[^/]+/, "")).join(", ")}</td>
-                  <td className="text-right num">{gscData ? (f.urls.some((u) => gscData.byPath[pathFor(u)]) ? imp(f).toLocaleString("en-US") : <span className="text-ink-2" title="This page isn't in the imported export">—</span>) : <span className="text-ink-2">—</span>}</td>
+                  <td className="text-right num">{gscData ? (f.urls.some((u) => gscRow(u)) ? imp(f).toLocaleString("en-US") : <span className="text-ink-2" title="This page isn't in the imported export">—</span>) : <span className="text-ink-2">—</span>}</td>
                   <td><Status tone={f.severity === "high" ? "bad" : f.severity === "medium" ? "warn" : "neutral"}>{f.severity}</Status></td>
                   <td className="num">{f.effort}</td>
                   <td>{f.status === "patch_proposed" ? <Status tone="info">Patch proposed</Status> : f.status === "resolved" ? <Status tone="ok">Resolved</Status> : f.status === "dismissed" ? <Status>Dismissed</Status> : <Status>Open</Status>}</td>
