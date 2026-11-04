@@ -486,12 +486,14 @@ model OutboundMessage {
   channel       String
   subject       String    @default("")
   body          String
-  /// draft | queued | blocked | held | sent | failed
+  /// draft | queued | sending | blocked | held | sent | failed
   status        String    @default("draft")
   blockReason   String    @default("")
   idempotencyKey String?
   scheduledFor  DateTime?
   sentAt        DateTime?
+  /// Provider message id once accepted (e.g. Resend email id).
+  providerRef   String    @default("")
   createdAt     DateTime  @default(now())
 
   @@unique([workspaceId, idempotencyKey])

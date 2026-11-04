@@ -3,13 +3,15 @@ import { z } from "zod";
 import { requirePermission } from "@/lib/auth";
 import { runAction, str } from "@/lib/actions";
 import { db } from "@/lib/db";
-import { createPiece, decide, editPiece, schedule, submitForReview } from "@/lib/content/publish";
+import { createPiece, decide, editPiece, markPostedByHand, schedule, submitForReview } from "@/lib/content/publish";
 import { templateVariants } from "@/lib/content/templates";
 import { PLATFORMS, VariantSchema, AssetSchema, type Platform } from "@/lib/content/variants";
 import { BrandProfileSchema } from "@/lib/brand";
 import { parseLocalInput } from "@/lib/time";
 import { slugify } from "@/lib/normalize";
 import { randomToken } from "@/lib/crypto";
+import { aiStatus } from "@/lib/ai/provider";
+import { aiCaptions } from "@/lib/ai/tasks";
 
 const actor = (c: { workspace: { id: string }; userId: string; role: string }) => ({ workspaceId: c.workspace.id, userId: c.userId, role: c.role });
 const list = (s: string) => s.split(/[,\n]/).map((x) => x.trim()).filter(Boolean);
@@ -38,8 +40,17 @@ export async function newDraftAction(f: FormData) {
     const brief = await db.contentBrief.create({ data: { workspaceId: ctx.workspace.id, brandId: brand.id, brandVersionId: bv!.id, objective: str(f, "objective") || "Leads", audienceQuestion: q, cta: str(f, "cta") || "Get in touch", destinationUrl, campaignKey: slugify(str(f, "campaign") || "general"), contentKey, sourceIds } });
     const t = templateVariants(profile, brief, platforms);
     if (t.blocked.length) throw new Error(`Draft not created: ${t.blocked.join("; ")}.`);
-    const piece = await createPiece(actor(ctx), { brandId: brand.id, briefId: brief.id, title: q.slice(0, 120), variants: t.variants, asset: t.asset, generator: "template" });
-    return { to: `/app/content/${piece.id}`, ok: "Draft created from the brand template. Edit it, then send it for review." };
+    let variants = t.variants;
+    let generator: "template" | "ai" = "template";
+    let note = "Draft created from the brand template (not AI).";
+    if (aiStatus().live) {
+      const sources = sourceIds.length ? await db.researchSource.findMany({ where: { workspaceId: ctx.workspace.id, id: { in: sourceIds } } }) : [];
+      const ai = await aiCaptions({ workspaceId: ctx.workspace.id, brandVersionId: bv!.id, profile, brief, platforms, sources: sources.map((s) => ({ url: s.url, excerpt: s.excerpt })) });
+      if ("variants" in ai) { variants = ai.variants; generator = "ai"; note = "AI draft created from approved brand facts. Check every claim before sending it for review."; }
+      else note = `AI draft not used — ${ai.error} A template draft was created instead.`;
+    }
+    const piece = await createPiece(actor(ctx), { brandId: brand.id, briefId: brief.id, title: q.slice(0, 120), variants, asset: t.asset, generator });
+    return { to: `/app/content/${piece.id}`, ok: note };
   });
 }
 
@@ -73,6 +84,12 @@ export async function decideAction(f: FormData) {
     await decide(actor(ctx), id, { decision, destinationIds: f.getAll("destinationIds").map(String), scheduleAt: when ? parseLocalInput(when, ctx.workspace.timezone) : null, note: str(f, "note") });
     return decision === "approved" ? "Approved for the selected destinations and time" : "Sent back with your note";
   });
+}
+
+export async function markPostedAction(f: FormData) {
+  const ctx = await requirePermission("content.write");
+  const id = str(f, "pieceId");
+  await runAction(`/app/content/${id}`, async () => { await markPostedByHand(actor(ctx), str(f, "publicationId"), str(f, "url")); return "Recorded as posted by hand"; });
 }
 
 export async function scheduleAction(f: FormData) {

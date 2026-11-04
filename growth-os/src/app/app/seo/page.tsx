@@ -3,6 +3,7 @@ import { requireStaffPage } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { Empty, Flash, PageHeader, Section, Status, SubmitButton, Tabs, When } from "@/components/ui";
 import { startCrawlAction } from "./actions";
+import { gscForPaths, publicPathFor } from "@/lib/integrations/gsc";
 
 export const metadata = { title: "SEO" };
 const SEV = { high: 0, medium: 1, low: 2 } as Record<string, number>;
@@ -18,7 +19,12 @@ export default async function Seo({ searchParams }: { searchParams: Promise<{ vi
     db.site.findMany({ where: { workspaceId: ctx.workspace.id } }),
     db.integration.findFirst({ where: { workspaceId: ctx.workspace.id, provider: "google_search_console" } }),
   ]);
-  findings.sort((a, b) => (SEV[a.severity]! - SEV[b.severity]!) || (a.effort < b.effort ? -1 : 1));
+  // Rank: severity, then real Search Console impressions where imported, then effort.
+  const siteFor = (u: string) => sites.find((s) => u.includes(`/s/${s.slug}`));
+  const pathFor = (u: string) => { const s = siteFor(u); return s ? publicPathFor(u, s.slug) : (() => { try { return new URL(u).pathname.replace(/\/$/, "") || "/"; } catch { return u; } })(); };
+  const gscData = await gscForPaths(ctx.workspace.id, [...new Set(findings.flatMap((f) => f.urls.map(pathFor)))]);
+  const imp = (f: (typeof findings)[number]) => f.urls.reduce((sum, u) => sum + (gscData?.byPath[pathFor(u)]?.impressions ?? 0), 0);
+  findings.sort((a, b) => (SEV[a.severity]! - SEV[b.severity]!) || imp(b) - imp(a) || (a.effort < b.effort ? -1 : 1));
   return (
     <>
       <PageHeader title="SEO" description="Bounded audits of sites you're authorized to check. Each finding shows its evidence, a proposed change and how to verify it." />
@@ -41,7 +47,7 @@ export default async function Seo({ searchParams }: { searchParams: Promise<{ vi
         <Section title="Data sources">
           <ul className="divide-y divide-line text-sm">
             <li className="flex items-center justify-between gap-2 px-4 py-2.5"><span>Crawler</span><Status tone="ok">Working — fixture &amp; owned sites</Status></li>
-            <li className="flex items-center justify-between gap-2 px-4 py-2.5"><span>Search Console</span>{gsc?.status === "connected" ? <Status tone="ok">Connected</Status> : <Status>Not connected</Status>}</li>
+            <li className="flex items-center justify-between gap-2 px-4 py-2.5"><span>Search Console</span>{gscData ? <Status tone="ok">CSV export, <When at={gscData.periodStart} tz={tz} short /> – <When at={gscData.periodEnd} tz={tz} short /></Status> : gsc?.status === "connected" ? <Status tone="ok">Connected</Status> : <Status>No data — import a CSV in Settings → Integrations</Status>}</li>
             <li className="flex items-center justify-between gap-2 px-4 py-2.5"><span>GA4</span><Status>Not connected</Status></li>
             <li className="flex items-center justify-between gap-2 px-4 py-2.5"><span>Ahrefs</span><Status>Not connected — paid, needs approval</Status></li>
             <li className="flex items-center justify-between gap-2 px-4 py-2.5"><span>Field performance (CrUX)</span><Status>Unavailable</Status></li>
@@ -54,12 +60,13 @@ export default async function Seo({ searchParams }: { searchParams: Promise<{ vi
       <div className="panel overflow-x-auto">
         {findings.length === 0 ? <Empty title={view === "open" ? "No open findings" : "Nothing resolved yet"}>{view === "open" ? "Run an audit to check a site." : "Findings resolve when a re-audit no longer reproduces them."}</Empty> : (
           <table className="table">
-            <thead><tr><th scope="col">Finding</th><th scope="col">Pages</th><th scope="col">Priority</th><th scope="col">Effort</th><th scope="col">State</th><th scope="col">Seen</th></tr></thead>
+            <thead><tr><th scope="col">Finding</th><th scope="col">Pages</th><th scope="col" className="text-right">Impressions{gscData ? "" : " (no data)"}</th><th scope="col">Priority</th><th scope="col">Effort</th><th scope="col">State</th><th scope="col">Seen</th></tr></thead>
             <tbody>
               {findings.map((f) => (
                 <tr key={f.id}>
                   <td className="min-w-[240px]"><Link className="font-medium hover:underline" href={`/app/seo/${f.id}`}>{f.finding}</Link><p className="text-2xs text-ink-2">{f.proposedChange}</p></td>
                   <td className="max-w-[220px] text-xs text-ink-2 [overflow-wrap:anywhere]">{f.urls.map((u) => u.replace(/^https?:\/\/[^/]+/, "")).join(", ")}</td>
+                  <td className="text-right num">{gscData ? (f.urls.some((u) => gscData.byPath[pathFor(u)]) ? imp(f).toLocaleString("en-US") : <span className="text-ink-2" title="This page isn't in the imported export">—</span>) : <span className="text-ink-2">—</span>}</td>
                   <td><Status tone={f.severity === "high" ? "bad" : f.severity === "medium" ? "warn" : "neutral"}>{f.severity}</Status></td>
                   <td className="num">{f.effort}</td>
                   <td>{f.status === "patch_proposed" ? <Status tone="info">Patch proposed</Status> : f.status === "resolved" ? <Status tone="ok">Resolved</Status> : f.status === "dismissed" ? <Status>Dismissed</Status> : <Status>Open</Status>}</td>

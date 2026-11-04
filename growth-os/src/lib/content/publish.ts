@@ -148,9 +148,9 @@ export async function dispatchPublication(workspaceId: string, publicationId: st
   const variant = variants.find((v) => v.platform === dest.platform);
   if (!variant) return refuse(`No ${dest.platform} version of this post.`);
 
-  const adapter = adapterFor(dest.adapter);
+  const { adapter, reason } = await adapterFor(dest, workspaceId);
   if (!adapter) {
-    await db.publication.update({ where: { id: pub.id, workspaceId }, data: { status: "manual_handoff", lastError: "No verified publishing connection. Download the post package and publish by hand." } });
+    await db.publication.update({ where: { id: pub.id, workspaceId }, data: { status: "manual_handoff", lastError: reason } });
     await rollUpStatus(workspaceId, pub.pieceId);
     return "manual_handoff";
   }
@@ -158,7 +158,7 @@ export async function dispatchPublication(workspaceId: string, publicationId: st
   const caption = [variant.caption, variant.hashtags.map((h) => (h.startsWith("#") ? h : `#${h}`)).join(" ")].filter(Boolean).join("\n\n");
   let res;
   try {
-    res = await adapter.publish({ idempotencyKey: pub.idempotencyKey, platform: dest.platform, caption });
+    res = await adapter.publish({ idempotencyKey: pub.idempotencyKey, platform: dest.platform, caption, scheduleAt: approval.scheduleAt });
   } catch (e) {
     res = { kind: "timeout" as const, error: redact(String(e)) };
   }
@@ -180,11 +180,18 @@ export async function reconcilePublication(workspaceId: string, publicationId: s
   const pub = await db.publication.findFirst({ where: { workspaceId, id: publicationId } });
   if (!pub || pub.status !== "ambiguous") return pub?.status ?? "missing";
   const dest = await db.destination.findFirst({ where: { workspaceId, id: pub.destinationId } });
-  const adapter = dest ? adapterFor(dest.adapter) : null;
-  if (!adapter) return "manual_handoff";
+  const adapter = dest ? (await adapterFor(dest, workspaceId)).adapter : null;
+  if (!adapter) {
+    await db.publication.update({ where: { id: pub.id, workspaceId }, data: { status: "failed", lastError: "Unconfirmed and the connection is gone. Check the account by hand before posting again." } });
+    await rollUpStatus(workspaceId, pub.pieceId);
+    return "unconfirmed";
+  }
   const found = await adapter.lookup(pub.idempotencyKey);
   if (found.found) {
     await db.publication.update({ where: { id: pub.id, workspaceId }, data: { status: found.publishedUrl ? "published" : "accepted", providerRef: found.providerRef ?? "", publishedUrl: found.publishedUrl ?? "", acceptedAt: new Date(), publishedAt: found.publishedUrl ? new Date() : null, lastError: "Confirmed by reconciliation; not resent." } });
+  } else if (!adapter.safeToRetryWhenNotFound) {
+    // The provider can't tell us whether it posted. Never resend: a person checks.
+    await db.publication.update({ where: { id: pub.id, workspaceId }, data: { status: "failed", lastError: `Unconfirmed: ${adapter.name} didn't answer clearly. Check the account in ${adapter.name} before posting again — Growth OS won't resend automatically.` } });
   } else if (pub.attempts < 3) {
     await db.publication.update({ where: { id: pub.id, workspaceId }, data: { status: "queued", lastError: "Not found at provider; safe to retry." } });
     await enqueue("publication.dispatch", workspaceId, { id: pub.id }, { idempotencyKey: `job:${pub.idempotencyKey}:retry:${pub.attempts}` });
@@ -196,3 +203,15 @@ export async function reconcilePublication(workspaceId: string, publicationId: s
 }
 
 export type PubJson = Prisma.JsonValue;
+
+/** A person posted it by hand. Recorded as such — never as a provider confirmation. */
+export async function markPostedByHand(a: Actor, publicationId: string, url: string) {
+  const pub = await db.publication.findFirst({ where: { workspaceId: a.workspaceId, id: publicationId } });
+  if (!pub || !["manual_handoff", "failed"].includes(pub.status)) throw new ContentError("Only hand-off or unconfirmed posts can be marked as posted by hand.");
+  let u: URL;
+  try { u = new URL(url); } catch { throw new ContentError("Paste the full link to the live post (https://…)."); }
+  if (u.protocol !== "https:") throw new ContentError("Use the post's https:// link.");
+  await db.publication.update({ where: { id: pub.id, workspaceId: a.workspaceId }, data: { status: "published", publishedUrl: u.toString(), publishedAt: new Date(), lastError: `Posted by hand (${a.role}). Not confirmed by a provider.` } });
+  await audit(a.workspaceId, a.userId, "publication.manual", "publication", pub.id);
+  await rollUpStatus(a.workspaceId, pub.pieceId);
+}

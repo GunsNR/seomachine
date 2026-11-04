@@ -21,7 +21,7 @@ export default async function Destinations({ searchParams }: { searchParams: Pro
       <PageHeader title="Destinations" description="Where each brand's posts go. A destination only shows as connected when a verified connection exists." />
       <Flash ok={sp.ok} error={sp.error} />
       <Section title="Destinations" count={dests.length}>
-        {dests.length === 0 ? <Empty title="None yet">Add one per social profile. Without a connection, you'll get a ready-to-post package instead.</Empty> : (
+        {dests.length === 0 ? <Empty title="None yet">Add one per social profile. Without a connection, you’ll get a ready-to-post package instead.</Empty> : (
           <ul className="divide-y divide-line">
             {dests.map((d) => (
               <li key={d.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5">
@@ -38,7 +38,7 @@ export default async function Destinations({ searchParams }: { searchParams: Pro
             <div><label className="label" htmlFor="label">Name</label><input id="label" name="label" className="field" placeholder="e.g. Harbor Line on Facebook" /></div>
             <div><label className="label" htmlFor="adapter">How it posts</label><select id="adapter" name="adapter" className="field"><option value="manual">Manual hand-off</option>{cs ? <option value="contentstudio">ContentStudio</option> : null}{ctx.workspace.isFixture ? <option value="dry_run">Dry run (demo only)</option> : null}</select></div>
             <div><label className="label" htmlFor="providerAccountId">ContentStudio account ID</label><input id="providerAccountId" name="providerAccountId" className="field" placeholder="Only for ContentStudio" /></div>
-            <div className="sm:col-span-2 lg:col-span-5"><SubmitButton variant="secondary">Add destination</SubmitButton>{!cs ? <p className="hint mt-1">ContentStudio appears here once it's connected under Integrations.</p> : null}</div>
+            <div className="sm:col-span-2 lg:col-span-5"><SubmitButton variant="secondary">Add destination</SubmitButton>{!cs ? <p className="hint mt-1">ContentStudio appears here once it’s connected under Integrations.</p> : null}</div>
           </form>
         ) : null}
       </Section>

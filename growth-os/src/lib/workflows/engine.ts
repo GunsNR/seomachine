@@ -214,8 +214,19 @@ export async function dispatchMessage(workspaceId: string, messageId: string): P
   }
   const provider = await db.integration.findFirst({ where: { workspaceId, provider: msg.channel === "email" ? "email_sender" : "sms_sender", status: "connected" } });
   if (!liveSendingEnabled() || !provider) {
-    return block("held", "Not sent: live sending is off and no verified sender is connected. Copy the draft and send it yourself, or finish sender setup in Settings.");
+    return block("held", "Not sent: live sending is off or no verified sender is connected. Copy the draft and send it yourself, or finish sender setup in Settings → Integrations.");
   }
-  // A verified provider adapter would be called here. None is live-verified in this MVP.
-  return block("held", "Sender adapter not implemented in this build.");
+  if (msg.channel !== "email") return block("held", "SMS sending isn't built. Send it yourself.");
+  // Claim the message so a concurrent dispatcher can't send it too.
+  const claimed = await db.outboundMessage.updateMany({ where: { workspaceId, id: msg.id, status: { in: ["queued", "draft"] } }, data: { status: "sending" } });
+  if (claimed.count === 0) return { status: "skipped", reason: "already being sent" };
+  const { sendEmail } = await import("../integrations/email");
+  const r = await sendEmail(workspaceId, { to: contact.email, subject: msg.subject, text: msg.body, idempotencyKey: `gos-${msg.id}` });
+  if (r.kind === "sent") {
+    await db.outboundMessage.update({ where: { id: msg.id, workspaceId }, data: { status: "sent", sentAt: new Date(), blockReason: "", providerRef: r.providerRef } });
+    await db.activity.create({ data: { workspaceId, contactId: contact.id, opportunityId: msg.opportunityId, kind: "email_sent", body: msg.subject, actorType: "workflow" } });
+    return { status: "sent", reason: "" };
+  }
+  if (r.kind === "unknown") return block("held", "Unconfirmed: the email provider didn't answer clearly. It may or may not have gone out — check the provider's log before sending again.");
+  return block("blocked", r.reason);
 }

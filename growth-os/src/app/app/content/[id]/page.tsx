@@ -9,7 +9,7 @@ import { PIECE_STATUS, PUB_STATUS } from "@/lib/content/labels";
 import { can } from "@/lib/rbac";
 import { toLocalInput } from "@/lib/time";
 import { Flash, Notice, PageHeader, Section, Status, SubmitButton, When } from "@/components/ui";
-import { decideAction, savePieceAction, scheduleAction, submitAction } from "../actions";
+import { decideAction, markPostedAction, savePieceAction, scheduleAction, submitAction } from "../actions";
 
 export const metadata = { title: "Post" };
 
@@ -133,6 +133,12 @@ export default async function PiecePage({ params, searchParams }: { params: Prom
                       <Status tone={ps.tone}>{ps.label}</Status>
                       {p.lastError ? <p className="mt-1 text-2xs text-ink-2">{p.lastError}</p> : null}
                       {p.publishedUrl ? <p className="mt-1 text-2xs text-ink-2 [overflow-wrap:anywhere]">{d?.adapter === "dry_run" ? "Simulated link: " : "Link: "}{p.publishedUrl}</p> : null}
+                      {p.status === "manual_handoff" || p.status === "failed" ? (
+                        <div className="mt-2 flex flex-col gap-1.5">
+                          <a className="link text-xs" href={`/api/export/post/${p.id}`}>Download post package</a>
+                          <form action={markPostedAction} className="flex gap-1.5"><input type="hidden" name="pieceId" value={piece.id} /><input type="hidden" name="publicationId" value={p.id} /><label className="sr-only" htmlFor={`url-${p.id}`}>Link to the live post</label><input id={`url-${p.id}`} name="url" type="url" required placeholder="https:// link to the live post" className="field min-h-[32px] flex-1 text-xs" /><SubmitButton variant="secondary" className="min-h-[32px] px-2 text-xs">Mark as posted</SubmitButton></form>
+                        </div>
+                      ) : null}
                     </li>
                   );
                 })}

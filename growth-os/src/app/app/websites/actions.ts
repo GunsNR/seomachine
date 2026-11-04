@@ -8,6 +8,8 @@ import { BrandProfileSchema, ThemeSchema, themeIssues } from "@/lib/brand";
 import type { PatchOp } from "@/lib/site/patch";
 import { slugify } from "@/lib/normalize";
 import { audit } from "@/lib/audit";
+import { aiStatus } from "@/lib/ai/provider";
+import { aiPageEdit } from "@/lib/ai/tasks";
 
 const actor = (c: { workspace: { id: string }; userId: string; role: string }) => ({ workspaceId: c.workspace.id, userId: c.userId, role: c.role });
 
@@ -143,10 +145,24 @@ export async function proposeEditAction(f: FormData) {
   const pageId = str(f, "pageId");
   await runAction(`/app/websites/${pageId}`, async () => {
     const { page, doc } = await loadPage(ctx.workspace.id, pageId);
-    // Page edits use the deterministic command parser only; the AI path is not wired here yet,
-    // so the proposal is always labelled as a template edit regardless of the AI switch.
-    const ops = parseCommand(str(f, "instruction"), doc.sections);
-    await proposeChange(actor(ctx), pageId, page.draftVersion, ops, "human", `Template edit (not AI): ${str(f, "instruction").slice(0, 300)}`);
+    const instruction = str(f, "instruction");
+    // Commands ("headline: …") always use the deterministic parser. Free text goes to AI when it's on.
+    const looksLikeCommand = /^(headline|h1|subhead|subheading|button|cta|title|description|move|remove)\b/i.test(instruction.trim());
+    if (!looksLikeCommand && aiStatus().live) {
+      const site = await db.site.findFirst({ where: { workspaceId: ctx.workspace.id, id: page.siteId } });
+      const brand = site ? await db.brand.findFirst({ where: { workspaceId: ctx.workspace.id, id: site.brandId } }) : null;
+      const bv = brand?.currentVersionId ? await db.brandVersion.findFirst({ where: { workspaceId: ctx.workspace.id, id: brand.currentVersionId } }) : null;
+      if (bv) {
+        const ai = await aiPageEdit({ workspaceId: ctx.workspace.id, brandVersionId: bv.id, profile: BrandProfileSchema.parse(bv.profile), doc, instruction });
+        if ("ops" in ai) {
+          await proposeChange(actor(ctx), pageId, page.draftVersion, ai.ops, "ai_edit", `AI: ${ai.summary || instruction.slice(0, 200)}`);
+          return "AI proposed a change. Review the before/after below — nothing is saved until you apply it.";
+        }
+        throw new Error(`${ai.error} You can also use commands like “headline: …”.`);
+      }
+    }
+    const ops = parseCommand(instruction, doc.sections);
+    await proposeChange(actor(ctx), pageId, page.draftVersion, ops, "human", `Template edit (not AI): ${instruction.slice(0, 300)}`);
     return "Change proposed. Review the before/after below, then apply or reject.";
   });
 }

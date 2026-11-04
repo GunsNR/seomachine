@@ -29,7 +29,7 @@ export default async function BrandPage({ searchParams }: { searchParams: Promis
       {pending.length ? <div className="mb-4"><Notice tone="warn" title={`${pending.length} fact${pending.length > 1 ? "s" : ""} waiting for review`}>Facts found on a website or inferred are never used until someone approves them.</Notice></div> : null}
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_380px]">
         <Section id="facts" title="Facts we may state" count={p.facts.length}>
-          {p.facts.length === 0 ? <Empty title="No facts yet">Add services, licences and real testimonials. Pages and posts can only use what's approved here.</Empty> : (
+          {p.facts.length === 0 ? <Empty title="No facts yet">Add services, licences and real testimonials. Pages and posts can only use what’s approved here.</Empty> : (
             <ul className="divide-y divide-line">
               {p.facts.map((f) => (
                 <li key={f.id} className="px-4 py-3">
