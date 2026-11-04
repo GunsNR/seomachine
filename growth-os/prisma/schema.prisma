@@ -583,8 +583,10 @@ model Destination {
   brandId     String
   platform    String
   label       String
-  adapter     String   @default("manual") // manual | dry_run | <provider>
+  adapter     String   @default("manual") // manual | dry_run | contentstudio
   status      String   @default("manual_handoff") // connected | manual_handoff | not_connected | expired
+  /// The provider's own id for this social profile (e.g. ContentStudio account id).
+  providerAccountId String @default("")
   createdAt   DateTime @default(now())
 
   @@index([workspaceId, brandId])
@@ -648,6 +650,8 @@ model Site {
   /// Client brand theme for generated pages. Never the Rank Logic app theme.
   theme       Json
   baseUrl     String   @default("")
+  /// Extra origins allowed to post this site's lead form (e.g. an exported copy on the client's domain).
+  allowedOrigins String[] @default([])
   createdAt   DateTime @default(now())
 
   pages Page[]
@@ -790,6 +794,8 @@ model Integration {
   scopes         String[]  @default([])
   encryptedToken String    @default("")
   note           String    @default("")
+  /// Non-secret settings and the last verification result (e.g. sender DNS checks).
+  meta           Json?
   lastCheckedAt  DateTime?
   createdAt      DateTime  @default(now())
 
@@ -880,4 +886,28 @@ model MarketingCost {
   createdAt   DateTime @default(now())
 
   @@index([workspaceId, periodStart])
+}
+
+/// Search Console performance rows, imported from a CSV export (or a future
+/// API sync). Each row keeps its source, period and import time: GSC data is
+/// aggregated, delayed and partly anonymised, so it is never treated as exact.
+model GscRow {
+  id          String   @id @default(cuid())
+  workspaceId String
+  property    String
+  page        String   @default("")
+  query       String   @default("")
+  clicks      Int
+  impressions Int
+  /// Average position as exported (an average, not a rank).
+  position    Float?
+  periodStart DateTime
+  periodEnd   DateTime
+  source      String // csv_import | api
+  importId    String
+  importedById String
+  importedAt  DateTime @default(now())
+
+  @@index([workspaceId, property, page])
+  @@index([workspaceId, importId])
 }
