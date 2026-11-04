@@ -1,0 +1,94 @@
+name: Growth OS CI
+
+# Runs only when Growth OS changes. SuperTool has its own workflow.
+on:
+  push:
+    branches: [main]
+    paths: ['growth-os/**', '.github/workflows/growth-os.yml']
+  pull_request:
+    paths: ['growth-os/**', '.github/workflows/growth-os.yml']
+
+concurrency:
+  group: growth-os-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    defaults:
+      run:
+        working-directory: growth-os
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: growthos
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: growthos_ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://growthos:ci-only-password@127.0.0.1:5432/growthos_ci
+      DIRECT_URL: postgresql://growthos:ci-only-password@127.0.0.1:5432/growthos_ci
+      # Tests need their own database; in CI the same throwaway DB is fine (CI=true allows it).
+      TEST_DATABASE_URL: postgresql://growthos:ci-only-password@127.0.0.1:5432/growthos_ci
+      # Never real secrets. Live switches stay off.
+      AUTH_SECRET: ci-only-secret-value-at-least-32-characters-long
+      SEED_PASSWORD: ci-only-demo-password
+      APP_ORIGIN: http://localhost:3100
+      LIVE_SENDING_ENABLED: 'false'
+      LIVE_PUBLISHING_ENABLED: 'false'
+      AI_LIVE_ENABLED: 'false'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: growth-os/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Production dependency audit
+        run: npm audit --omit=dev --audit-level=high
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Apply migrations to an empty database
+        run: npx prisma migrate deploy
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Behaviour tests
+        run: npm test
+
+      - name: Production build
+        run: npm run build
+
+      - name: Seed demo data and smoke-test the server
+        run: |
+          npm run db:seed
+          npm start &
+          for i in $(seq 1 30); do curl -fsS http://localhost:3100/api/health && break; sleep 2; done
+          curl -fsS http://localhost:3100/api/health | grep '"ok":true'
+          curl -fsS -o /dev/null http://localhost:3100/login
+          curl -fsS http://localhost:3100/s/harbor-line | grep -q '<link rel="canonical"'

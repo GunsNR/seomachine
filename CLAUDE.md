@@ -141,3 +141,7 @@ never upgrade a public claim.
 Verification for `supertool/` is `npm run typecheck`, `npm run lint`,
 `npm test`, `npm run build`, plus PHP lint and Elementor JSON validation for
 `wordpress/`. CI runs all of it on any change to `supertool/**` or `docs/**`.
+
+## Rank Logic Growth OS (`growth-os/`)
+
+A separate internal agency app (CRM, content approval, site builder, SEO, reporting), with its own Postgres schema, tests and docs. Start with `growth-os/CLAUDE.md`. It doesn't import from `supertool/`, and changes there don't touch `supertool/`, `docs/` or `wordpress/`.
