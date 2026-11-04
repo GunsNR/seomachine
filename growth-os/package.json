@@ -32,7 +32,7 @@
     "react-dom": "19.1.10",
     "server-only": "0.0.1",
     "tsx": "4.20.5",
-    "zod": "3.25.76"
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@eslint/eslintrc": "3.3.1",
@@ -43,10 +43,16 @@
     "autoprefixer": "10.4.21",
     "eslint": "9.35.0",
     "eslint-config-next": "15.5.28",
-    "postcss": "8.5.6",
+    "postcss": "8.5.31",
     "prisma": "6.16.2",
     "tailwindcss": "3.4.17",
     "typescript": "5.9.2",
     "vitest": "3.2.4"
+  },
+  "overrides": {
+    "postcss": "8.5.31",
+    "effect": "3.22.3",
+    "deepmerge-ts": "8.0.2",
+    "sharp": "0.35.5"
   }
 }
